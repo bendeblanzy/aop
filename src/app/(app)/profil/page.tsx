@@ -30,7 +30,7 @@ export default function ProfilPage() {
     async function load() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
-      const { data } = await supabase.from('profiles').select('*').eq('id', user.id).single()
+      const { data } = await supabase.from('profiles').select('*').eq('id', user.id).maybeSingle()
       if (data) setProfile(data)
       setLoading(false)
     }
@@ -41,9 +41,25 @@ export default function ProfilPage() {
     setSaving(true)
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
-    const { error } = await supabase.from('profiles').upsert({ ...profile, id: user.id })
-    if (error) toast.error('Erreur lors de la sauvegarde')
-    else toast.success('Profil sauvegardé !')
+
+    // Nettoyer les valeurs avant envoi à Supabase :
+    // - chaînes vides → null (évite les 400 sur les colonnes date/number)
+    // - NaN → null
+    const cleaned = Object.fromEntries(
+      Object.entries({ ...profile, id: user.id }).map(([k, v]) => {
+        if (v === '') return [k, null]
+        if (typeof v === 'number' && isNaN(v)) return [k, null]
+        return [k, v]
+      })
+    )
+
+    const { error } = await supabase.from('profiles').upsert(cleaned, { onConflict: 'id' })
+    if (error) {
+      console.error('[profil] upsert error:', error)
+      toast.error(`Erreur : ${error.message}`)
+    } else {
+      toast.success('Profil sauvegardé !')
+    }
     setSaving(false)
   }
 

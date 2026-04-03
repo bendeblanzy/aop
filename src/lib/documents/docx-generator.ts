@@ -28,7 +28,7 @@ function run(text: string, opts: Partial<{
 }
 
 function para(children: TextRun[], opts: Partial<{
-  align: AlignmentType; spaceBefore: number; spaceAfter: number; indent: number
+  align: typeof AlignmentType[keyof typeof AlignmentType]; spaceBefore: number; spaceAfter: number; indent: number
 }> = {}) {
   return new Paragraph({
     children,
@@ -129,7 +129,7 @@ function formTable(rows: TableRow[]) {
   return new Table({
     width: { size: CONTENT_W, type: WidthType.DXA },
     columnWidths: [COL_LABEL, COL_VALUE],
-    borders: { top: { style: BorderStyle.NONE }, bottom: { style: BorderStyle.NONE }, left: { style: BorderStyle.NONE }, right: { style: BorderStyle.NONE }, insideH: { style: BorderStyle.NONE }, insideV: { style: BorderStyle.NONE } },
+    borders: { top: { style: BorderStyle.NONE }, bottom: { style: BorderStyle.NONE }, left: { style: BorderStyle.NONE }, right: { style: BorderStyle.NONE }, insideHorizontal: { style: BorderStyle.NONE }, insideVertical: { style: BorderStyle.NONE } },
     rows,
   })
 }
