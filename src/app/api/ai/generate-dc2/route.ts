@@ -51,7 +51,9 @@ export async function POST(request: NextRequest) {
     date_signature: new Date().toLocaleDateString('fr-FR'),
     acheteur_nom: ao.acheteur || '',
     objet_marche: ao.analyse_rc?.objet || ao.titre,
-    lots_candidats: ao.analyse_rc?.lots?.map((l: any) => `Lot ${l.numero} — ${l.intitule}`).join(', ') || 'Marché global',
+    lots_candidats: Array.isArray(ao.analyse_rc?.lots)
+      ? ao.analyse_rc.lots.map((l: any) => `Lot ${l.numero} — ${l.intitule}`).join(', ')
+      : 'Marché global',
   }
 
   const buffer = await generateDC2Docx(data)

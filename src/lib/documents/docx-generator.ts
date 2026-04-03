@@ -2,7 +2,7 @@ import {
   Document, Paragraph, TextRun, HeadingLevel, AlignmentType,
   Table, TableRow, TableCell, WidthType, BorderStyle,
   Packer, ShadingType, PageOrientation, convertInchesToTwip,
-  UnderlineType, Header, Footer, PageNumber, NumberFormat,
+  UnderlineType, Header, Footer, PageNumber,
 } from 'docx'
 
 // ─── Couleurs & styles ───────────────────────────────────────────────────────
@@ -310,8 +310,7 @@ export async function generateDC1Docx(data: Record<string, string>): Promise<Buf
             children: [
               new TextRun({ text: 'DC1 — Réf. consultation : ', size: 16, font: 'Arial', color: '9CA3AF' }),
               new TextRun({ text: data.reference_marche || '', size: 16, font: 'Arial', color: '9CA3AF' }),
-              new TextRun({ text: '    Page ', size: 16, font: 'Arial', color: '9CA3AF' }),
-              new PageNumber({ format: NumberFormat.DECIMAL }),
+              new TextRun({ children: ['    Page ', PageNumber.CURRENT], size: 16, font: 'Arial', color: '9CA3AF' }),
             ],
             alignment: AlignmentType.RIGHT,
             border: { top: { style: BorderStyle.SINGLE, size: 4, color: GREY_LINE } },
@@ -462,8 +461,7 @@ export async function generateDC2Docx(data: Record<string, any>): Promise<Buffer
             children: [
               new TextRun({ text: 'DC2 — ', size: 16, font: 'Arial', color: '9CA3AF' }),
               new TextRun({ text: data.raison_sociale || '', size: 16, font: 'Arial', color: '9CA3AF' }),
-              new TextRun({ text: '    Page ', size: 16, font: 'Arial', color: '9CA3AF' }),
-              new PageNumber({ format: NumberFormat.DECIMAL }),
+              new TextRun({ children: ['    Page ', PageNumber.CURRENT], size: 16, font: 'Arial', color: '9CA3AF' }),
             ],
             alignment: AlignmentType.RIGHT,
             border: { top: { style: BorderStyle.SINGLE, size: 4, color: GREY_LINE } },
@@ -527,8 +525,7 @@ export async function generateMemoireDocx(titre: string, sections: { title: stri
         default: new Footer({
           children: [new Paragraph({
             children: [
-              new TextRun({ text: 'Page ', size: 16, font: 'Arial', color: '9CA3AF' }),
-              new PageNumber({ format: NumberFormat.DECIMAL }),
+              new TextRun({ children: ['Page ', PageNumber.CURRENT], size: 16, font: 'Arial', color: '9CA3AF' }),
             ],
             alignment: AlignmentType.RIGHT,
             border: { top: { style: BorderStyle.SINGLE, size: 4, color: GREY_LINE } },
