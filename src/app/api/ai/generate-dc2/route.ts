@@ -42,13 +42,16 @@ export async function POST(request: NextRequest) {
     ca_n2: p.ca_annee_n2,
     ca_n3: p.ca_annee_n3,
     effectif: p.effectif_moyen,
-    certifications: p.certifications,
+    certifications: Array.isArray(p.certifications) ? p.certifications : (p.certifications ? [String(p.certifications)] : []),
     assurance_rc_numero: p.assurance_rc_numero,
     assurance_rc_compagnie: p.assurance_rc_compagnie,
     assurance_rc_expiration: p.assurance_rc_expiration,
     references_selectionnees: selectedRefs,
     lieu_signature: p.ville,
     date_signature: new Date().toLocaleDateString('fr-FR'),
+    acheteur_nom: ao.acheteur || '',
+    objet_marche: ao.analyse_rc?.objet || ao.titre,
+    lots_candidats: ao.analyse_rc?.lots?.map((l: any) => `Lot ${l.numero} — ${l.intitule}`).join(', ') || 'Marché global',
   }
 
   const buffer = await generateDC2Docx(data)

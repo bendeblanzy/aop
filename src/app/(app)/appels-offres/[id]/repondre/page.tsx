@@ -233,23 +233,34 @@ export default function RepondreAOPage({ params }: { params: Promise<{ id: strin
     setGenerating(true)
     setGenError('')
     const docs: { type: DocType; url: string; nom: string }[] = []
+    const errors: string[] = []
 
     for (const docType of docsToGenerate) {
-      const res = await fetch(`/api/ai/generate-${docType === 'memoire_technique' ? 'memoire' : docType}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ao_id: id, format: outputFormat }),
-      })
-      if (res.ok) {
-        const data = await res.json()
-        docs.push({ type: docType, url: data.url, nom: data.nom })
+      try {
+        const res = await fetch(`/api/ai/generate-${docType === 'memoire_technique' ? 'memoire' : docType}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ao_id: id, format: outputFormat }),
+        })
+        if (res.ok) {
+          const data = await res.json()
+          docs.push({ type: docType, url: data.url, nom: data.nom })
+        } else {
+          const errBody = await res.json().catch(() => ({}))
+          errors.push(`${docLabels[docType]} : ${errBody.error || `Erreur ${res.status}`}`)
+        }
+      } catch (e: any) {
+        errors.push(`${docLabels[docType]} : ${e.message || 'Erreur réseau'}`)
       }
     }
 
     if (docs.length === 0) {
-      setGenError('Erreur lors de la génération. Vérifiez votre clé API Anthropic.')
+      setGenError(`Tous les documents ont échoué :\n${errors.join('\n')}`)
       setGenerating(false)
       return
+    }
+    if (errors.length > 0) {
+      setGenError(`Certains documents ont échoué :\n${errors.join('\n')}`)
     }
 
     const supabase = createClient()
@@ -508,7 +519,7 @@ export default function RepondreAOPage({ params }: { params: Promise<{ id: strin
               <div className="bg-surface rounded-xl p-5 space-y-3 border border-border">
                 <p className="text-sm font-semibold text-text-primary">Analyse RC</p>
                 {analyseRC.objet && <p className="text-sm text-text-primary">{analyseRC.objet}</p>}
-                {analyseRC.criteres_notation && analyseRC.criteres_notation.length > 0 && (
+                {Array.isArray(analyseRC.criteres_notation) && analyseRC.criteres_notation.length > 0 && (
                   <div className="space-y-1">
                     {analyseRC.criteres_notation.map((c, i) => (
                       <div key={i} className="flex items-center justify-between text-sm">
@@ -670,8 +681,8 @@ export default function RepondreAOPage({ params }: { params: Promise<{ id: strin
 
             {genError && (
               <div className="flex items-start gap-3 bg-red-50 border border-red-200 rounded-lg px-4 py-3">
-                <AlertCircle className="w-4 h-4 text-danger mt-0.5" />
-                <span className="text-sm text-danger">{genError}</span>
+                <AlertCircle className="w-4 h-4 text-danger mt-0.5 shrink-0" />
+                <div className="text-sm text-danger whitespace-pre-line">{genError}</div>
               </div>
             )}
 

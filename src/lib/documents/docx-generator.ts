@@ -421,7 +421,9 @@ export async function generateDC2Docx(data: Record<string, any>): Promise<Buffer
   children.push(...spacer(1))
   children.push(formTable([
     formRow('G1 — Effectifs & moyens humains', data.effectif ? `${data.effectif} collaborateurs` : '[À renseigner]'),
-    formRow('Certifications / qualifications', (data.certifications || []).length > 0 ? (data.certifications || []).join(' — ') : 'Aucune certification renseignée'),
+    formRow('Certifications / qualifications', Array.isArray(data.certifications) && data.certifications.length > 0
+      ? data.certifications.join(' — ')
+      : (data.certifications && typeof data.certifications === 'string' ? data.certifications : 'Aucune certification renseignée')),
     formRow('G2 — Documents disponibles en ligne', '[URL si applicable]'),
   ]))
   children.push(...spacer(1))

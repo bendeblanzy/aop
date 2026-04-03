@@ -75,7 +75,7 @@ export default async function AODetailPage({ params }: { params: Promise<{ id: s
                   <p className="text-sm text-text-primary">{ao.analyse_rc.objet}</p>
                 </div>
               )}
-              {ao.analyse_rc.criteres_notation && ao.analyse_rc.criteres_notation.length > 0 && (
+              {Array.isArray(ao.analyse_rc.criteres_notation) && ao.analyse_rc.criteres_notation.length > 0 && (
                 <div className="mb-4">
                   <p className="text-xs font-medium text-text-secondary uppercase mb-2">Critères de notation</p>
                   <div className="space-y-2">
@@ -91,7 +91,7 @@ export default async function AODetailPage({ params }: { params: Promise<{ id: s
                   </div>
                 </div>
               )}
-              {ao.analyse_rc.pieces_exigees && ao.analyse_rc.pieces_exigees.length > 0 && (
+              {Array.isArray(ao.analyse_rc.pieces_exigees) && ao.analyse_rc.pieces_exigees.length > 0 && (
                 <div>
                   <p className="text-xs font-medium text-text-secondary uppercase mb-2">Pièces exigées</p>
                   <ul className="space-y-1">
@@ -112,7 +112,7 @@ export default async function AODetailPage({ params }: { params: Promise<{ id: s
                   <p className="text-sm text-text-primary">{ao.analyse_cctp.prestations_attendues}</p>
                 </div>
               )}
-              {ao.analyse_cctp.livrables && ao.analyse_cctp.livrables.length > 0 && (
+              {Array.isArray(ao.analyse_cctp.livrables) && ao.analyse_cctp.livrables.length > 0 && (
                 <div>
                   <p className="text-xs font-medium text-text-secondary uppercase mb-2">Livrables</p>
                   <ul className="space-y-1">

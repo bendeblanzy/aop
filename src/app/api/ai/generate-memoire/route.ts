@@ -44,9 +44,22 @@ AO : ${ao.titre} — Acheteur : ${ao.acheteur || 'N/A'}
   try {
     const m = raw.match(/\{[\s\S]*\}/)
     const parsed = m ? JSON.parse(m[0]) : {}
+
+    function flattenToText(v: unknown): string {
+      if (typeof v === 'string') return v
+      if (typeof v === 'boolean' || typeof v === 'number') return String(v)
+      if (Array.isArray(v)) return v.map(item => `- ${flattenToText(item)}`).join('\n')
+      if (v && typeof v === 'object') {
+        return Object.entries(v as Record<string, unknown>)
+          .map(([key, val]) => `${key} : ${flattenToText(val)}`)
+          .join('\n')
+      }
+      return ''
+    }
+
     sections = Object.entries(parsed).map(([k, v]) => ({
       title: k,
-      content: typeof v === 'string' ? v : JSON.stringify(v, null, 2),
+      content: flattenToText(v),
     }))
   } catch {
     sections = [{ title: 'Mémoire technique', content: raw }]

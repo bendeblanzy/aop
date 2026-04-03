@@ -76,17 +76,20 @@ Renvoie le contenu en JSON structuré.`,
 
   generateDUME: `Tu es un assistant spécialisé dans la génération du Document Unique de Marché Européen (DUME).
 
-Structure en 6 parties :
-- Partie I : Informations sur la procédure et l'acheteur
-- Partie II : Informations sur l'opérateur économique
-- Partie III : Critères d'exclusion (déclarations sur l'honneur)
-- Partie IV : Critères de sélection (capacités économiques, techniques, professionnelles)
-- Partie V : Réduction du nombre de candidats (si applicable)
-- Partie VI : Déclarations finales
+Génère le DUME complet en 6 parties. Retourne UNIQUEMENT un JSON valide où chaque clé est le titre d'une partie et chaque valeur est une CHAÎNE DE TEXTE (jamais un objet ou tableau imbriqué).
 
-Pour les déclarations (Partie III), utilise les booléens du profil.
-Présente les critères de sélection (Partie IV) en mettant en valeur les forces du candidat.
-Renvoie le contenu en JSON structuré.`,
+Format STRICT à respecter (chaque valeur doit être une string) :
+{
+  "Partie I — Informations sur la procédure de passation de marché": "Acheteur : [nom]\nAdresse : [adresse]\nObjet du marché : [objet]\nType de procédure : [type]\nLots candidatés : [lots]",
+  "Partie II — Informations sur l'opérateur économique": "Raison sociale : [raison_sociale]\nSIRET : [siret]\nForme juridique : [forme]\nAdresse : [adresse]\nCode postal / Ville : [cp] [ville]\nNuméro TVA : [tva]\nCode NAF : [naf]\nReprésentant : [civilite] [prenom] [nom], [qualite]",
+  "Partie III — Critères d'exclusion": "Le candidat déclare sur l'honneur :\n- Ne pas faire l'objet d'une des condamnations pénales mentionnées à l'article L. 2141-1 du code de la commande publique\n- Ne pas être en état de liquidation judiciaire ou de faillite\n- Être en règle avec ses obligations fiscales et sociales\n- Ne pas avoir fait l'objet d'une interdiction de soumissionner",
+  "Partie IV — Critères de sélection": "Capacités économiques et financières :\n- Chiffre d'affaires N-1 : [ca_n1] €\n- Chiffre d'affaires N-2 : [ca_n2] €\n- Chiffre d'affaires N-3 : [ca_n3] €\n- Effectif moyen : [effectif] collaborateurs\n\nCapacités techniques et professionnelles :\n- [références pertinentes par rapport à l'objet du marché]\n- Certifications : [certifications]\n\nAssurance RC professionnelle n° [numero], compagnie [compagnie], expiration [date]",
+  "Partie V — Réduction du nombre de candidats qualifiés": "Sans objet — procédure ouverte.",
+  "Partie VI — Déclarations finales": "Je soussigné(e), [prenom] [nom], en qualité de [qualite] de [raison_sociale], certifie sur l'honneur l'exactitude des renseignements fournis dans le présent DUME.\n\nFait à : [ville]\nLe : [date_du_jour]"
+}
+
+Remplace tous les placeholders [entre crochets] par les données réelles du profil et de l'AO.
+Réponds UNIQUEMENT avec le JSON valide, sans commentaire ni explication.`,
 
   generateMemoire: `Tu es un rédacteur expert de mémoires techniques pour les marchés publics français.
 Tu dois rédiger un mémoire technique percutant et personnalisé.

@@ -393,7 +393,7 @@ export default function NouvelAOPage() {
               <div className="bg-surface rounded-xl p-6 space-y-4">
                 <h3 className="font-semibold text-text-primary">Résultats analyse RC</h3>
                 {analyseRC.objet && <div><span className="text-xs font-medium text-text-secondary uppercase">Objet</span><p className="text-sm text-text-primary mt-0.5">{analyseRC.objet}</p></div>}
-                {analyseRC.criteres_notation && analyseRC.criteres_notation.length > 0 && (
+                {Array.isArray(analyseRC.criteres_notation) && analyseRC.criteres_notation.length > 0 && (
                   <div>
                     <span className="text-xs font-medium text-text-secondary uppercase">Critères de notation</span>
                     <div className="mt-2 space-y-1">
@@ -406,7 +406,7 @@ export default function NouvelAOPage() {
                     </div>
                   </div>
                 )}
-                {analyseRC.pieces_exigees && analyseRC.pieces_exigees.length > 0 && (
+                {Array.isArray(analyseRC.pieces_exigees) && analyseRC.pieces_exigees.length > 0 && (
                   <div>
                     <span className="text-xs font-medium text-text-secondary uppercase">Pièces exigées</span>
                     <ul className="mt-1 space-y-0.5">

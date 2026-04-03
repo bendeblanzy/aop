@@ -40,7 +40,28 @@ AO : ${ao.titre}
   try {
     const jsonMatch = raw.match(/\{[\s\S]*\}/)
     const parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : {}
-    sections = Object.entries(parsed).map(([k, v]) => ({ title: k, content: typeof v === 'string' ? v : JSON.stringify(v, null, 2) }))
+
+    // Aplatir récursivement les objets imbriqués en texte lisible
+    function flattenValue(v: unknown, depth = 0): string {
+      if (typeof v === 'string') return v
+      if (typeof v === 'boolean') return v ? 'Oui' : 'Non'
+      if (typeof v === 'number') return String(v)
+      if (Array.isArray(v)) return v.map(item => `- ${flattenValue(item, depth + 1)}`).join('\n')
+      if (v && typeof v === 'object') {
+        return Object.entries(v as Record<string, unknown>)
+          .map(([key, val]) => {
+            const indent = '  '.repeat(depth)
+            return `${indent}${key} : ${flattenValue(val, depth + 1)}`
+          })
+          .join('\n')
+      }
+      return String(v ?? '')
+    }
+
+    sections = Object.entries(parsed).map(([k, v]) => ({
+      title: k,
+      content: flattenValue(v),
+    }))
   } catch {
     sections = [{ title: 'DUME', content: raw }]
   }
