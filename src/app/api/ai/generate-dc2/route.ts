@@ -1,9 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { adminClient, uploadGeneratedDoc, getOrFallbackProfile } from '@/lib/supabase/admin'
 import { NextRequest, NextResponse } from 'next/server'
-import { callClaude } from '@/lib/ai/claude-client'
-import { PROMPTS } from '@/lib/ai/prompts'
-import { generateDocx } from '@/lib/documents/docx-generator'
+import { generateDC2Docx } from '@/lib/documents/docx-generator'
 
 export async function POST(request: NextRequest) {
   const supabase = await createClient()
@@ -17,43 +15,43 @@ export async function POST(request: NextRequest) {
     getOrFallbackProfile(user.id),
     adminClient.from('references').select('*').eq('profile_id', user.id).limit(10),
   ])
-
   if (!ao) return NextResponse.json({ error: 'AO introuvable' }, { status: 404 })
 
-  const selectedRefs = references?.filter(r => ao.references_selectionnees?.includes(r.id)) ?? references?.slice(0, 3) ?? []
+  const p = profile as any
+  const selectedRefs = references?.filter(r => ao.references_selectionnees?.includes(r.id))
+    ?? references?.slice(0, 5) ?? []
 
-  const userMsg = `
-Profil entreprise :
-${JSON.stringify(profile, null, 2)}
-
-Références sélectionnées :
-${JSON.stringify(selectedRefs, null, 2)}
-
-Analyse du RC :
-${JSON.stringify(ao.analyse_rc || {}, null, 2)}
-
-AO : ${ao.titre} — Acheteur : ${ao.acheteur || 'N/A'}
-`
-
-  let raw: string
-  try {
-    raw = await callClaude(PROMPTS.generateDC2, userMsg, 'sonnet')
-  } catch (e) {
-    return NextResponse.json({ error: 'Erreur IA' }, { status: 500 })
+  const data: Record<string, any> = {
+    raison_sociale: p.raison_sociale,
+    siret: p.siret,
+    forme_juridique: p.forme_juridique,
+    date_creation: p.date_creation_entreprise,
+    capital_social: p.capital_social,
+    adresse_siege: p.adresse_siege,
+    code_postal: p.code_postal,
+    ville: p.ville,
+    numero_tva: p.numero_tva,
+    code_naf: p.code_naf,
+    representant_prenom: p.prenom_representant,
+    representant_nom: p.nom_representant,
+    representant_qualite: p.qualite_representant,
+    declaration_non_interdiction: p.declaration_non_interdiction,
+    declaration_a_jour_fiscal: p.declaration_a_jour_fiscal,
+    declaration_a_jour_social: p.declaration_a_jour_social,
+    ca_n1: p.ca_annee_n1,
+    ca_n2: p.ca_annee_n2,
+    ca_n3: p.ca_annee_n3,
+    effectif: p.effectif_moyen,
+    certifications: p.certifications,
+    assurance_rc_numero: p.assurance_rc_numero,
+    assurance_rc_compagnie: p.assurance_rc_compagnie,
+    assurance_rc_expiration: p.assurance_rc_expiration,
+    references_selectionnees: selectedRefs,
+    lieu_signature: p.ville,
+    date_signature: new Date().toLocaleDateString('fr-FR'),
   }
 
-  let sections: { title: string; content: string }[]
-  try {
-    const jsonMatch = raw.match(/\{[\s\S]*\}/)
-    const parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : {}
-    sections = Object.entries(parsed).map(([k, v]) => ({ title: k, content: typeof v === 'string' ? v : JSON.stringify(v, null, 2) }))
-  } catch {
-    sections = [{ title: 'DC2 — Déclaration du candidat', content: raw }]
-  }
-  if (sections.length === 0) sections = [{ title: 'DC2', content: raw }]
-
-  const buffer = await generateDocx(`DC2 — Déclaration du candidat\n${ao.titre}`, sections)
-
+  const buffer = await generateDC2Docx(data)
   try {
     const publicUrl = await uploadGeneratedDoc(user.id, ao_id, 'DC2', buffer)
     return NextResponse.json({ url: publicUrl, nom: `DC2-${ao.titre}.docx` })
