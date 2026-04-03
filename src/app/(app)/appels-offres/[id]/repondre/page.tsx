@@ -75,6 +75,8 @@ export default function RepondreAOPage({ params }: { params: Promise<{ id: strin
   const [selectedRefs, setSelectedRefs] = useState<string[]>([])
   const [selectedCollabs, setSelectedCollabs] = useState<string[]>([])
   const [notes, setNotes] = useState('')
+  const [newCollab, setNewCollab] = useState({ prenom: '', nom: '', poste: '' })
+  const [addingCollab, setAddingCollab] = useState(false)
 
   // Étape 4
   const [docsToGenerate, setDocsToGenerate] = useState<DocType[]>(['dc1', 'dc2', 'dume', 'memoire_technique'])
@@ -226,6 +228,24 @@ export default function RepondreAOPage({ params }: { params: Promise<{ id: strin
       statut: 'analyse',
     }).eq('id', id)
     setStep(4)
+  }
+
+  async function addCollab() {
+    if (!newCollab.nom.trim() || !orgId) return
+    setAddingCollab(true)
+    const supabase = createClient()
+    const { data, error } = await supabase.from('collaborateurs').insert({
+      organization_id: orgId,
+      prenom: newCollab.prenom.trim(),
+      nom: newCollab.nom.trim(),
+      poste: newCollab.poste.trim() || null,
+    }).select().single()
+    if (!error && data) {
+      setCollaborateurs(prev => [...prev, data])
+      setSelectedCollabs(prev => [...prev, data.id])
+      setNewCollab({ prenom: '', nom: '', poste: '' })
+    }
+    setAddingCollab(false)
   }
 
   async function handleGenerate() {
@@ -599,10 +619,10 @@ export default function RepondreAOPage({ params }: { params: Promise<{ id: strin
               </div>
             )}
 
-            {collaborateurs.length > 0 && (
-              <div>
-                <h3 className="text-sm font-semibold text-text-primary mb-3">Collaborateurs à affecter</h3>
-                <div className="space-y-2 max-h-60 overflow-y-auto">
+            <div>
+              <h3 className="text-sm font-semibold text-text-primary mb-3">Membres de l&apos;équipe à affecter ({selectedCollabs.length} sélectionné{selectedCollabs.length > 1 ? 's' : ''})</h3>
+              {collaborateurs.length > 0 && (
+                <div className="space-y-2 max-h-60 overflow-y-auto mb-3">
                   {collaborateurs.map(c => (
                     <label key={c.id} className="flex items-start gap-3 p-3 border border-border rounded-lg cursor-pointer hover:bg-surface">
                       <input type="checkbox" checked={selectedCollabs.includes(c.id)}
@@ -615,8 +635,39 @@ export default function RepondreAOPage({ params }: { params: Promise<{ id: strin
                     </label>
                   ))}
                 </div>
+              )}
+              <div className="border border-dashed border-border rounded-lg p-3">
+                <p className="text-xs font-medium text-text-secondary mb-2">Ajouter un membre ad hoc</p>
+                <div className="flex gap-2">
+                  <input
+                    value={newCollab.prenom}
+                    onChange={e => setNewCollab(prev => ({ ...prev, prenom: e.target.value }))}
+                    placeholder="Prénom"
+                    className="flex-1 border border-border rounded-md px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                  />
+                  <input
+                    value={newCollab.nom}
+                    onChange={e => setNewCollab(prev => ({ ...prev, nom: e.target.value }))}
+                    placeholder="Nom *"
+                    className="flex-1 border border-border rounded-md px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                  />
+                  <input
+                    value={newCollab.poste}
+                    onChange={e => setNewCollab(prev => ({ ...prev, poste: e.target.value }))}
+                    placeholder="Poste"
+                    className="flex-1 border border-border rounded-md px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                  />
+                  <button
+                    onClick={addCollab}
+                    disabled={!newCollab.nom.trim() || addingCollab}
+                    className="flex items-center gap-1 bg-primary hover:bg-primary-hover text-white rounded-md px-3 py-1.5 text-sm font-medium transition-colors disabled:opacity-50"
+                  >
+                    {addingCollab ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+                    Ajouter
+                  </button>
+                </div>
               </div>
-            )}
+            </div>
 
             <div>
               <label className="block text-sm font-medium text-text-primary mb-1.5">Notes et instructions pour l&apos;IA</label>
