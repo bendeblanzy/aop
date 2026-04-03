@@ -23,7 +23,7 @@ export default async function AODetailPage({ params }: { params: Promise<{ id: s
     .from('appels_offres')
     .select('*')
     .eq('id', id)
-    .eq('profile_id', user!.id)
+    
     .single() as { data: AppelOffre | null }
 
   if (!ao) notFound()

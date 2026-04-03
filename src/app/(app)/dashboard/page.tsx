@@ -8,8 +8,8 @@ export default async function DashboardPage() {
   const { data: { user } } = await supabase.auth.getUser()
 
   const [{ data: profile }, { data: aos }] = await Promise.all([
-    supabase.from('profiles').select('raison_sociale, siret').eq('id', user!.id).single(),
-    supabase.from('appels_offres').select('*').eq('profile_id', user!.id).order('created_at', { ascending: false }).limit(10),
+    supabase.from('profiles').select('raison_sociale').maybeSingle(),
+    supabase.from('appels_offres').select('*').order('created_at', { ascending: false }).limit(10),
   ])
 
   const stats = {

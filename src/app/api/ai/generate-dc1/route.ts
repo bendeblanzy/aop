@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
-import { adminClient, uploadGeneratedDoc, getOrFallbackProfile } from '@/lib/supabase/admin'
+import { adminClient, uploadGeneratedDoc, getOrgIdForUser, getOrgProfile } from '@/lib/supabase/admin'
 import { NextRequest, NextResponse } from 'next/server'
 import { callClaude } from '@/lib/ai/claude-client'
 import { generateDC1Docx } from '@/lib/documents/docx-generator'
@@ -38,11 +38,14 @@ export async function POST(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
+  const orgId = await getOrgIdForUser(user.id)
+  if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 403 })
+
   const { ao_id } = await request.json()
 
   const [{ data: ao }, profile] = await Promise.all([
-    adminClient.from('appels_offres').select('*').eq('id', ao_id).eq('profile_id', user.id).single(),
-    getOrFallbackProfile(user.id),
+    adminClient.from('appels_offres').select('*').eq('id', ao_id).eq('organization_id', orgId).single(),
+    getOrgProfile(orgId),
   ])
   if (!ao) return NextResponse.json({ error: 'AO introuvable' }, { status: 404 })
 

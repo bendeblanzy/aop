@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
-import { adminClient, uploadGeneratedDoc, getOrFallbackProfile } from '@/lib/supabase/admin'
+import { adminClient, uploadGeneratedDoc, getOrgIdForUser, getOrgProfile } from '@/lib/supabase/admin'
 import { NextRequest, NextResponse } from 'next/server'
 import { callClaude } from '@/lib/ai/claude-client'
 import { PROMPTS } from '@/lib/ai/prompts'
@@ -10,11 +10,14 @@ export async function POST(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
+  const orgId = await getOrgIdForUser(user.id)
+  if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 403 })
+
   const { ao_id } = await request.json()
 
   const [{ data: ao }, profile] = await Promise.all([
-    adminClient.from('appels_offres').select('*').eq('id', ao_id).eq('profile_id', user.id).single(),
-    getOrFallbackProfile(user.id),
+    adminClient.from('appels_offres').select('*').eq('id', ao_id).eq('organization_id', orgId).single(),
+    getOrgProfile(orgId),
   ])
 
   if (!ao) return NextResponse.json({ error: 'AO introuvable' }, { status: 404 })
@@ -55,7 +58,7 @@ Note : Pas de sous-traitance prévue pour ce marché.
   const buffer = await generateDocx(`DC4 — Déclaration de sous-traitance\n${ao.titre}`, sections)
 
   try {
-    const publicUrl = await uploadGeneratedDoc(user.id, ao_id, 'DC4', buffer)
+    const publicUrl = await uploadGeneratedDoc(orgId, ao_id, 'DC4', buffer)
     return NextResponse.json({ url: publicUrl, nom: `DC4-${ao.titre}.docx` })
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 500 })

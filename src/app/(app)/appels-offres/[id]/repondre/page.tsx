@@ -2,6 +2,7 @@
 import { useState, useEffect, use } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { useOrganization } from '@/context/OrganizationContext'
 import {
   Upload, Brain, CheckSquare, FileDown, Eye,
   ChevronRight, ChevronLeft, Loader2, X, File,
@@ -42,6 +43,7 @@ function detectFileType(name: string): 'rc' | 'cctp' | 'avis' | 'autre' {
 export default function RepondreAOPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
   const router = useRouter()
+  const { orgId } = useOrganization()
 
   const [loading, setLoading] = useState(true)
   const [ao, setAo] = useState<AppelOffre | null>(null)
@@ -85,12 +87,10 @@ export default function RepondreAOPage({ params }: { params: Promise<{ id: strin
   useEffect(() => {
     async function loadAO() {
       const supabase = createClient()
-      const { data: { user } } = await supabase.auth.getUser()
       const { data } = await supabase
         .from('appels_offres')
         .select('*')
         .eq('id', id)
-        .eq('profile_id', user!.id)
         .single() as { data: AppelOffre | null }
 
       if (!data) { router.push('/appels-offres'); return }
@@ -110,10 +110,10 @@ export default function RepondreAOPage({ params }: { params: Promise<{ id: strin
         setGeneratedDocs(data.documents_generes.map(d => ({ type: d.type, url: d.url, nom: `${d.type}.docx` })))
       }
 
-      // Charger refs et collabs
+      // Charger refs et collabs (RLS filtre automatiquement par org)
       const [{ data: refs }, { data: collabs }] = await Promise.all([
-        supabase.from('references').select('*').eq('profile_id', user!.id),
-        supabase.from('collaborateurs').select('*').eq('profile_id', user!.id),
+        supabase.from('references').select('*').order('annee', { ascending: false }),
+        supabase.from('collaborateurs').select('*').order('nom'),
       ])
       setReferences(refs || [])
       setCollaborateurs(collabs || [])
@@ -147,7 +147,6 @@ export default function RepondreAOPage({ params }: { params: Promise<{ id: strin
     if (!titre.trim()) return alert('Veuillez saisir un titre')
     setUploading(true)
     const supabase = createClient()
-    const { data: { user } } = await supabase.auth.getUser()
 
     // Upload nouveaux fichiers
     const uploaded = [...existingFiles]
@@ -163,7 +162,7 @@ export default function RepondreAOPage({ params }: { params: Promise<{ id: strin
       }
     }
 
-    // Mettre à jour l'AO
+    // Mettre à jour l'AO (RLS filtre par org automatiquement)
     await supabase.from('appels_offres').update({
       titre,
       acheteur: acheteur || null,
@@ -171,7 +170,7 @@ export default function RepondreAOPage({ params }: { params: Promise<{ id: strin
       date_limite_reponse: dateLimite || null,
       fichiers_source: uploaded,
       statut: 'en_cours',
-    }).eq('id', id).eq('profile_id', user!.id)
+    }).eq('id', id)
 
     setExistingFiles(uploaded)
     setNewFiles([])
@@ -591,8 +590,8 @@ export default function RepondreAOPage({ params }: { params: Promise<{ id: strin
                         onChange={e => setSelectedRefs(prev => e.target.checked ? [...prev, ref.id] : prev.filter(x => x !== ref.id))}
                         className="mt-0.5" />
                       <div>
-                        <p className="text-sm font-medium text-text-primary">{ref.intitule_marche}</p>
-                        <p className="text-xs text-text-secondary">{ref.acheteur_public}{ref.annee_execution ? ` — ${ref.annee_execution}` : ''}</p>
+                        <p className="text-sm font-medium text-text-primary">{ref.titre}</p>
+                        <p className="text-xs text-text-secondary">{ref.client}{ref.annee ? ` — ${ref.annee}` : ''}</p>
                       </div>
                     </label>
                   ))}

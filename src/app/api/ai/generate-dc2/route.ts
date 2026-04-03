@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
-import { adminClient, uploadGeneratedDoc, getOrFallbackProfile } from '@/lib/supabase/admin'
+import { adminClient, uploadGeneratedDoc, getOrgIdForUser, getOrgProfile } from '@/lib/supabase/admin'
 import { NextRequest, NextResponse } from 'next/server'
 import { generateDC2Docx } from '@/lib/documents/docx-generator'
 
@@ -8,12 +8,15 @@ export async function POST(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
+  const orgId = await getOrgIdForUser(user.id)
+  if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 403 })
+
   const { ao_id } = await request.json()
 
   const [{ data: ao }, profile, { data: references }] = await Promise.all([
-    adminClient.from('appels_offres').select('*').eq('id', ao_id).eq('profile_id', user.id).single(),
-    getOrFallbackProfile(user.id),
-    adminClient.from('references').select('*').eq('profile_id', user.id).limit(10),
+    adminClient.from('appels_offres').select('*').eq('id', ao_id).eq('organization_id', orgId).single(),
+    getOrgProfile(orgId),
+    adminClient.from('references').select('*').eq('organization_id', orgId).limit(10),
   ])
   if (!ao) return NextResponse.json({ error: 'AO introuvable' }, { status: 404 })
 

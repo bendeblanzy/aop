@@ -2,6 +2,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { useOrganization } from '@/context/OrganizationContext'
 import { Upload, Brain, CheckSquare, FileDown, Eye, ChevronRight, ChevronLeft, Loader2, X, File, AlertCircle, CheckCircle2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { AnalyseRC, AnalyseCCTP, Reference, Collaborateur } from '@/lib/types'
@@ -19,6 +20,7 @@ type OutputFormat = 'docx' | 'pdf'
 
 export default function NouvelAOPage() {
   const router = useRouter()
+  const { orgId } = useOrganization()
   const [step, setStep] = useState(1)
   const [aoId, setAoId] = useState<string | null>(null)
   const [titre, setTitre] = useState('')
@@ -84,13 +86,13 @@ export default function NouvelAOPage() {
 
   async function handleUpload() {
     if (!titre.trim()) return alert('Veuillez saisir un titre pour cet appel d\'offres')
+    if (!orgId) return alert('Organisation non chargée, veuillez réessayer.')
     setUploading(true)
     const supabase = createClient()
-    const { data: { user } } = await supabase.auth.getUser()
 
     // Créer l'AO
     const { data: ao, error } = await supabase.from('appels_offres').insert({
-      profile_id: user!.id,
+      organization_id: orgId,
       titre,
       acheteur: acheteur || null,
       reference_marche: referencemarche || null,
@@ -167,12 +169,11 @@ export default function NouvelAOPage() {
     setAnalyseRC(rc)
     setAnalyseCCTP(cctp)
 
-    // Charger références et collaborateurs pour l'étape 3
+    // Charger références et collaborateurs pour l'étape 3 (RLS filtre automatiquement par org)
     const supabase = createClient()
-    const { data: { user } } = await supabase.auth.getUser()
     const [{ data: refs }, { data: collabs }] = await Promise.all([
-      supabase.from('references').select('*').eq('profile_id', user!.id),
-      supabase.from('collaborateurs').select('*').eq('profile_id', user!.id),
+      supabase.from('references').select('*').order('annee', { ascending: false }),
+      supabase.from('collaborateurs').select('*').order('nom'),
     ])
     setReferences(refs || [])
     setCollaborateurs(collabs || [])
@@ -446,8 +447,8 @@ export default function NouvelAOPage() {
                     <label key={ref.id} className="flex items-start gap-3 p-3 border border-border rounded-lg cursor-pointer hover:bg-surface">
                       <input type="checkbox" checked={selectedRefs.includes(ref.id)} onChange={e => setSelectedRefs(prev => e.target.checked ? [...prev, ref.id] : prev.filter(id => id !== ref.id))} className="mt-0.5" />
                       <div>
-                        <p className="text-sm font-medium text-text-primary">{ref.intitule_marche}</p>
-                        <p className="text-xs text-text-secondary">{ref.acheteur_public} {ref.annee_execution ? `— ${ref.annee_execution}` : ''}</p>
+                        <p className="text-sm font-medium text-text-primary">{ref.titre}</p>
+                        <p className="text-xs text-text-secondary">{ref.client} {ref.annee ? `— ${ref.annee}` : ''}</p>
                       </div>
                     </label>
                   ))}

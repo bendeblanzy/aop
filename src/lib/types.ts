@@ -1,5 +1,21 @@
-export interface Profile {
+export interface Organization {
   id: string
+  name: string
+  created_at: string
+  updated_at: string
+}
+
+export interface OrganizationMember {
+  id: string
+  organization_id: string
+  user_id: string
+  role: 'admin' | 'member'
+  created_at: string
+  email?: string
+}
+
+export interface Profile {
+  organization_id: string
   created_at: string
   updated_at: string
   raison_sociale: string
@@ -37,6 +53,7 @@ export interface Profile {
   declaration_a_jour_fiscal: boolean
   declaration_a_jour_social: boolean
   sous_traitants?: SousTraitant[]
+  positionnement?: string
 }
 
 export interface SousTraitant {
@@ -49,13 +66,13 @@ export interface SousTraitant {
 
 export interface Reference {
   id: string
-  profile_id: string
+  organization_id: string
   created_at: string
-  intitule_marche: string
-  acheteur_public: string
-  annee_execution?: number
+  titre: string
+  client: string
+  annee?: number
   montant?: number
-  description_prestations?: string
+  description?: string
   domaine?: string
   lot?: string
   attestation_bonne_execution: boolean
@@ -65,7 +82,7 @@ export interface Reference {
 
 export interface Collaborateur {
   id: string
-  profile_id: string
+  organization_id: string
   created_at: string
   nom: string
   prenom: string
@@ -74,12 +91,14 @@ export interface Collaborateur {
   diplomes?: string[]
   certifications?: string[]
   competences_cles?: string[]
+  email?: string
+  role_metier?: string
   cv_url?: string
 }
 
 export interface AppelOffre {
   id: string
-  profile_id: string
+  organization_id: string
   created_at: string
   updated_at: string
   titre: string
@@ -94,6 +113,7 @@ export interface AppelOffre {
   notes_utilisateur?: string
   references_selectionnees?: string[]
   collaborateurs_selectionnes?: string[]
+  team_members?: string[]
 }
 
 export interface FichierSource {

@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { adminClient, getOrgIdForUser } from '@/lib/supabase/admin'
 import { NextRequest, NextResponse } from 'next/server'
 import { callClaude } from '@/lib/ai/claude-client'
 import { PROMPTS } from '@/lib/ai/prompts'
@@ -9,6 +10,9 @@ export async function POST(request: NextRequest) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const orgId = await getOrgIdForUser(user.id)
+  if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 403 })
 
   const { ao_id, file_url } = await request.json()
 
@@ -25,7 +29,7 @@ export async function POST(request: NextRequest) {
   if (!jsonMatch) return NextResponse.json({ error: 'Invalid AI response' }, { status: 500 })
 
   const analyse = JSON.parse(jsonMatch[0])
-  await supabase.from('appels_offres').update({ analyse_cctp: analyse }).eq('id', ao_id).eq('profile_id', user.id)
+  await adminClient.from('appels_offres').update({ analyse_cctp: analyse }).eq('id', ao_id).eq('organization_id', orgId)
 
   return NextResponse.json({ analyse })
 }

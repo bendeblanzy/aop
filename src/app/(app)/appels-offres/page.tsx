@@ -10,7 +10,7 @@ export default async function AppelsOffresPage() {
   const { data: aos } = await supabase
     .from('appels_offres')
     .select('*')
-    .eq('profile_id', user!.id)
+    
     .order('created_at', { ascending: false })
 
   return (

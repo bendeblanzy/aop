@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { adminClient, getOrgIdForUser } from '@/lib/supabase/admin'
 import { NextRequest, NextResponse } from 'next/server'
 import { callClaude } from '@/lib/ai/claude-client'
 import { PROMPTS } from '@/lib/ai/prompts'
@@ -9,6 +10,9 @@ export async function POST(request: NextRequest) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const orgId = await getOrgIdForUser(user.id)
+  if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 403 })
 
   const { ao_id, file_url } = await request.json()
   console.log('[analyze-rc] Téléchargement:', file_url)
@@ -61,7 +65,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Impossible de parser la réponse IA' }, { status: 500 })
   }
 
-  await supabase.from('appels_offres').update({ analyse_rc: analyse }).eq('id', ao_id).eq('profile_id', user.id)
+  await adminClient.from('appels_offres').update({ analyse_rc: analyse }).eq('id', ao_id).eq('organization_id', orgId)
   console.log('[analyze-rc] Analyse sauvegardée pour AO:', ao_id)
 
   return NextResponse.json({ analyse })

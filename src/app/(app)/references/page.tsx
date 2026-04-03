@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { useOrganization } from '@/context/OrganizationContext'
 import { Reference } from '@/lib/types'
 import { formatCurrency } from '@/lib/utils'
 import { Plus, Search, Trash2, Edit, BookMarked, CheckCircle, Loader2 } from 'lucide-react'
@@ -9,12 +10,13 @@ import { toast } from 'sonner'
 const DOMAINES = ['BTP', 'Informatique / IT', 'Conseil', 'Formation', 'Maintenance', 'Nettoyage', 'Sécurité', 'Transport', 'Santé', 'Environnement', 'Autre']
 
 const emptyRef = (): Partial<Reference> => ({
-  intitule_marche: '', acheteur_public: '', annee_execution: new Date().getFullYear(),
-  montant: undefined, description_prestations: '', domaine: '', lot: '',
+  titre: '', client: '', annee: new Date().getFullYear(),
+  montant: undefined, description: '', domaine: '', lot: '',
   attestation_bonne_execution: false, contact_reference: '', telephone_reference: ''
 })
 
 export default function ReferencesPage() {
+  const { orgId } = useOrganization()
   const [refs, setRefs] = useState<Reference[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -25,9 +27,7 @@ export default function ReferencesPage() {
   const supabase = createClient()
 
   async function load() {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
-    const { data } = await supabase.from('references').select('*').eq('profile_id', user.id).order('annee_execution', { ascending: false })
+    const { data } = await supabase.from('references').select('*').order('annee', { ascending: false })
     setRefs(data || [])
     setLoading(false)
   }
@@ -35,15 +35,13 @@ export default function ReferencesPage() {
   useEffect(() => { load() }, [])
 
   const filtered = refs.filter(r =>
-    (!search || r.intitule_marche.toLowerCase().includes(search.toLowerCase()) || r.acheteur_public.toLowerCase().includes(search.toLowerCase())) &&
+    (!search || r.titre.toLowerCase().includes(search.toLowerCase()) || r.client.toLowerCase().includes(search.toLowerCase())) &&
     (!filterDomaine || r.domaine === filterDomaine)
   )
 
   async function save() {
     setSaving(true)
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
-    const payload = { ...editing, profile_id: user.id }
+    const payload = { ...editing, organization_id: orgId }
     const { error } = editing.id
       ? await supabase.from('references').update(payload).eq('id', editing.id)
       : await supabase.from('references').insert(payload)
@@ -75,7 +73,7 @@ export default function ReferencesPage() {
       <div className="flex gap-3 mb-6">
         <div className="flex-1 relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-secondary" />
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Rechercher par intitulé ou acheteur..."
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Rechercher par titre ou client..."
             className="w-full pl-9 pr-3 py-2.5 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary" />
         </div>
         <select value={filterDomaine} onChange={e => setFilterDomaine(e.target.value)} className="border border-border rounded-lg px-3 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary/20">
@@ -98,16 +96,16 @@ export default function ReferencesPage() {
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-1">
-                      <h3 className="font-semibold text-text-primary">{ref.intitule_marche}</h3>
+                      <h3 className="font-semibold text-text-primary">{ref.titre}</h3>
                       {ref.attestation_bonne_execution && <CheckCircle className="w-4 h-4 text-secondary" aria-label="Attestation disponible" />}
                     </div>
-                    <p className="text-text-secondary text-sm">{ref.acheteur_public}</p>
+                    <p className="text-text-secondary text-sm">{ref.client}</p>
                     <div className="flex flex-wrap gap-3 mt-3 text-xs text-text-secondary">
-                      {ref.annee_execution && <span>{ref.annee_execution}</span>}
+                      {ref.annee && <span>{ref.annee}</span>}
                       {ref.montant && <span className="font-medium text-text-primary">{formatCurrency(ref.montant)}</span>}
                       {ref.domaine && <span className="bg-primary-light text-primary px-2 py-0.5 rounded-full font-medium">{ref.domaine}</span>}
                     </div>
-                    {ref.description_prestations && <p className="text-sm text-text-secondary mt-2 line-clamp-2">{ref.description_prestations}</p>}
+                    {ref.description && <p className="text-sm text-text-secondary mt-2 line-clamp-2">{ref.description}</p>}
                   </div>
                   <div className="flex gap-2 ml-4">
                     <button onClick={() => { setEditing(ref); setShowModal(true) }} className="p-2 text-text-secondary hover:text-primary hover:bg-primary-light rounded-lg transition-colors"><Edit className="w-4 h-4" /></button>
@@ -131,16 +129,16 @@ export default function ReferencesPage() {
             <div className="p-6 space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="col-span-2">
-                  <label className="block text-sm font-medium text-text-primary mb-1.5">Intitulé du marché *</label>
-                  <input value={editing.intitule_marche || ''} onChange={e => setEditing(p => ({ ...p, intitule_marche: e.target.value }))} className="w-full border border-border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary" />
+                  <label className="block text-sm font-medium text-text-primary mb-1.5">Titre du marché *</label>
+                  <input value={editing.titre || ''} onChange={e => setEditing(p => ({ ...p, titre: e.target.value }))} className="w-full border border-border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary" />
                 </div>
                 <div className="col-span-2">
-                  <label className="block text-sm font-medium text-text-primary mb-1.5">Acheteur public *</label>
-                  <input value={editing.acheteur_public || ''} onChange={e => setEditing(p => ({ ...p, acheteur_public: e.target.value }))} className="w-full border border-border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary" />
+                  <label className="block text-sm font-medium text-text-primary mb-1.5">Client *</label>
+                  <input value={editing.client || ''} onChange={e => setEditing(p => ({ ...p, client: e.target.value }))} className="w-full border border-border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-text-primary mb-1.5">Année d&apos;exécution</label>
-                  <input type="number" value={editing.annee_execution || ''} onChange={e => setEditing(p => ({ ...p, annee_execution: parseInt(e.target.value) }))} className="w-full border border-border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary" />
+                  <label className="block text-sm font-medium text-text-primary mb-1.5">Année</label>
+                  <input type="number" value={editing.annee || ''} onChange={e => setEditing(p => ({ ...p, annee: parseInt(e.target.value) }))} className="w-full border border-border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-text-primary mb-1.5">Montant (€)</label>
@@ -159,7 +157,7 @@ export default function ReferencesPage() {
                 </div>
                 <div className="col-span-2">
                   <label className="block text-sm font-medium text-text-primary mb-1.5">Description des prestations</label>
-                  <textarea value={editing.description_prestations || ''} onChange={e => setEditing(p => ({ ...p, description_prestations: e.target.value }))} rows={3} className="w-full border border-border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary resize-none" />
+                  <textarea value={editing.description || ''} onChange={e => setEditing(p => ({ ...p, description: e.target.value }))} rows={3} className="w-full border border-border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary resize-none" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-text-primary mb-1.5">Contact référence</label>
@@ -177,7 +175,7 @@ export default function ReferencesPage() {
             </div>
             <div className="flex justify-end gap-3 px-6 pb-6">
               <button onClick={() => setShowModal(false)} className="px-5 py-2.5 border border-border rounded-lg text-sm font-medium text-text-secondary hover:bg-surface transition-colors">Annuler</button>
-              <button onClick={save} disabled={saving || !editing.intitule_marche || !editing.acheteur_public} className="flex items-center gap-2 bg-primary hover:bg-primary-hover text-white rounded-lg px-5 py-2.5 text-sm font-medium transition-colors disabled:opacity-60">
+              <button onClick={save} disabled={saving || !editing.titre || !editing.client} className="flex items-center gap-2 bg-primary hover:bg-primary-hover text-white rounded-lg px-5 py-2.5 text-sm font-medium transition-colors disabled:opacity-60">
                 {saving && <Loader2 className="w-4 h-4 animate-spin" />} Sauvegarder
               </button>
             </div>

@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { useOrganization } from '@/context/OrganizationContext'
 import { Profile } from '@/lib/types'
 import { calculateProfileCompletion, cn } from '@/lib/utils'
 import { Loader2, Save, Plus, Trash2, Building2 } from 'lucide-react'
@@ -10,6 +11,7 @@ const FORMES_JURIDIQUES = ['SARL', 'SAS', 'SA', 'EURL', 'EI', 'SASU', 'SNC', 'As
 const DOMAINES = ['BTP', 'Informatique / IT', 'Conseil', 'Formation', 'Maintenance', 'Nettoyage', 'Sécurité', 'Transport', 'Restauration', 'Santé', 'Environnement', 'Communication', 'Juridique', 'Autre']
 
 export default function ProfilPage() {
+  const { orgId, refresh: refreshOrg } = useOrganization()
   const [profile, setProfile] = useState<Partial<Profile>>({
     pays: 'France',
     declaration_non_interdiction: false,
@@ -26,37 +28,35 @@ export default function ProfilPage() {
   const [newST, setNewST] = useState({ nom: '', siret: '', adresse: '', specialite: '' })
   const supabase = createClient()
 
-  useEffect(() => {
-    async function load() {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
-      const { data } = await supabase.from('profiles').select('*').eq('id', user.id).maybeSingle()
-      if (data) setProfile(data)
-      setLoading(false)
-    }
-    load()
-  }, [])
+  async function load() {
+    if (!orgId) return
+    const { data } = await supabase.from('profiles').select('*').eq('organization_id', orgId).maybeSingle()
+    if (data) setProfile(data)
+    setLoading(false)
+  }
+
+  useEffect(() => { if (orgId) load() }, [orgId])
 
   async function save() {
     setSaving(true)
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
 
-    // Exclure les champs auto-gérés par Supabase (created_at, updated_at)
-    // et nettoyer les champs date vides → null
     const DATE_FIELDS = ['date_creation_entreprise', 'assurance_rc_expiration', 'assurance_decennale_expiration']
-    const { created_at, updated_at, siren, ...editableFields } = profile as any
-    const payload: Record<string, unknown> = { ...editableFields, id: user.id }
+    const { created_at, updated_at, siren, id, ...editableFields } = profile as any
+    const payload: Record<string, unknown> = { ...editableFields, organization_id: orgId }
     for (const f of DATE_FIELDS) {
       if (payload[f] === '') payload[f] = null
     }
 
-    const { error } = await supabase.from('profiles').upsert(payload)
+    const { error } = await supabase.from('profiles').upsert(
+      { ...payload, organization_id: orgId },
+      { onConflict: 'organization_id' }
+    )
     if (error) {
       console.error('[profil] upsert error:', error.message, error.details, error.hint)
       toast.error(`Erreur : ${error.message}`)
     } else {
       toast.success('Profil sauvegardé !')
+      refreshOrg()
     }
     setSaving(false)
   }
@@ -75,6 +75,7 @@ export default function ProfilPage() {
     { id: 'assurances', label: 'Assurances' },
     { id: 'declarations', label: 'Déclarations' },
     { id: 'sous-traitants', label: 'Sous-traitants' },
+    { id: 'positionnement', label: 'Positionnement' },
   ]
 
   if (loading) return <div className="flex items-center justify-center h-64"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>
@@ -287,6 +288,23 @@ export default function ProfilPage() {
                   <Plus className="w-4 h-4" /> Ajouter
                 </button>
               </div>
+            </div>
+          )}
+
+          {/* Onglet Positionnement */}
+          {activeTab === 'positionnement' && (
+            <div>
+              <p className="text-sm text-text-secondary mb-3">
+                Décrivez la philosophie, les valeurs et le positionnement stratégique de votre organisation.
+                Ces informations seront automatiquement intégrées dans vos réponses aux AOP pour personnaliser votre approche.
+              </p>
+              <textarea
+                value={profile.positionnement || ''}
+                onChange={e => update('positionnement', e.target.value)}
+                rows={12}
+                className="w-full border border-border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary resize-none"
+                placeholder="Ex: Notre cabinet est spécialisé dans la communication santé depuis 15 ans. Nous défendons une approche centrée sur le patient, avec une expertise particulière dans les campagnes de prévention..."
+              />
             </div>
           )}
         </div>
