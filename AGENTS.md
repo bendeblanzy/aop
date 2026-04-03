@@ -47,6 +47,11 @@ This version has breaking changes — APIs, conventions, and file structure may 
 - **`Array.isArray(ao.analyse_rc?.lots)`** avant tout `.map()` sur des champs JSON
   stockés en base (Supabase renvoie parfois un objet au lieu d'un tableau selon le schéma).
 
+- **Colonnes à exclure des upserts Supabase** (ce projet) :
+  `created_at`, `updated_at` (auto-timestamps), `siren` (colonne générée depuis `siret`).
+  PostgreSQL interdit de fournir une valeur explicite sur une colonne générée → 400.
+  Pattern : `const { created_at, updated_at, siren, ...payload } = data`
+
 ### Stack technique du projet
 
 - Next.js App Router (version récente — voir `node_modules/next/dist/docs/`)
