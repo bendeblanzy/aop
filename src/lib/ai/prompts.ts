@@ -105,6 +105,7 @@ Structure du mémoire :
 8. Engagements et valeur ajoutée
 
 Règles impératives :
+- Si un "positionnement" ou une philosophie d'entreprise est fourni(e), intègre-le naturellement dans la présentation de l'entreprise et dans la valeur ajoutée — sans le copier-coller mot pour mot, mais en l'adaptant au contexte du marché.
 - Personnalise chaque section en fonction du CCTP analysé
 - Mets en avant les références les plus proches du marché
 - Quantifie au maximum (chiffres, pourcentages, délais)

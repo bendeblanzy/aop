@@ -26,8 +26,11 @@ export async function POST(request: NextRequest) {
   const selectedRefs = references?.filter(r => ao.references_selectionnees?.includes(r.id)) ?? references?.slice(0, 5) ?? []
   const selectedCollabs = collaborateurs?.filter(c => ao.collaborateurs_selectionnes?.includes(c.id)) ?? collaborateurs?.slice(0, 3) ?? []
 
+  const p = profile as any
   const userMsg = `
-Profil entreprise : ${JSON.stringify(profile)}
+Entreprise : ${p.raison_sociale || ''}
+${p.positionnement ? `Positionnement / Philosophie : ${p.positionnement}` : ''}
+Profil complet : ${JSON.stringify(profile)}
 Analyse RC : ${JSON.stringify(ao.analyse_rc || {})}
 Analyse CCTP : ${JSON.stringify(ao.analyse_cctp || {})}
 Références : ${JSON.stringify(selectedRefs)}

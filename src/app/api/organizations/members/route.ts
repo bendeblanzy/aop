@@ -82,7 +82,7 @@ export async function POST(request: NextRequest) {
       email,
       {
         data: { org_id: requesterMember.organization_id },
-        redirectTo: `${process.env.NEXT_PUBLIC_APP_URL ?? ''}/auth/accept-invite`,
+        redirectTo: `${process.env.NEXT_PUBLIC_APP_URL ?? 'https://aop-woad.vercel.app'}/auth/accept-invite`,
       }
     )
 
