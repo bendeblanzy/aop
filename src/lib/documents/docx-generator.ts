@@ -193,185 +193,260 @@ export async function generateDocx(title: string, sections: { title: string; con
   return await Packer.toBuffer(doc)
 }
 
-// ─── DC1 — Lettre de candidature ─────────────────────────────────────────────
+// ─── DC1 — Lettre de candidature (structure officielle DAJ v01/04/2019) ───────
 export async function generateDC1Docx(data: Record<string, string>): Promise<Buffer> {
+  const seul = data.groupement !== 'oui'
   const children: (Paragraph | Table)[] = [
+    // En-tête officiel
     heading1('DC1 — LETTRE DE CANDIDATURE'),
-    para([run('Habilitation du mandataire par ses co-traitants', { italic: true, color: '6B7280' })], { align: AlignmentType.CENTER }),
-    para([run('CERFA n° 12156 — Direction des Affaires Juridiques', { italic: true, size: 9, color: '9CA3AF' })], { align: AlignmentType.CENTER }),
+    para([run('Désignation du mandataire par ses co-traitants', { italic: true, color: '6B7280' })], { align: AlignmentType.CENTER }),
+    para([run('Formulaire DAJ — Version 01/04/2019 — Ministère de l\'Économie et des Finances', { italic: true, size: 9, color: '9CA3AF' })], { align: AlignmentType.CENTER }),
     ...spacer(1),
 
+    // A — Identification de l'acheteur
     formTable([
       sectionHeaderRow('A — IDENTIFICATION DE L\'ACHETEUR PUBLIC'),
-      formRow('Nom de l\'acheteur', data.acheteur_nom),
-      formRow('Adresse', data.acheteur_adresse),
-      sectionHeaderRow('B — OBJET DU MARCHÉ'),
-      formRow('Objet du marché', data.objet_marche),
-      formRow('Référence / numéro', data.reference_marche),
-      formRow('Lot(s) candidaté(s)', data.lots_candidats || 'Marché global (sans allotissement)'),
-      sectionHeaderRow('C — IDENTIFICATION DU CANDIDAT'),
-      formRow('Dénomination sociale', data.raison_sociale),
+      formRow('Nom / Raison sociale', data.acheteur_nom),
+      formRow('Adresse postale', data.acheteur_adresse),
+      formRow('Adresse électronique', data.acheteur_email || ''),
+    ]),
+    ...spacer(1),
+
+    // B — Objet de la consultation
+    formTable([
+      sectionHeaderRow('B — OBJET DE LA CONSULTATION'),
+      formRow('Objet du marché ou de l\'accord-cadre', data.objet_marche || data.titre_ao || ''),
+      formRow('Référence de la procédure', data.reference_marche || ''),
+    ]),
+    ...spacer(1),
+
+    // C — Objet de la candidature
+    formTable([
+      sectionHeaderRow('C — OBJET DE LA CANDIDATURE'),
+      formRow('Le candidat soumissionne pour', data.lots_candidats
+        ? `Les lots : ${data.lots_candidats}`
+        : 'Le marché global (procédure sans allotissement)'),
+    ]),
+    ...spacer(1),
+
+    // D — Présentation du candidat
+    formTable([
+      sectionHeaderRow('D — PRÉSENTATION DU CANDIDAT'),
+      formRow('Situation', seul ? '☑ Le candidat se présente seul' : '☑ Le candidat est membre d\'un groupement'),
+      formRow('Nom commercial et dénomination sociale', data.raison_sociale),
+      formRow('Adresse de l\'établissement', data.adresse_siege),
+      formRow('Code postal — Ville', `${data.code_postal || ''} ${data.ville || ''}`.trim()),
+      formRow('Adresse électronique', data.email || ''),
       formRow('Numéro SIRET', data.siret),
-      formRow('Forme juridique', data.forme_juridique || '[À compléter]'),
-      formRow('Adresse du siège social', data.adresse_siege),
-      formRow('Code postal — Ville', `${data.code_postal || ''} ${data.ville || ''}`.trim() || '[À compléter]'),
-      formRow('N° TVA intracommunautaire', data.numero_tva || '[Si applicable]'),
-      formRow('Représentant habilité (civilité)', data.representant_civilite),
-      formRow('Nom du représentant', data.representant_nom),
-      formRow('Prénom du représentant', data.representant_prenom),
-      formRow('Qualité / fonction', data.representant_qualite || '[À compléter]'),
+      ...(seul ? [] : [
+        formRow('Type de groupement', data.type_groupement || '[Conjoint / Solidaire]'),
+        formRow('Rôle dans le groupement', data.role_groupement || '[Mandataire / Co-traitant]'),
+      ]),
     ]),
     ...spacer(1),
 
-    // Section D - Groupement
-    formTable([
-      sectionHeaderRow('D — CAS DE GROUPEMENT (remplir uniquement si applicable)'),
-      formRow('Le candidat est-il en groupement ?', data.groupement === 'oui' ? 'OUI' : 'NON'),
-      formRow('Type de groupement', data.groupement === 'oui' ? (data.type_groupement || '[À préciser]') : 'Sans objet'),
-      formRow('Mandataire du groupement', data.groupement === 'oui' ? (data.mandataire || '[À préciser]') : 'Sans objet'),
-    ]),
+    // E — Membres du groupement (si applicable)
+    ...(!seul ? [
+      formTable([
+        sectionHeaderRow('E — IDENTIFICATION DES MEMBRES DU GROUPEMENT'),
+        formRow('Mandataire désigné', data.mandataire || data.raison_sociale),
+        formRow('Autres co-traitants', data.cotraitants || '[À lister avec SIRET et répartition des prestations]'),
+      ]),
+      ...spacer(1),
+    ] : []),
+
+    // F — Engagements
+    heading2('F — ENGAGEMENTS DU CANDIDAT'),
+    para([run('F1 — Déclarations sur l\'honneur relatives aux interdictions de soumissionner', { bold: true })]),
+    para([run('Le candidat déclare sur l\'honneur n\'entrer dans aucun des cas d\'exclusion prévus aux articles L. 2141-1 à L. 2141-14 du code de la commande publique, et être en règle au regard des articles L. 5212-1 à L. 5212-11 du code du travail (emploi des travailleurs handicapés).')]),
+    ...spacer(1),
+    para([run('F2 — Capacités du candidat', { bold: true })]),
+    para([run('Le candidat joint à sa candidature le formulaire DC2 complété, attestant de ses capacités économiques, financières et techniques.')]),
     ...spacer(1),
 
-    // Section E - Déclarations
-    heading2('E — DÉCLARATIONS SUR L\'HONNEUR'),
-    para([run('Je soussigné(e), représentant habilité du candidat, déclare sur l\'honneur que :', { bold: true })]),
-    para([run('1. Les renseignements fournis dans le présent document sont exacts et complets.')], { indent: 200 }),
-    para([run('2. Le candidat n\'entre dans aucun des cas d\'exclusion prévus aux articles L. 2141-1 à L. 2141-14 du code de la commande publique.')], { indent: 200 }),
-    para([run('3. Le candidat est en règle au regard de ses obligations fiscales et sociales.')], { indent: 200 }),
-    para([run('4. Le candidat dispose des capacités techniques, professionnelles et financières pour exécuter le marché.')], { indent: 200 }),
-    ...spacer(1),
+    // G — Mandataire (si groupement)
+    ...(!seul ? [
+      formTable([
+        sectionHeaderRow('G — DÉSIGNATION DU MANDATAIRE (groupement)'),
+        formRow('Mandataire', data.mandataire || data.raison_sociale),
+        formRow('SIRET du mandataire', data.siret_mandataire || data.siret),
+      ]),
+      ...spacer(1),
+    ] : []),
 
-    // Section F - Signature
-    heading2('F — SIGNATURE'),
+    // Signature (non obligatoire depuis 2016, sauf si le RC le prévoit)
+    heading2('SIGNATURE'),
+    para([run('Note : la signature du DC1 est facultative depuis le 01/01/2016, sauf si les documents de la consultation le prévoient expressément.', { italic: true, size: 9, color: '6B7280' })]),
+    ...spacer(1),
     formTable([
-      formRow('Fait à', data.lieu_signature || '[Ville]'),
+      formRow('Fait à', data.lieu_signature || data.ville || '[Ville]'),
       formRow('Le', data.date_signature || new Date().toLocaleDateString('fr-FR')),
-      formRow('Nom et prénom du signataire', `${data.representant_prenom || ''} ${data.representant_nom || ''}`.trim()),
-      formRow('Qualité du signataire', data.representant_qualite || '[Qualité]'),
+      formRow('Nom et prénom', `${data.representant_prenom || ''} ${data.representant_nom || ''}`.trim()),
+      formRow('Qualité', data.representant_qualite || '[Qualité / Fonction]'),
       new TableRow({
-        children: [
-          new TableCell({
-            columnSpan: 2,
-            margins: { top: 300, bottom: 300, left: 120, right: 120 },
-            borders: formBorders(),
-            children: [
-              new Paragraph({ children: [run('Signature :', { bold: true })] }),
-              new Paragraph({ children: [run(' ')] }),
-              new Paragraph({ children: [run(' ')] }),
-              new Paragraph({ children: [run('(Cachet de l\'entreprise)', { italic: true, color: '6B7280', size: 9 })] }),
-            ],
-          }),
-        ],
+        children: [new TableCell({
+          columnSpan: 2,
+          margins: { top: 500, bottom: 500, left: 120, right: 120 },
+          borders: formBorders(),
+          children: [
+            new Paragraph({ children: [run('Signature et cachet :', { bold: true })] }),
+            new Paragraph({ children: [run(' ')] }),
+            new Paragraph({ children: [run(' ')] }),
+          ],
+        })],
       }),
     ]),
     ...spacer(1),
-    para([run('⚠ Ce document DC1 doit être complété, signé et accompagné des pièces justificatives listées dans le Règlement de Consultation.', { italic: true, size: 9, color: '6B7280' })], { align: AlignmentType.CENTER }),
+    para([run('Ce formulaire DC1 doit être accompagné du DC2 et de toutes les pièces exigées par le Règlement de Consultation.', { italic: true, size: 9, color: '6B7280' })], { align: AlignmentType.CENTER }),
   ]
 
   const doc = new Document({
     styles: { default: { document: { run: { font: 'Arial', size: 22 } } } },
     sections: [{
       properties: { page: { margin: { top: convertInchesToTwip(0.8), bottom: convertInchesToTwip(0.8), left: convertInchesToTwip(1.2), right: convertInchesToTwip(1) } } },
+      footers: {
+        default: new Footer({
+          children: [new Paragraph({
+            children: [
+              new TextRun({ text: 'DC1 — Réf. consultation : ', size: 16, font: 'Arial', color: '9CA3AF' }),
+              new TextRun({ text: data.reference_marche || '', size: 16, font: 'Arial', color: '9CA3AF' }),
+              new TextRun({ text: '    Page ', size: 16, font: 'Arial', color: '9CA3AF' }),
+              new PageNumber({ format: NumberFormat.DECIMAL }),
+            ],
+            alignment: AlignmentType.RIGHT,
+            border: { top: { style: BorderStyle.SINGLE, size: 4, color: GREY_LINE } },
+          })],
+        }),
+      },
       children: children as Paragraph[],
     }],
   })
   return await Packer.toBuffer(doc)
 }
 
-// ─── DC2 — Déclaration du candidat ───────────────────────────────────────────
+// ─── DC2 — Déclaration du candidat (structure officielle DAJ v01/04/2019, MàJ 21/11/2023) ───
 export async function generateDC2Docx(data: Record<string, any>): Promise<Buffer> {
   const refs: any[] = data.references_selectionnees || []
   const children: (Paragraph | Table)[] = [
     heading1('DC2 — DÉCLARATION DU CANDIDAT'),
     para([run('Individuel ou membre du groupement', { italic: true, color: '6B7280' })], { align: AlignmentType.CENTER }),
-    para([run('CERFA n° 12571 — Direction des Affaires Juridiques', { italic: true, size: 9, color: '9CA3AF' })], { align: AlignmentType.CENTER }),
+    para([run('Formulaire DAJ — Version 01/04/2019 (MàJ 21/11/2023) — Marchés publics', { italic: true, size: 9, color: '9CA3AF' })], { align: AlignmentType.CENTER }),
     ...spacer(1),
 
+    // A — Identification de l'acheteur
     formTable([
-      sectionHeaderRow('A — IDENTIFICATION DU CANDIDAT'),
-      formRow('Dénomination sociale', data.raison_sociale),
+      sectionHeaderRow('A — IDENTIFICATION DE L\'ACHETEUR'),
+      formRow('Acheteur public', data.acheteur_nom || '[À compléter par l\'acheteur]'),
+    ]),
+    ...spacer(1),
+
+    // B — Objet de la consultation
+    formTable([
+      sectionHeaderRow('B — OBJET DE LA CONSULTATION'),
+      formRow('Objet du marché', data.objet_marche || '[À compléter]'),
+      formRow('Lot(s) concerné(s)', data.lots_candidats || 'Marché global'),
+    ]),
+    ...spacer(1),
+
+    // C1 — Identification du candidat (cas général)
+    formTable([
+      sectionHeaderRow('C1 — IDENTIFICATION DU CANDIDAT (cas général)'),
+      formRow('Nom commercial et dénomination sociale', data.raison_sociale),
+      formRow('Adresse de l\'établissement exécutant la prestation', data.adresse_siege),
+      formRow('Code postal — Ville', `${data.code_postal || ''} ${data.ville || ''}`.trim()),
+      formRow('Adresse électronique', data.email || ''),
       formRow('Numéro SIRET', data.siret),
-      formRow('Forme juridique', data.forme_juridique || '[À compléter]'),
-      formRow('Date de création', data.date_creation || '[À compléter]'),
-      formRow('Capital social (€)', data.capital_social ? `${Number(data.capital_social).toLocaleString('fr-FR')} €` : '[À compléter]'),
-      formRow('Adresse siège social', data.adresse_siege || '[À compléter]'),
-      formRow('Code postal — Ville', `${data.code_postal || ''} ${data.ville || ''}`.trim() || '[À compléter]'),
-      formRow('N° TVA intracommunautaire', data.numero_tva || '[Si applicable]'),
-      formRow('Code NAF/APE', data.code_naf || '[À compléter]'),
-      formRow('Représentant légal', `${data.representant_prenom || ''} ${data.representant_nom || ''}`.trim()),
-      formRow('Qualité du représentant', data.representant_qualite || '[À compléter]'),
+      formRow('Forme juridique', data.forme_juridique || '[SA, SARL, EURL, SAS, association, etc.]'),
+      formRow('Code NAF/APE', data.code_naf || ''),
+      formRow('PME / artisan ?', 'À préciser selon situation (art. R. 2151-13 CCP)'),
     ]),
     ...spacer(1),
 
+    // E — Aptitude à exercer l'activité
     formTable([
-      sectionHeaderRow('B — SITUATION JURIDIQUE (Déclarations sur l\'honneur)'),
-      formRow('Non-interdiction de soumissionner', data.declaration_non_interdiction ? '✓ OUI — Déclaré conforme' : '[À compléter]'),
-      formRow('À jour obligations fiscales', data.declaration_a_jour_fiscal ? '✓ OUI — Déclaré conforme' : '[À compléter]'),
-      formRow('À jour obligations sociales', data.declaration_a_jour_social ? '✓ OUI — Déclaré conforme' : '[À compléter]'),
+      sectionHeaderRow('E — APTITUDE À EXERCER L\'ACTIVITÉ PROFESSIONNELLE'),
+      formRow('Inscription registre professionnel', data.registre_professionnel || 'Registre du commerce et des sociétés (RCS)'),
+      formRow('N° d\'inscription', data.siret ? `SIRET : ${data.siret}` : '[À compléter]'),
+      formRow('Documents disponibles en ligne', data.url_documents || '[URL si applicable]'),
     ]),
     ...spacer(1),
 
+    // F — Capacité économique et financière
+    heading2('F — CAPACITÉ ÉCONOMIQUE ET FINANCIÈRE'),
+    para([run('F1 — Chiffres d\'affaires hors taxes des trois derniers exercices disponibles', { bold: true })]),
+    ...spacer(1),
+    dataTable(
+      ['Exercice', 'Période', 'CA global HT (€)', 'Part CA marché (%)'],
+      [
+        ['N-1', data.periode_n1 || `${new Date().getFullYear() - 1}`, data.ca_n1 ? `${Number(data.ca_n1).toLocaleString('fr-FR')} €` : '[À renseigner]', ''],
+        ['N-2', data.periode_n2 || `${new Date().getFullYear() - 2}`, data.ca_n2 ? `${Number(data.ca_n2).toLocaleString('fr-FR')} €` : '[À renseigner]', ''],
+        ['N-3', data.periode_n3 || `${new Date().getFullYear() - 3}`, data.ca_n3 ? `${Number(data.ca_n3).toLocaleString('fr-FR')} €` : '[À renseigner]', ''],
+      ],
+      [15, 25, 35, 25]
+    ),
+    ...spacer(1),
     formTable([
-      sectionHeaderRow('C — CAPACITÉ ÉCONOMIQUE ET FINANCIÈRE'),
-      formRow('Chiffre d\'affaires N-1 (€)', data.ca_n1 ? `${Number(data.ca_n1).toLocaleString('fr-FR')} €` : '[À renseigner]'),
-      formRow('Chiffre d\'affaires N-2 (€)', data.ca_n2 ? `${Number(data.ca_n2).toLocaleString('fr-FR')} €` : '[À renseigner]'),
-      formRow('Chiffre d\'affaires N-3 (€)', data.ca_n3 ? `${Number(data.ca_n3).toLocaleString('fr-FR')} €` : '[À renseigner]'),
-      formRow('Effectif moyen annuel', data.effectif ? `${data.effectif} salariés` : '[À renseigner]'),
+      formRow('F2 — Autres informations financières', `Effectif moyen annuel : ${data.effectif ? `${data.effectif} salariés` : '[À renseigner]'}`),
+      formRow('Capital social', data.capital_social ? `${Number(data.capital_social).toLocaleString('fr-FR')} €` : '[À renseigner]'),
+      formRow('F3 — Assurance RC professionnelle n°', data.assurance_rc_numero || '[À renseigner]'),
+      formRow('Compagnie d\'assurance', data.assurance_rc_compagnie || '[À renseigner]'),
+      formRow('Expiration', data.assurance_rc_expiration || '[À renseigner]'),
     ]),
+    ...spacer(1),
+
+    // G — Capacité technique et professionnelle
+    heading2('G — CAPACITÉ TECHNIQUE ET PROFESSIONNELLE'),
+    para([run('G1 — Références de prestations similaires réalisées au cours des 3 à 5 dernières années', { bold: true })]),
     ...spacer(1),
   ]
 
-  // Section D - Références
-  children.push(heading2('D — CAPACITÉS TECHNIQUES ET PROFESSIONNELLES'))
   if (refs.length > 0) {
     children.push(
       dataTable(
-        ['Intitulé du marché', 'Acheteur public', 'Année', 'Montant (€)'],
-        refs.map(r => [
+        ['Intitulé du marché', 'Acheteur public', 'Année', 'Montant (€)', 'Attestation'],
+        refs.map((r: any) => [
           r.intitule_marche || '',
           r.acheteur_public || '',
           String(r.annee_execution || ''),
           r.montant ? `${Number(r.montant).toLocaleString('fr-FR')} €` : '—',
+          r.attestation_bonne_execution ? 'Oui' : 'Sur demande',
         ]),
-        [40, 30, 10, 20]
+        [32, 25, 10, 18, 15]
       )
     )
   } else {
-    children.push(para([run('Aucune référence renseignée. Complétez votre profil pour inclure vos références.', { italic: true, color: '6B7280' })]))
+    children.push(para([run('Aucune référence renseignée — à compléter depuis votre profil AOP.', { italic: true, color: '6B7280' })]))
   }
 
-  // Certifications
   children.push(...spacer(1))
   children.push(formTable([
-    sectionHeaderRow('E — CERTIFICATIONS ET QUALIFICATIONS'),
-    formRow('Certifications', (data.certifications || []).join(', ') || 'Aucune certification renseignée'),
-    formRow('Assurance RC pro n°', data.assurance_rc_numero || '[À compléter]'),
-    formRow('Compagnie d\'assurance RC', data.assurance_rc_compagnie || '[À compléter]'),
-    formRow('Validité assurance RC', data.assurance_rc_expiration || '[À compléter]'),
+    formRow('G1 — Effectifs & moyens humains', data.effectif ? `${data.effectif} collaborateurs` : '[À renseigner]'),
+    formRow('Certifications / qualifications', (data.certifications || []).length > 0 ? (data.certifications || []).join(' — ') : 'Aucune certification renseignée'),
+    formRow('G2 — Documents disponibles en ligne', '[URL si applicable]'),
   ]))
   children.push(...spacer(1))
 
-  // Signature
-  children.push(heading2('F — DÉCLARATION SUR L\'HONNEUR ET SIGNATURE'))
-  children.push(para([run('Je soussigné(e) certifie l\'exactitude des informations fournies dans le présent document et atteste sur l\'honneur de la capacité du candidat à exécuter les prestations demandées.')]))
+  // Signature (facultative)
+  children.push(heading2('DÉCLARATION SUR L\'HONNEUR ET SIGNATURE'))
+  children.push(para([run('Je soussigné(e), représentant habilité du candidat, certifie l\'exactitude de toutes les informations fournies dans le présent DC2 et atteste sur l\'honneur de la capacité du candidat à réaliser les prestations objet du marché.')]))
+  children.push(para([run('Note : la signature est facultative sauf si les documents de la consultation le prévoient expressément.', { italic: true, size: 9, color: '6B7280' })]))
   children.push(...spacer(1))
   children.push(formTable([
-    formRow('Fait à', data.lieu_signature || '[Ville]'),
+    formRow('Fait à', data.lieu_signature || data.ville || '[Ville]'),
     formRow('Le', data.date_signature || new Date().toLocaleDateString('fr-FR')),
-    formRow('Nom et prénom', `${data.representant_prenom || ''} ${data.representant_nom || ''}`.trim()),
+    formRow('Nom et prénom du représentant habilité', `${data.representant_prenom || ''} ${data.representant_nom || ''}`.trim()),
+    formRow('Qualité', data.representant_qualite || '[Qualité / Fonction]'),
     new TableRow({
-      children: [
-        new TableCell({
-          columnSpan: 2,
-          margins: { top: 400, bottom: 400, left: 120, right: 120 },
-          borders: formBorders(),
-          children: [
-            new Paragraph({ children: [run('Signature et cachet :')] }),
-            new Paragraph({ children: [run(' ')] }),
-            new Paragraph({ children: [run(' ')] }),
-          ],
-        }),
-      ],
+      children: [new TableCell({
+        columnSpan: 2,
+        margins: { top: 500, bottom: 500, left: 120, right: 120 },
+        borders: formBorders(),
+        children: [
+          new Paragraph({ children: [run('Signature et cachet de l\'entreprise :', { bold: true })] }),
+          new Paragraph({ children: [run(' ')] }),
+          new Paragraph({ children: [run(' ')] }),
+        ],
+      })],
     }),
   ]))
 
@@ -379,6 +454,20 @@ export async function generateDC2Docx(data: Record<string, any>): Promise<Buffer
     styles: { default: { document: { run: { font: 'Arial', size: 22 } } } },
     sections: [{
       properties: { page: { margin: { top: convertInchesToTwip(0.8), bottom: convertInchesToTwip(0.8), left: convertInchesToTwip(1.2), right: convertInchesToTwip(1) } } },
+      footers: {
+        default: new Footer({
+          children: [new Paragraph({
+            children: [
+              new TextRun({ text: 'DC2 — ', size: 16, font: 'Arial', color: '9CA3AF' }),
+              new TextRun({ text: data.raison_sociale || '', size: 16, font: 'Arial', color: '9CA3AF' }),
+              new TextRun({ text: '    Page ', size: 16, font: 'Arial', color: '9CA3AF' }),
+              new PageNumber({ format: NumberFormat.DECIMAL }),
+            ],
+            alignment: AlignmentType.RIGHT,
+            border: { top: { style: BorderStyle.SINGLE, size: 4, color: GREY_LINE } },
+          })],
+        }),
+      },
       children: children as Paragraph[],
     }],
   })
