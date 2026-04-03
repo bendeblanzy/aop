@@ -45,7 +45,7 @@ export default function ProfilPage() {
     // Exclure les champs auto-gérés par Supabase (created_at, updated_at)
     // et nettoyer les champs date vides → null
     const DATE_FIELDS = ['date_creation_entreprise', 'assurance_rc_expiration', 'assurance_decennale_expiration']
-    const { created_at, updated_at, ...editableFields } = profile as any
+    const { created_at, updated_at, siren, ...editableFields } = profile as any
     const payload: Record<string, unknown> = { ...editableFields, id: user.id }
     for (const f of DATE_FIELDS) {
       if (payload[f] === '') payload[f] = null
