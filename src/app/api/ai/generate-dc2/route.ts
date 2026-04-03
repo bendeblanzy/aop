@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { adminClient, uploadGeneratedDoc, getOrFallbackProfile } from '@/lib/supabase/admin'
 import { NextRequest, NextResponse } from 'next/server'
 import { callClaude } from '@/lib/ai/claude-client'
 import { PROMPTS } from '@/lib/ai/prompts'
@@ -11,15 +12,15 @@ export async function POST(request: NextRequest) {
 
   const { ao_id } = await request.json()
 
-  const [{ data: ao }, { data: profile }, { data: references }] = await Promise.all([
-    supabase.from('appels_offres').select('*').eq('id', ao_id).single(),
-    supabase.from('profiles').select('*').eq('id', user.id).single(),
-    supabase.from('references').select('*').eq('profile_id', user.id).limit(10),
+  const [{ data: ao }, profile, { data: references }] = await Promise.all([
+    adminClient.from('appels_offres').select('*').eq('id', ao_id).eq('profile_id', user.id).single(),
+    getOrFallbackProfile(user.id),
+    adminClient.from('references').select('*').eq('profile_id', user.id).limit(10),
   ])
 
-  if (!ao || !profile) return NextResponse.json({ error: 'Données manquantes' }, { status: 400 })
+  if (!ao) return NextResponse.json({ error: 'AO introuvable' }, { status: 404 })
 
-  const selectedRefs = references?.filter(r => ao.references_selectionnees?.includes(r.id)) || references?.slice(0, 3) || []
+  const selectedRefs = references?.filter(r => ao.references_selectionnees?.includes(r.id)) ?? references?.slice(0, 3) ?? []
 
   const userMsg = `
 Profil entreprise :
@@ -34,7 +35,12 @@ ${JSON.stringify(ao.analyse_rc || {}, null, 2)}
 AO : ${ao.titre} — Acheteur : ${ao.acheteur || 'N/A'}
 `
 
-  const raw = await callClaude(PROMPTS.generateDC2, userMsg, 'sonnet')
+  let raw: string
+  try {
+    raw = await callClaude(PROMPTS.generateDC2, userMsg, 'sonnet')
+  } catch (e) {
+    return NextResponse.json({ error: 'Erreur IA' }, { status: 500 })
+  }
 
   let sections: { title: string; content: string }[]
   try {
@@ -44,11 +50,14 @@ AO : ${ao.titre} — Acheteur : ${ao.acheteur || 'N/A'}
   } catch {
     sections = [{ title: 'DC2 — Déclaration du candidat', content: raw }]
   }
+  if (sections.length === 0) sections = [{ title: 'DC2', content: raw }]
 
   const buffer = await generateDocx(`DC2 — Déclaration du candidat\n${ao.titre}`, sections)
-  const fileName = `${user.id}/${ao_id}/DC2-${Date.now()}.docx`
-  const { data: uploadData, error } = await supabase.storage.from('ao-documents-generes').upload(fileName, buffer, { contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', upsert: true })
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  const { data: { publicUrl } } = supabase.storage.from('ao-documents-generes').getPublicUrl(uploadData.path)
-  return NextResponse.json({ url: publicUrl, nom: `DC2-${ao.titre}.docx` })
+
+  try {
+    const publicUrl = await uploadGeneratedDoc(user.id, ao_id, 'DC2', buffer)
+    return NextResponse.json({ url: publicUrl, nom: `DC2-${ao.titre}.docx` })
+  } catch (e: any) {
+    return NextResponse.json({ error: e.message }, { status: 500 })
+  }
 }

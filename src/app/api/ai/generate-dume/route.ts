@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { adminClient, uploadGeneratedDoc, getOrFallbackProfile } from '@/lib/supabase/admin'
 import { NextRequest, NextResponse } from 'next/server'
 import { callClaude } from '@/lib/ai/claude-client'
 import { PROMPTS } from '@/lib/ai/prompts'
@@ -10,12 +11,13 @@ export async function POST(request: NextRequest) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { ao_id } = await request.json()
-  const [{ data: ao }, { data: profile }] = await Promise.all([
-    supabase.from('appels_offres').select('*').eq('id', ao_id).single(),
-    supabase.from('profiles').select('*').eq('id', user.id).single(),
+
+  const [{ data: ao }, profile] = await Promise.all([
+    adminClient.from('appels_offres').select('*').eq('id', ao_id).eq('profile_id', user.id).single(),
+    getOrFallbackProfile(user.id),
   ])
 
-  if (!ao || !profile) return NextResponse.json({ error: 'Données manquantes' }, { status: 400 })
+  if (!ao) return NextResponse.json({ error: 'AO introuvable' }, { status: 404 })
 
   const userMsg = `
 Profil entreprise :
@@ -27,7 +29,13 @@ ${JSON.stringify(ao.analyse_rc || {}, null, 2)}
 AO : ${ao.titre}
 `
 
-  const raw = await callClaude(PROMPTS.generateDUME, userMsg, 'sonnet')
+  let raw: string
+  try {
+    raw = await callClaude(PROMPTS.generateDUME, userMsg, 'sonnet')
+  } catch (e) {
+    return NextResponse.json({ error: 'Erreur IA' }, { status: 500 })
+  }
+
   let sections: { title: string; content: string }[]
   try {
     const jsonMatch = raw.match(/\{[\s\S]*\}/)
@@ -36,11 +44,14 @@ AO : ${ao.titre}
   } catch {
     sections = [{ title: 'DUME', content: raw }]
   }
+  if (sections.length === 0) sections = [{ title: 'DUME', content: raw }]
 
   const buffer = await generateDocx(`DUME — Document Unique de Marché Européen\n${ao.titre}`, sections)
-  const fileName = `${user.id}/${ao_id}/DUME-${Date.now()}.docx`
-  const { data: uploadData, error } = await supabase.storage.from('ao-documents-generes').upload(fileName, buffer, { contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', upsert: true })
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  const { data: { publicUrl } } = supabase.storage.from('ao-documents-generes').getPublicUrl(uploadData.path)
-  return NextResponse.json({ url: publicUrl, nom: `DUME-${ao.titre}.docx` })
+
+  try {
+    const publicUrl = await uploadGeneratedDoc(user.id, ao_id, 'DUME', buffer)
+    return NextResponse.json({ url: publicUrl, nom: `DUME-${ao.titre}.docx` })
+  } catch (e: any) {
+    return NextResponse.json({ error: e.message }, { status: 500 })
+  }
 }
