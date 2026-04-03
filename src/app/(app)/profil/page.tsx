@@ -42,18 +42,16 @@ export default function ProfilPage() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 
-    // Nettoyer les valeurs avant envoi à Supabase :
-    // - chaînes vides → null (évite les 400 sur les colonnes date/number)
-    // - NaN → null
-    const cleaned = Object.fromEntries(
-      Object.entries({ ...profile, id: user.id }).map(([k, v]) => {
-        if (v === '') return [k, null]
-        if (typeof v === 'number' && isNaN(v)) return [k, null]
-        return [k, v]
-      })
-    )
+    // Nettoyer uniquement les champs date : '' → null (PostgreSQL refuse les chaînes vides sur colonnes date)
+    const DATE_FIELDS = ['date_creation_entreprise', 'assurance_rc_expiration', 'assurance_decennale_expiration']
+    const payload = { ...profile, id: user.id }
+    for (const f of DATE_FIELDS) {
+      if ((payload as Record<string, unknown>)[f] === '') {
+        (payload as Record<string, unknown>)[f] = null
+      }
+    }
 
-    const { error } = await supabase.from('profiles').upsert(cleaned, { onConflict: 'id' })
+    const { error } = await supabase.from('profiles').upsert(payload)
     if (error) {
       console.error('[profil] upsert error:', error)
       toast.error(`Erreur : ${error.message}`)
