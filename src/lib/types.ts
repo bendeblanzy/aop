@@ -1,0 +1,138 @@
+export interface Profile {
+  id: string
+  created_at: string
+  updated_at: string
+  raison_sociale: string
+  forme_juridique?: string
+  siret: string
+  siren?: string
+  code_naf?: string
+  numero_tva?: string
+  date_creation_entreprise?: string
+  capital_social?: number
+  adresse_siege?: string
+  code_postal?: string
+  ville?: string
+  pays: string
+  civilite_representant?: string
+  nom_representant: string
+  prenom_representant: string
+  qualite_representant?: string
+  email_representant?: string
+  telephone_representant?: string
+  ca_annee_n1?: number
+  ca_annee_n2?: number
+  ca_annee_n3?: number
+  effectif_moyen?: number
+  certifications?: string[]
+  domaines_competence?: string[]
+  moyens_techniques?: string
+  assurance_rc_numero?: string
+  assurance_rc_compagnie?: string
+  assurance_rc_expiration?: string
+  assurance_decennale_numero?: string
+  assurance_decennale_compagnie?: string
+  assurance_decennale_expiration?: string
+  declaration_non_interdiction: boolean
+  declaration_a_jour_fiscal: boolean
+  declaration_a_jour_social: boolean
+  sous_traitants?: SousTraitant[]
+}
+
+export interface SousTraitant {
+  nom: string
+  siret: string
+  adresse: string
+  specialite: string
+  montant_habituel?: number
+}
+
+export interface Reference {
+  id: string
+  profile_id: string
+  created_at: string
+  intitule_marche: string
+  acheteur_public: string
+  annee_execution?: number
+  montant?: number
+  description_prestations?: string
+  domaine?: string
+  lot?: string
+  attestation_bonne_execution: boolean
+  contact_reference?: string
+  telephone_reference?: string
+}
+
+export interface Collaborateur {
+  id: string
+  profile_id: string
+  created_at: string
+  nom: string
+  prenom: string
+  poste?: string
+  experience_annees?: number
+  diplomes?: string[]
+  certifications?: string[]
+  competences_cles?: string[]
+  cv_url?: string
+}
+
+export interface AppelOffre {
+  id: string
+  profile_id: string
+  created_at: string
+  updated_at: string
+  titre: string
+  reference_marche?: string
+  acheteur?: string
+  date_limite_reponse?: string
+  statut: 'brouillon' | 'en_cours' | 'analyse' | 'genere' | 'soumis' | 'archive'
+  fichiers_source?: FichierSource[]
+  analyse_rc?: AnalyseRC
+  analyse_cctp?: AnalyseCCTP
+  documents_generes?: DocumentGenere[]
+  notes_utilisateur?: string
+  references_selectionnees?: string[]
+  collaborateurs_selectionnes?: string[]
+}
+
+export interface FichierSource {
+  nom: string
+  url: string
+  type: 'rc' | 'cctp' | 'avis' | 'autre'
+  taille: number
+}
+
+export interface AnalyseRC {
+  objet?: string
+  acheteur?: string
+  lots?: { numero: string; intitule: string; montant_estime?: number }[]
+  criteres_notation?: { critere: string; ponderation_pourcentage: number }[]
+  pieces_exigees?: string[]
+  delai_reponse?: string
+  duree_marche?: string
+  clauses_eliminatoires?: string[]
+  forme_groupement?: string
+  variantes?: string
+  visite_obligatoire?: string
+  decision_go_nogo?: string
+}
+
+export interface AnalyseCCTP {
+  prestations_attendues?: string
+  normes_exigees?: string[]
+  certifications_requises?: string[]
+  moyens_humains_exiges?: string
+  moyens_techniques_exiges?: string
+  contraintes_techniques?: string[]
+  planning_prevu?: string
+  penalites?: string
+  livrables?: string[]
+}
+
+export interface DocumentGenere {
+  type: 'dc1' | 'dc2' | 'dc4' | 'dume' | 'memoire_technique'
+  url: string
+  version: number
+  genere_le: string
+}
