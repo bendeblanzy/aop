@@ -30,6 +30,7 @@ export default function NouvelAOPage() {
   const [files, setFiles] = useState<{ file: File; type: 'rc' | 'cctp' | 'avis' | 'autre' }[]>([])
   const [uploading, setUploading] = useState(false)
   const [uploadedFiles, setUploadedFiles] = useState<{ nom: string; url: string; type: string; taille: number }[]>([])
+  const [isDragOver, setIsDragOver] = useState(false)
 
   // Étape 2
   const [analyseRC, setAnalyseRC] = useState<AnalyseRC | null>(null)
@@ -51,14 +52,33 @@ export default function NouvelAOPage() {
   const [generatedDocs, setGeneratedDocs] = useState<{ type: DocType; url: string; nom: string }[]>([])
   const [genError, setGenError] = useState('')
 
+  function detectFileType(name: string): 'rc' | 'cctp' | 'avis' | 'autre' {
+    const n = name.toLowerCase().replace(/\.[^.]+$/, '') // retire l'extension
+    // Découpe sur séparateurs pour tester les mots exacts
+    const words = n.split(/[\s\-_\.\/\\]+/)
+    if (words.includes('rc') || n.includes('reglement') || n.includes('règlement') || n.includes('consultation')) return 'rc'
+    if (words.includes('cctp') || n.includes('cahier des charges') || n.includes('technique') || n.includes('prescriptions')) return 'cctp'
+    if (words.includes('avis') || n.includes('avis de marche') || n.includes('avis de marché') || n.includes('annonce')) return 'avis'
+    return 'autre'
+  }
+
   async function handleFileAdd(e: React.ChangeEvent<HTMLInputElement>) {
     const added = Array.from(e.target.files || [])
-    const typed = added.map(f => ({
-      file: f,
-      type: (f.name.toLowerCase().includes('rc') || f.name.toLowerCase().includes('reglement') ? 'rc' :
-             f.name.toLowerCase().includes('cctp') ? 'cctp' :
-             f.name.toLowerCase().includes('avis') ? 'avis' : 'autre') as 'rc' | 'cctp' | 'avis' | 'autre'
-    }))
+    const typed = added.map(f => ({ file: f, type: detectFileType(f.name) }))
+    setFiles(prev => [...prev, ...typed])
+  }
+
+  function handleDrop(e: React.DragEvent) {
+    e.preventDefault()
+    setIsDragOver(false)
+    const dropped = Array.from(e.dataTransfer.files).filter(f =>
+      f.type === 'application/pdf' ||
+      f.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+      f.type === 'application/msword' ||
+      f.name.endsWith('.pdf') || f.name.endsWith('.docx') || f.name.endsWith('.doc')
+    )
+    if (dropped.length === 0) return
+    const typed = dropped.map(f => ({ file: f, type: detectFileType(f.name) }))
     setFiles(prev => [...prev, ...typed])
   }
 
@@ -280,12 +300,27 @@ export default function NouvelAOPage() {
 
             <div>
               <label className="block text-sm font-medium text-text-primary mb-2">Documents de l&apos;appel d&apos;offres</label>
-              <label className="flex flex-col items-center justify-center w-full h-36 border-2 border-dashed border-border rounded-xl cursor-pointer hover:border-primary hover:bg-primary-light/30 transition-colors">
-                <Upload className="w-8 h-8 text-text-secondary mb-2" />
-                <span className="text-sm font-medium text-text-secondary">Glissez vos fichiers ici</span>
-                <span className="text-xs text-text-secondary mt-1">PDF, DOCX acceptés (RC, CCTP, avis de marché)</span>
-                <input type="file" multiple accept=".pdf,.docx,.doc" onChange={handleFileAdd} className="hidden" />
-              </label>
+              <div
+                onDragOver={e => { e.preventDefault(); setIsDragOver(true) }}
+                onDragEnter={e => { e.preventDefault(); setIsDragOver(true) }}
+                onDragLeave={e => { e.preventDefault(); setIsDragOver(false) }}
+                onDrop={handleDrop}
+                className={cn(
+                  'flex flex-col items-center justify-center w-full h-36 border-2 border-dashed rounded-xl transition-colors',
+                  isDragOver
+                    ? 'border-primary bg-primary-light/50 scale-[1.01]'
+                    : 'border-border hover:border-primary hover:bg-primary-light/30'
+                )}
+              >
+                <label className="flex flex-col items-center justify-center w-full h-full cursor-pointer">
+                  <Upload className={cn('w-8 h-8 mb-2', isDragOver ? 'text-primary' : 'text-text-secondary')} />
+                  <span className={cn('text-sm font-medium', isDragOver ? 'text-primary' : 'text-text-secondary')}>
+                    {isDragOver ? 'Relâchez pour ajouter les fichiers' : 'Glissez vos fichiers ici ou cliquez pour sélectionner'}
+                  </span>
+                  <span className="text-xs text-text-secondary mt-1">PDF, DOCX acceptés · RC, CCTP, avis de marché</span>
+                  <input type="file" multiple accept=".pdf,.docx,.doc" onChange={handleFileAdd} className="hidden" />
+                </label>
+              </div>
             </div>
 
             {files.length > 0 && (

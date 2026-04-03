@@ -1,9 +1,10 @@
 import { createClient } from '@/lib/supabase/server'
 import { notFound } from 'next/navigation'
 import { formatDate, getStatutColor, getStatutLabel } from '@/lib/utils'
-import { FileText, Download, Clock, Building2, Tag, RefreshCw } from 'lucide-react'
+import { FileText, Download, Clock, Building2, Tag } from 'lucide-react'
 import Link from 'next/link'
 import type { AppelOffre } from '@/lib/types'
+import AOActions from '@/components/appels-offres/AOActions'
 
 const docLabels: Record<string, string> = {
   dc1: 'DC1 — Lettre de candidature',
@@ -57,16 +58,7 @@ export default async function AODetailPage({ params }: { params: Promise<{ id: s
             )}
           </div>
         </div>
-        <div className="flex gap-2">
-          {ao.statut !== 'soumis' && (
-            <form action={`/api/appels-offres/${id}/statut`} method="POST">
-              <input type="hidden" name="statut" value="soumis" />
-              <button type="submit" className="bg-secondary hover:opacity-90 text-white rounded-lg px-4 py-2.5 text-sm font-medium transition-colors">
-                Marquer comme soumis
-              </button>
-            </form>
-          )}
-        </div>
+        <AOActions ao={ao} />
       </div>
 
       <div className="grid grid-cols-3 gap-6">

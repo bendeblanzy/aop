@@ -1,7 +1,8 @@
 import { createClient } from '@/lib/supabase/server'
 import { formatDate, getStatutColor, getStatutLabel } from '@/lib/utils'
-import { Plus, FileText, Search } from 'lucide-react'
+import { Plus, FileText } from 'lucide-react'
 import Link from 'next/link'
+import DeleteAOButton from '@/components/appels-offres/DeleteAOButton'
 
 export default async function AppelsOffresPage() {
   const supabase = await createClient()
@@ -41,12 +42,8 @@ export default async function AppelsOffresPage() {
       ) : (
         <div className="bg-white rounded-xl border border-border divide-y divide-border">
           {aos.map((ao) => (
-            <Link
-              key={ao.id}
-              href={`/appels-offres/${ao.id}`}
-              className="flex items-center justify-between px-6 py-5 hover:bg-surface transition-colors group"
-            >
-              <div className="flex-1 min-w-0">
+            <div key={ao.id} className="flex items-center justify-between px-6 py-5 hover:bg-surface transition-colors group">
+              <Link href={`/appels-offres/${ao.id}`} className="flex-1 min-w-0 mr-4">
                 <div className="flex items-center gap-3">
                   <p className="font-medium text-text-primary group-hover:text-primary transition-colors truncate">{ao.titre}</p>
                   <span className={`shrink-0 px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatutColor(ao.statut)}`}>
@@ -62,9 +59,12 @@ export default async function AppelsOffresPage() {
                     </span>
                   )}
                 </div>
+              </Link>
+              <div className="flex items-center gap-3 shrink-0">
+                <span className="text-xs text-text-secondary">{formatDate(ao.created_at)}</span>
+                <DeleteAOButton id={ao.id} titre={ao.titre} />
               </div>
-              <span className="text-xs text-text-secondary ml-6 shrink-0">{formatDate(ao.created_at)}</span>
-            </Link>
+            </div>
           ))}
         </div>
       )}
