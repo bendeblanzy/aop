@@ -1,7 +1,8 @@
 'use client'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Pencil, Trash2, Loader2, X } from 'lucide-react'
+import { Pencil, Trash2, Loader2, X, PlayCircle } from 'lucide-react'
+import Link from 'next/link'
 import type { AppelOffre } from '@/lib/types'
 
 interface Props {
@@ -66,12 +67,20 @@ export default function AOActions({ ao }: Props) {
   return (
     <>
       <div className="flex gap-2">
+        <Link
+          href={`/appels-offres/${ao.id}/repondre`}
+          className="flex items-center gap-2 bg-primary hover:bg-primary-hover text-white rounded-lg px-4 py-2.5 text-sm font-medium transition-colors"
+        >
+          <PlayCircle className="w-4 h-4" />
+          Modifier la réponse
+        </Link>
         <button
           onClick={() => setShowEdit(true)}
           className="flex items-center gap-2 border border-border text-text-secondary hover:text-primary hover:border-primary rounded-lg px-4 py-2.5 text-sm font-medium transition-colors"
+          title="Modifier uniquement le titre, acheteur, date..."
         >
           <Pencil className="w-4 h-4" />
-          Modifier
+          Infos
         </button>
         <button
           onClick={() => setShowConfirmDelete(true)}
