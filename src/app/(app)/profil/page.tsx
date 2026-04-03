@@ -42,18 +42,18 @@ export default function ProfilPage() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 
-    // Nettoyer uniquement les champs date : '' → null (PostgreSQL refuse les chaînes vides sur colonnes date)
+    // Exclure les champs auto-gérés par Supabase (created_at, updated_at)
+    // et nettoyer les champs date vides → null
     const DATE_FIELDS = ['date_creation_entreprise', 'assurance_rc_expiration', 'assurance_decennale_expiration']
-    const payload = { ...profile, id: user.id }
+    const { created_at, updated_at, ...editableFields } = profile as any
+    const payload: Record<string, unknown> = { ...editableFields, id: user.id }
     for (const f of DATE_FIELDS) {
-      if ((payload as Record<string, unknown>)[f] === '') {
-        (payload as Record<string, unknown>)[f] = null
-      }
+      if (payload[f] === '') payload[f] = null
     }
 
     const { error } = await supabase.from('profiles').upsert(payload)
     if (error) {
-      console.error('[profil] upsert error:', error)
+      console.error('[profil] upsert error:', error.message, error.details, error.hint)
       toast.error(`Erreur : ${error.message}`)
     } else {
       toast.success('Profil sauvegardé !')
