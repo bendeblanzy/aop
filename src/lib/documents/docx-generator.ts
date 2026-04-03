@@ -63,12 +63,25 @@ function heading3(text: string) {
   })
 }
 
+// ─── Largeurs de colonnes (DXA = twips) ──────────────────────────────────────
+// A4 (11906 twips) – marges 1,2" gauche (1728) + 1,0" droite (1440) = 8738 twips utiles
+const CONTENT_W = 8738
+const COL_LABEL  = Math.round(CONTENT_W * 0.35)       // 3058
+const COL_VALUE  = CONTENT_W - COL_LABEL               // 5680
+
+function pctToDxa(pcts: number[]): number[] {
+  const raw = pcts.map(p => Math.round(CONTENT_W * p / 100))
+  const diff = CONTENT_W - raw.reduce((a, b) => a + b, 0)
+  raw[raw.length - 1] += diff   // ajustement sur la dernière colonne
+  return raw
+}
+
 // ─── Tableau formulaire (label | valeur) ─────────────────────────────────────
 function formRow(label: string, value: string, highlight = false) {
   return new TableRow({
     children: [
       new TableCell({
-        width: { size: 35, type: WidthType.PERCENTAGE },
+        width: { size: COL_LABEL, type: WidthType.DXA },
         shading: highlight
           ? { type: ShadingType.SOLID, color: GREY_BG, fill: GREY_BG }
           : undefined,
@@ -79,7 +92,7 @@ function formRow(label: string, value: string, highlight = false) {
         })],
       }),
       new TableCell({
-        width: { size: 65, type: WidthType.PERCENTAGE },
+        width: { size: COL_VALUE, type: WidthType.DXA },
         margins: { top: 80, bottom: 80, left: 120, right: 80 },
         borders: formBorders(),
         children: [new Paragraph({
@@ -95,6 +108,7 @@ function sectionHeaderRow(text: string) {
     children: [
       new TableCell({
         columnSpan: 2,
+        width: { size: CONTENT_W, type: WidthType.DXA },
         shading: { type: ShadingType.SOLID, color: BLUE_DARK, fill: BLUE_DARK },
         margins: { top: 100, bottom: 100, left: 120, right: 120 },
         borders: formBorders(),
@@ -113,18 +127,22 @@ function formBorders() {
 
 function formTable(rows: TableRow[]) {
   return new Table({
-    width: { size: 100, type: WidthType.PERCENTAGE },
+    width: { size: CONTENT_W, type: WidthType.DXA },
+    columnWidths: [COL_LABEL, COL_VALUE],
     borders: { top: { style: BorderStyle.NONE }, bottom: { style: BorderStyle.NONE }, left: { style: BorderStyle.NONE }, right: { style: BorderStyle.NONE }, insideH: { style: BorderStyle.NONE }, insideV: { style: BorderStyle.NONE } },
     rows,
   })
 }
 
-// ─── Tableau à deux colonnes (données) ───────────────────────────────────────
+// ─── Tableau à colonnes multiples (données) ───────────────────────────────────
 function dataTable(headers: string[], rows: string[][], widths?: number[]) {
+  const pcts = widths ?? headers.map(() => Math.floor(100 / headers.length))
+  const colWidths = pctToDxa(pcts)
+
   const headerRow = new TableRow({
     tableHeader: true,
     children: headers.map((h, i) => new TableCell({
-      width: { size: widths?.[i] ?? Math.floor(100 / headers.length), type: WidthType.PERCENTAGE },
+      width: { size: colWidths[i], type: WidthType.DXA },
       shading: { type: ShadingType.SOLID, color: BLUE_DARK, fill: BLUE_DARK },
       margins: { top: 80, bottom: 80, left: 120, right: 80 },
       borders: formBorders(),
@@ -135,7 +153,7 @@ function dataTable(headers: string[], rows: string[][], widths?: number[]) {
   })
   const dataRows = rows.map((row, ri) => new TableRow({
     children: row.map((cell, ci) => new TableCell({
-      width: { size: widths?.[ci] ?? Math.floor(100 / headers.length), type: WidthType.PERCENTAGE },
+      width: { size: colWidths[ci], type: WidthType.DXA },
       shading: ri % 2 === 1 ? { type: ShadingType.SOLID, color: GREY_BG, fill: GREY_BG } : undefined,
       margins: { top: 80, bottom: 80, left: 120, right: 80 },
       borders: formBorders(),
@@ -145,7 +163,8 @@ function dataTable(headers: string[], rows: string[][], widths?: number[]) {
     })),
   }))
   return new Table({
-    width: { size: 100, type: WidthType.PERCENTAGE },
+    width: { size: CONTENT_W, type: WidthType.DXA },
+    columnWidths: colWidths,
     rows: [headerRow, ...dataRows],
   })
 }
