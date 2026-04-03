@@ -99,7 +99,7 @@ export default function ReferencesPage() {
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-1">
                       <h3 className="font-semibold text-text-primary">{ref.intitule_marche}</h3>
-                      {ref.attestation_bonne_execution && <CheckCircle className="w-4 h-4 text-secondary" title="Attestation disponible" />}
+                      {ref.attestation_bonne_execution && <CheckCircle className="w-4 h-4 text-secondary" aria-label="Attestation disponible" />}
                     </div>
                     <p className="text-text-secondary text-sm">{ref.acheteur_public}</p>
                     <div className="flex flex-wrap gap-3 mt-3 text-xs text-text-secondary">
