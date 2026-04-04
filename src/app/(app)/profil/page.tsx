@@ -11,7 +11,7 @@ const FORMES_JURIDIQUES = ['SARL', 'SAS', 'SA', 'EURL', 'EI', 'SASU', 'SNC', 'As
 const DOMAINES = ['BTP', 'Informatique / IT', 'Conseil', 'Formation', 'Maintenance', 'Nettoyage', 'Sécurité', 'Transport', 'Restauration', 'Santé', 'Environnement', 'Communication', 'Juridique', 'Autre']
 
 export default function ProfilPage() {
-  const { orgId, refresh: refreshOrg } = useOrganization()
+  const { orgId, loading: orgLoading, refresh: refreshOrg } = useOrganization()
   const [profile, setProfile] = useState<Partial<Profile>>({
     pays: 'France',
     declaration_non_interdiction: false,
@@ -29,15 +29,29 @@ export default function ProfilPage() {
   const supabase = createClient()
 
   async function load() {
-    if (!orgId) return
-    const { data } = await supabase.from('profiles').select('*').eq('organization_id', orgId).maybeSingle()
+    if (!orgId) {
+      setLoading(false)
+      return
+    }
+    const { data, error } = await supabase.from('profiles').select('*').eq('organization_id', orgId).maybeSingle()
+    if (error) console.error('[profil] load error:', error.message)
     if (data) setProfile(data)
     setLoading(false)
   }
 
-  useEffect(() => { if (orgId) load() }, [orgId])
+  useEffect(() => {
+    if (orgId) {
+      load()
+    } else if (!orgLoading) {
+      setLoading(false)
+    }
+  }, [orgId, orgLoading])
 
   async function save() {
+    if (!orgId) {
+      toast.error('Organisation non chargée. Veuillez recharger la page.')
+      return
+    }
     setSaving(true)
 
     const DATE_FIELDS = ['date_creation_entreprise', 'assurance_rc_expiration', 'assurance_decennale_expiration']
