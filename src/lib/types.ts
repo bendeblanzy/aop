@@ -54,6 +54,9 @@ export interface Profile {
   declaration_a_jour_social: boolean
   sous_traitants?: SousTraitant[]
   positionnement?: string
+  // Veille BOAMP
+  boamp_codes?: string[]
+  activite_metier?: string
 }
 
 export interface SousTraitant {

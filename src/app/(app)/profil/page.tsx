@@ -4,8 +4,9 @@ import { createClient } from '@/lib/supabase/client'
 import { useOrganization } from '@/context/OrganizationContext'
 import { Profile } from '@/lib/types'
 import { calculateProfileCompletion, cn } from '@/lib/utils'
-import { Loader2, Save, Plus, Trash2, Building2 } from 'lucide-react'
+import { Loader2, Save, Plus, Trash2, Building2, Radar } from 'lucide-react'
 import { toast } from 'sonner'
+import { BOAMP_CODES, BOAMP_CATEGORIES } from '@/lib/boamp/codes'
 
 const FORMES_JURIDIQUES = ['SARL', 'SAS', 'SA', 'EURL', 'EI', 'SASU', 'SNC', 'Association', 'Autre']
 const DOMAINES = ['BTP', 'Informatique / IT', 'Conseil', 'Formation', 'Maintenance', 'Nettoyage', 'Sécurité', 'Transport', 'Restauration', 'Santé', 'Environnement', 'Communication', 'Juridique', 'Autre']
@@ -20,6 +21,8 @@ export default function ProfilPage() {
     certifications: [],
     domaines_competence: [],
     sous_traitants: [],
+    boamp_codes: [],
+    activite_metier: '',
   })
   const [activeTab, setActiveTab] = useState('identite')
   const [loading, setLoading] = useState(true)
@@ -90,6 +93,7 @@ export default function ProfilPage() {
     { id: 'declarations', label: 'Déclarations' },
     { id: 'sous-traitants', label: 'Sous-traitants' },
     { id: 'positionnement', label: 'Positionnement' },
+    { id: 'veille-boamp', label: '📡 Veille BOAMP' },
   ]
 
   if (loading) return <div className="flex items-center justify-center h-64"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>
@@ -319,6 +323,92 @@ export default function ProfilPage() {
                 className="w-full border border-border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary resize-none"
                 placeholder="Ex: Notre cabinet est spécialisé dans la communication santé depuis 15 ans. Nous défendons une approche centrée sur le patient, avec une expertise particulière dans les campagnes de prévention..."
               />
+            </div>
+          )}
+
+          {/* Onglet Veille BOAMP */}
+          {activeTab === 'veille-boamp' && (
+            <div className="space-y-8">
+              {/* Activité métier */}
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <Radar className="w-4 h-4 text-primary" />
+                  <label className="block text-sm font-medium text-text-primary">
+                    Description de votre activité métier
+                  </label>
+                </div>
+                <p className="text-xs text-text-secondary mb-2">
+                  Ce texte est utilisé par l'IA pour scorer la pertinence des annonces BOAMP. Plus il est précis, meilleurs sont les scores.
+                  Décrivez votre cœur de métier, vos spécialités, les types de marchés sur lesquels vous répondez habituellement.
+                </p>
+                <textarea
+                  value={profile.activite_metier || ''}
+                  onChange={e => update('activite_metier', e.target.value)}
+                  rows={6}
+                  className="w-full border border-border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary resize-none"
+                  placeholder="Ex: Agence de communication spécialisée en audiovisuel institutionnel et production vidéo pour le secteur public. Nous réalisons des films institutionnels, campagnes de sensibilisation, contenus digitaux et événementiels pour des collectivités, ministères et établissements publics. Notre expertise couvre également la stratégie éditoriale, la création graphique et la communication digitale."
+                />
+                <p className="text-xs text-text-secondary mt-1">
+                  {(profile.activite_metier || '').length} caractères — recommandé : 200 à 600 caractères
+                </p>
+              </div>
+
+              {/* Codes BOAMP */}
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <label className="block text-sm font-medium text-text-primary">
+                    Codes thématiques BOAMP
+                  </label>
+                  {(profile.boamp_codes || []).length > 0 && (
+                    <span className="text-xs bg-primary-light text-primary px-2 py-0.5 rounded-full font-medium">
+                      {(profile.boamp_codes || []).length} sélectionné{(profile.boamp_codes || []).length > 1 ? 's' : ''}
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-text-secondary mb-4">
+                  Sélectionnez les codes thématiques correspondant à vos domaines d'activité.
+                  Seules les annonces portant au moins un de ces codes seront affichées dans la Veille BOAMP.
+                </p>
+                <div className="space-y-5">
+                  {BOAMP_CATEGORIES.map(categorie => {
+                    const codesInCat = BOAMP_CODES.filter(c => c.categorie === categorie)
+                    return (
+                      <div key={categorie}>
+                        <p className="text-xs font-semibold text-text-secondary uppercase tracking-wide mb-2">{categorie}</p>
+                        <div className="grid grid-cols-1 gap-1.5">
+                          {codesInCat.map(bc => {
+                            const checked = (profile.boamp_codes || []).includes(bc.code)
+                            return (
+                              <label
+                                key={bc.code}
+                                className={cn(
+                                  'flex items-center gap-3 px-3 py-2.5 rounded-lg border cursor-pointer transition-colors text-sm',
+                                  checked ? 'border-primary bg-primary-light text-primary' : 'border-border hover:bg-surface text-text-primary'
+                                )}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={checked}
+                                  onChange={e => {
+                                    const codes = profile.boamp_codes || []
+                                    update('boamp_codes', e.target.checked
+                                      ? [...codes, bc.code]
+                                      : codes.filter(c => c !== bc.code)
+                                    )
+                                  }}
+                                  className="accent-primary shrink-0"
+                                />
+                                <span className="font-mono text-xs text-text-secondary w-8 shrink-0">{bc.code}</span>
+                                <span>{bc.libelle}</span>
+                              </label>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
             </div>
           )}
         </div>

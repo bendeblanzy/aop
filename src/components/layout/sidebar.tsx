@@ -3,7 +3,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
   LayoutDashboard, Building2, BookMarked, Users,
-  FileText, Settings, LogOut, ChevronRight
+  FileText, Settings, LogOut, ChevronRight, Radar
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
@@ -11,6 +11,7 @@ import { useRouter } from 'next/navigation'
 
 const navigation = [
   { name: 'Tableau de bord', href: '/dashboard', icon: LayoutDashboard },
+  { name: 'Veille BOAMP', href: '/veille', icon: Radar },
   { name: "Appels d'offres", href: '/appels-offres', icon: FileText },
   { name: 'Mon profil', href: '/profil', icon: Building2 },
   { name: 'Références', href: '/references', icon: BookMarked },

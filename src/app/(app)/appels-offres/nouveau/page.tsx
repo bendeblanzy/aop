@@ -1,6 +1,6 @@
 'use client'
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useEffect, Suspense } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { useOrganization } from '@/context/OrganizationContext'
 import { Upload, Brain, CheckSquare, FileDown, Eye, ChevronRight, ChevronLeft, Loader2, X, File, AlertCircle, CheckCircle2, Plus } from 'lucide-react'
@@ -18,15 +18,33 @@ const STEPS = [
 type DocType = 'dc1' | 'dc2' | 'dc4' | 'dume' | 'memoire_technique'
 type OutputFormat = 'docx' | 'pdf'
 
-export default function NouvelAOPage() {
+function NouvelAOPageInner() {
   const router = useRouter()
   const { orgId } = useOrganization()
+  const searchParams = useSearchParams()
   const [step, setStep] = useState(1)
   const [aoId, setAoId] = useState<string | null>(null)
   const [titre, setTitre] = useState('')
   const [acheteur, setAcheteur] = useState('')
   const [referencemarche, setReferencemarche] = useState('')
   const [dateLimite, setDateLimite] = useState('')
+  // Référence BOAMP (si pré-rempli depuis la Veille)
+  const [boampIdweb, setBoampIdweb] = useState('')
+  const [boampUrl, setBoampUrl] = useState('')
+
+  // Pré-remplissage depuis les query params (bouton "Répondre" de la page Veille)
+  useEffect(() => {
+    const t = searchParams.get('titre')
+    const a = searchParams.get('acheteur')
+    const d = searchParams.get('deadline')
+    const idweb = searchParams.get('boamp_idweb')
+    const url = searchParams.get('boamp_url')
+    if (t) setTitre(t)
+    if (a) setAcheteur(a)
+    if (d) setDateLimite(d)
+    if (idweb) { setBoampIdweb(idweb); setReferencemarche(idweb) }
+    if (url) setBoampUrl(url)
+  }, [])
 
   // Étape 1
   const [files, setFiles] = useState<{ file: File; type: 'rc' | 'cctp' | 'avis' | 'autre' }[]>([])
@@ -93,6 +111,11 @@ export default function NouvelAOPage() {
     const supabase = createClient()
 
     // Créer l'AO
+    const boampNote = boampUrl
+      ? `Annonce BOAMP : ${boampUrl}${boampIdweb ? ` (réf. ${boampIdweb})` : ''}`
+      : boampIdweb
+        ? `Référence BOAMP : ${boampIdweb}`
+        : null
     const { data: ao, error } = await supabase.from('appels_offres').insert({
       organization_id: orgId,
       titre,
@@ -100,6 +123,7 @@ export default function NouvelAOPage() {
       reference_marche: referencemarche || null,
       date_limite_reponse: dateLimite || null,
       statut: 'en_cours',
+      ...(boampNote ? { notes_utilisateur: boampNote } : {}),
     }).select().single()
 
     if (error || !ao) {
@@ -652,5 +676,13 @@ export default function NouvelAOPage() {
         )}
       </div>
     </div>
+  )
+}
+
+export default function NouvelAOPage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center h-64"><div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" /></div>}>
+      <NouvelAOPageInner />
+    </Suspense>
   )
 }
