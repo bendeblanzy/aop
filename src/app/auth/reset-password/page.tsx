@@ -8,15 +8,26 @@ export default function ResetPasswordPage() {
   const [email, setEmail] = useState('')
   const [sent, setSent] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://aop-woad.vercel.app'
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+    setError('')
     setLoading(true)
     const supabase = createClient()
-    await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/auth/callback?next=/parametres`,
+    const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${appUrl}/auth/callback?next=/parametres`,
     })
-    setSent(true)
+    if (resetError) {
+      console.error('[reset-password]', resetError.message)
+      setError(resetError.message === 'For security purposes, you can only request this once every 60 seconds'
+        ? 'Veuillez patienter 60 secondes avant de réessayer.'
+        : `Erreur : ${resetError.message}`)
+    } else {
+      setSent(true)
+    }
     setLoading(false)
   }
 
@@ -48,6 +59,11 @@ export default function ResetPasswordPage() {
         </div>
         <div className="bg-white rounded-2xl border border-border p-8 shadow-sm">
           <form onSubmit={handleSubmit} className="space-y-5">
+            {error && (
+              <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm">
+                {error}
+              </div>
+            )}
             <div>
               <label className="block text-sm font-medium text-text-primary mb-1.5">Email</label>
               <input type="email" value={email} onChange={e => setEmail(e.target.value)} className="w-full border border-border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary" required />

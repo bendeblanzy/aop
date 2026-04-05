@@ -9,6 +9,7 @@ import {
   AlertCircle, CheckCircle2, Plus, RefreshCw
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { uploadFileToStorage } from '@/lib/upload'
 import type { AppelOffre, AnalyseRC, AnalyseCCTP, Reference, Collaborateur } from '@/lib/types'
 import Link from 'next/link'
 
@@ -150,18 +151,20 @@ export default function RepondreAOPage({ params }: { params: Promise<{ id: strin
     setUploading(true)
     const supabase = createClient()
 
-    // Upload nouveaux fichiers
+    // Upload nouveaux fichiers (direct vers Supabase Storage via signed URL)
     const uploaded = [...existingFiles]
+    const failed: string[] = []
     for (const { file, type } of newFiles) {
-      const formData = new FormData()
-      formData.append('file', file)
-      formData.append('ao_id', id)
-      formData.append('type', type)
-      const res = await fetch('/api/upload', { method: 'POST', body: formData })
-      if (res.ok) {
-        const data = await res.json()
-        uploaded.push({ nom: file.name, url: data.url, type, taille: file.size })
+      try {
+        const { url } = await uploadFileToStorage(file, id)
+        uploaded.push({ nom: file.name, url, type, taille: file.size })
+      } catch (uploadErr) {
+        console.error('[upload] Fichier échoué:', file.name, uploadErr)
+        failed.push(file.name)
       }
+    }
+    if (failed.length > 0) {
+      alert(`⚠️ ${failed.length} fichier(s) n'ont pas pu être uploadés :\n${failed.join('\n')}`)
     }
 
     // Mettre à jour l'AO (RLS filtre par org automatiquement)

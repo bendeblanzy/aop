@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import { useOrganization } from '@/context/OrganizationContext'
 import { Upload, Brain, CheckSquare, FileDown, Eye, ChevronRight, ChevronLeft, Loader2, X, File, AlertCircle, CheckCircle2, Plus } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { uploadFileToStorage } from '@/lib/upload'
 import type { AnalyseRC, AnalyseCCTP, Reference, Collaborateur } from '@/lib/types'
 
 const STEPS = [
@@ -133,24 +134,20 @@ function NouvelAOPageInner() {
       }
       setAoId(ao.id)
 
-      // Upload files
+      // Upload files (direct vers Supabase Storage via signed URL)
       const uploaded: { nom: string; url: string; type: string; taille: number }[] = []
+      const failed: string[] = []
       for (const { file, type } of files) {
-        const formData = new FormData()
-        formData.append('file', file)
-        formData.append('ao_id', ao.id)
-        formData.append('type', type)
         try {
-          const res = await fetch('/api/upload', { method: 'POST', body: formData })
-          if (res.ok) {
-            const data = await res.json()
-            uploaded.push({ nom: file.name, url: data.url, type, taille: file.size })
-          } else {
-            console.error('[upload] Fichier échoué:', file.name, res.status)
-          }
+          const { url } = await uploadFileToStorage(file, ao.id)
+          uploaded.push({ nom: file.name, url, type, taille: file.size })
         } catch (uploadErr) {
-          console.error('[upload] Erreur réseau pour', file.name, uploadErr)
+          console.error('[upload] Fichier échoué:', file.name, uploadErr)
+          failed.push(file.name)
         }
+      }
+      if (failed.length > 0) {
+        alert(`⚠️ ${failed.length} fichier(s) n'ont pas pu être uploadés :\n${failed.join('\n')}\n\nLes autres fichiers ont été envoyés avec succès.`)
       }
       setUploadedFiles(uploaded)
 
