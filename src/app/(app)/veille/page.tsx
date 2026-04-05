@@ -21,6 +21,7 @@ interface TenderItem {
   valeur_estimee: number | null
   duree_mois: number | null
   url_avis: string | null
+  url_profil_acheteur: string | null
   description_detail: string | null
   score: number | null
   reason: string | null
@@ -394,6 +395,18 @@ export default function VeillePage() {
 
                     {/* Boutons */}
                     <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      {tender.url_profil_acheteur && (
+                        <a
+                          href={tender.url_profil_acheteur}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-1 text-xs text-white bg-primary hover:bg-primary-hover rounded px-2 py-1 transition-colors font-medium"
+                          title="Accéder au dossier de consultation (DCE)"
+                        >
+                          <FileText className="w-3 h-3" />
+                          DCE
+                        </a>
+                      )}
                       {tender.url_avis && (
                         <a
                           href={tender.url_avis}

@@ -72,7 +72,52 @@ function parseEforms(donneesStr: string | null): ParsedEforms {
       // ignore
     }
 
-    return { description, valeur_estimee, duree_mois, type_marche }
+    // URL profil acheteur (lien vers le DCE sur la plateforme de dématérialisation)
+    let url_profil_acheteur: string | undefined
+    try {
+      const lots = cn['cac:ProcurementProjectLot']
+      const lot = Array.isArray(lots) ? lots[0] : lots
+      const terms = lot?.['cac:TenderingTerms']
+
+      // Chemin principal : ProcurementProjectLot > TenderingTerms > CallForTendersDocumentReference > Attachment > ExternalReference > URI
+      const docRef = terms?.['cac:CallForTendersDocumentReference']
+      const ref = Array.isArray(docRef) ? docRef[0] : docRef
+      const uri = ref?.['cac:Attachment']?.['cac:ExternalReference']?.['cbc:URI']
+      const uriStr = uri?.['#text'] ?? uri
+      if (uriStr && typeof uriStr === 'string') {
+        // Nettoyer les entités HTML (&amp; → &)
+        const clean = uriStr.replace(/&amp;/g, '&')
+        if (clean.startsWith('http')) url_profil_acheteur = clean
+      }
+
+      // Fallback 1 : BuyerProfileURI (profil acheteur générique)
+      if (!url_profil_acheteur) {
+        const bpUri = cn['cac:ContractingParty']?.['cbc:BuyerProfileURI']
+        const bpStr = bpUri?.['#text'] ?? bpUri
+        if (bpStr && typeof bpStr === 'string' && bpStr.startsWith('http')) {
+          url_profil_acheteur = bpStr
+        }
+      }
+
+      // Fallback 2 : Organization EndpointID (souvent le lien direct vers la consultation)
+      if (!url_profil_acheteur) {
+        const orgs = cn['ext:UBLExtensions']?.['ext:UBLExtension']?.['ext:ExtensionContent']
+          ?.['efext:EformsExtension']?.['efac:Organizations']?.['efac:Organization']
+        const orgList = Array.isArray(orgs) ? orgs : orgs ? [orgs] : []
+        for (const org of orgList) {
+          const ep = org?.['efac:Company']?.['cbc:EndpointID']
+          const epStr = ep?.['#text'] ?? ep
+          if (epStr && typeof epStr === 'string' && epStr.startsWith('http') && !epStr.includes('tribunal')) {
+            url_profil_acheteur = epStr.replace(/&amp;/g, '&')
+            break
+          }
+        }
+      }
+    } catch {
+      // ignore
+    }
+
+    return { description, valeur_estimee, duree_mois, type_marche, url_profil_acheteur }
   } catch {
     return {}
   }
@@ -132,6 +177,7 @@ export function transformRecord(record: BoampRecord) {
     descripteur_libelles: parseJsonArray(record.descripteur_libelle),
     type_marche: eforms.type_marche ?? null,
     url_avis: record.url_avis ?? null,
+    url_profil_acheteur: eforms.url_profil_acheteur ?? null,
     description_detail: eforms.description ?? null,
     valeur_estimee: eforms.valeur_estimee ?? null,
     duree_mois: eforms.duree_mois ?? null,
