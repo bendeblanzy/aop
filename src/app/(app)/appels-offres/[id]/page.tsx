@@ -31,13 +31,13 @@ export default async function AODetailPage({ params }: { params: Promise<{ id: s
   return (
     <div>
       {/* Header */}
-      <div className="flex items-start justify-between mb-8">
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-8">
         <div>
           <div className="flex items-center gap-3 mb-2">
             <Link href="/appels-offres" className="text-text-secondary hover:text-primary text-sm">← Retour</Link>
           </div>
-          <h1 className="text-2xl font-bold text-text-primary">{ao.titre}</h1>
-          <div className="flex items-center gap-4 mt-2">
+          <h1 className="text-xl sm:text-2xl font-bold text-text-primary">{ao.titre}</h1>
+          <div className="flex items-center gap-3 sm:gap-4 mt-2 flex-wrap">
             <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${getStatutColor(ao.statut)}`}>
               {getStatutLabel(ao.statut)}
             </span>
@@ -61,9 +61,9 @@ export default async function AODetailPage({ params }: { params: Promise<{ id: s
         <AOActions ao={ao} />
       </div>
 
-      <div className="grid grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Colonne principale */}
-        <div className="col-span-2 space-y-6">
+        <div className="lg:col-span-2 space-y-6">
 
           {/* Analyse RC */}
           {ao.analyse_rc && (

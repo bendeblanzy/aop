@@ -24,7 +24,6 @@ export interface ParsedEforms {
   valeur_estimee?: number
   duree_mois?: number
   type_marche?: string
-  url_profil_acheteur?: string
 }
 
 /** Annonce BOAMP en base de données */
@@ -41,7 +40,6 @@ export interface Tender {
   descripteur_libelles: string[]
   type_marche: string | null
   url_avis: string | null
-  url_profil_acheteur: string | null
   description_detail: string | null
   valeur_estimee: number | null
   duree_mois: number | null

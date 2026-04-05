@@ -22,7 +22,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     <OrganizationProvider>
       <div className="flex min-h-screen bg-background">
         <Sidebar />
-        <main className="flex-1 ml-60 p-8">
+        <main className="flex-1 lg:ml-60 p-4 pt-16 lg:pt-8 lg:p-8">
           <div className="max-w-6xl mx-auto">
             {children}
           </div>

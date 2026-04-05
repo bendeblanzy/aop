@@ -200,10 +200,10 @@ export default function VeillePage() {
   return (
     <div>
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-text-primary">Veille BOAMP</h1>
-          <p className="text-text-secondary mt-1 text-sm">
+          <h1 className="text-xl sm:text-2xl font-bold text-text-primary">Veille BOAMP</h1>
+          <p className="text-text-secondary mt-1 text-xs sm:text-sm">
             Annonces publiées sur le Bulletin Officiel des Annonces des Marchés Publics
           </p>
         </div>
@@ -211,7 +211,7 @@ export default function VeillePage() {
           <button
             onClick={handleManualScore}
             disabled={scoring || tenders.length === 0}
-            className="flex items-center gap-2 bg-primary hover:bg-primary-hover disabled:opacity-50 text-white rounded-lg px-4 py-2 text-sm font-medium transition-colors"
+            className="flex items-center gap-2 bg-primary hover:bg-primary-hover disabled:opacity-50 text-white rounded-lg px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium transition-colors"
           >
             {scoring
               ? <><RefreshCw className="w-4 h-4 animate-spin" /> Scoring en cours…</>
@@ -253,10 +253,10 @@ export default function VeillePage() {
       )}
 
       {/* Filtres */}
-      <div className="bg-white rounded-xl border border-border p-4 mb-4">
-        <div className="flex gap-3 items-center flex-wrap">
+      <div className="bg-white rounded-xl border border-border p-3 sm:p-4 mb-4">
+        <div className="flex flex-col sm:flex-row gap-3 sm:items-center flex-wrap">
           {/* Recherche */}
-          <div className="relative flex-1 min-w-48">
+          <div className="relative flex-1 min-w-0 sm:min-w-48">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-secondary" />
             <input
               type="text"
@@ -326,13 +326,13 @@ export default function VeillePage() {
             const deadline = formatDeadline(tender.datelimitereponse)
             const euros = formatEuros(tender.valeur_estimee)
             return (
-              <div key={tender.idweb} className="p-4 hover:bg-surface transition-colors group">
-                <div className="flex items-start gap-4">
+              <div key={tender.idweb} className="p-3 sm:p-4 hover:bg-surface transition-colors group">
+                <div className="flex flex-col sm:flex-row sm:items-start gap-3 sm:gap-4">
                   {/* Contenu principal */}
                   <div className="flex-1 min-w-0">
                     {/* Titre + badges */}
                     <div className="flex items-start gap-2 flex-wrap mb-1">
-                      <h3 className="font-medium text-text-primary text-sm leading-snug flex-1">
+                      <h3 className="font-medium text-text-primary text-sm leading-snug flex-1 line-clamp-2" title={tender.objet ?? ''}>
                         {tender.objet ?? '(sans titre)'}
                       </h3>
                       <ScoreBadge score={tender.score} />
@@ -384,7 +384,7 @@ export default function VeillePage() {
                   </div>
 
                   {/* Actions */}
-                  <div className="flex flex-col items-end gap-2 shrink-0">
+                  <div className="flex sm:flex-col items-center sm:items-end gap-2 shrink-0">
                     {/* Date limite */}
                     <span className={cn(
                       'text-xs font-medium px-2 py-0.5 rounded-full',
@@ -393,8 +393,8 @@ export default function VeillePage() {
                       {deadline.label}
                     </span>
 
-                    {/* Boutons */}
-                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    {/* Boutons — toujours visibles sur mobile, hover sur desktop */}
+                    <div className="flex gap-1 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                       {tender.url_profil_acheteur && (
                         <a
                           href={tender.url_profil_acheteur}

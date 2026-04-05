@@ -18,6 +18,24 @@ function parseJsonArray(value: string | string[] | null): string[] {
   }
 }
 
+/**
+ * Vérifie si une URL pointe vers une page spécifique (consultation)
+ * et non vers une simple page d'accueil générique.
+ */
+function isSpecificUrl(url: string): boolean {
+  try {
+    const u = new URL(url)
+    const path = u.pathname.replace(/\/+$/, '') // retirer les trailing slashes
+    const hasPath = path.length > 0 && path !== '/index.html' && path !== '/index.htm'
+      && path !== '/index.jsp' && path !== '/index.cfm' && path !== '/index.php'
+      && path !== '/accueil.htm' && path !== '/accueil.html'
+    const hasQueryParams = u.search.length > 1 // "?" seul ne compte pas
+    return hasPath || hasQueryParams
+  } catch {
+    return false
+  }
+}
+
 /** Extrait les infos utiles du champ `donnees` (eForms JSON) */
 function parseEforms(donneesStr: string | null): ParsedEforms {
   if (!donneesStr) return {}
@@ -85,21 +103,20 @@ function parseEforms(donneesStr: string | null): ParsedEforms {
       const uri = ref?.['cac:Attachment']?.['cac:ExternalReference']?.['cbc:URI']
       const uriStr = uri?.['#text'] ?? uri
       if (uriStr && typeof uriStr === 'string') {
-        // Nettoyer les entités HTML (&amp; → &)
         const clean = uriStr.replace(/&amp;/g, '&')
-        if (clean.startsWith('http')) url_profil_acheteur = clean
+        if (clean.startsWith('http') && isSpecificUrl(clean)) url_profil_acheteur = clean
       }
 
-      // Fallback 1 : BuyerProfileURI (profil acheteur générique)
+      // Fallback 1 : BuyerProfileURI (souvent générique — on ne garde que si spécifique)
       if (!url_profil_acheteur) {
         const bpUri = cn['cac:ContractingParty']?.['cbc:BuyerProfileURI']
         const bpStr = bpUri?.['#text'] ?? bpUri
-        if (bpStr && typeof bpStr === 'string' && bpStr.startsWith('http')) {
+        if (bpStr && typeof bpStr === 'string' && bpStr.startsWith('http') && isSpecificUrl(bpStr)) {
           url_profil_acheteur = bpStr
         }
       }
 
-      // Fallback 2 : Organization EndpointID (souvent le lien direct vers la consultation)
+      // Fallback 2 : Organization EndpointID
       if (!url_profil_acheteur) {
         const orgs = cn['ext:UBLExtensions']?.['ext:UBLExtension']?.['ext:ExtensionContent']
           ?.['efext:EformsExtension']?.['efac:Organizations']?.['efac:Organization']
@@ -107,7 +124,8 @@ function parseEforms(donneesStr: string | null): ParsedEforms {
         for (const org of orgList) {
           const ep = org?.['efac:Company']?.['cbc:EndpointID']
           const epStr = ep?.['#text'] ?? ep
-          if (epStr && typeof epStr === 'string' && epStr.startsWith('http') && !epStr.includes('tribunal')) {
+          if (epStr && typeof epStr === 'string' && epStr.startsWith('http')
+              && !epStr.includes('tribunal') && isSpecificUrl(epStr)) {
             url_profil_acheteur = epStr.replace(/&amp;/g, '&')
             break
           }
