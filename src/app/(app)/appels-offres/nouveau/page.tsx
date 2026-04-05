@@ -41,7 +41,7 @@ function NouvelAOPageInner() {
     const url = searchParams.get('boamp_url')
     if (t) setTitre(t)
     if (a) setAcheteur(a)
-    if (d) setDateLimite(d)
+    if (d) setDateLimite(d.includes('T') ? d.slice(0, 16) : `${d}T00:00`)
     if (idweb) { setBoampIdweb(idweb); setReferencemarche(idweb) }
     if (url) setBoampUrl(url)
   }, [])
@@ -110,51 +110,62 @@ function NouvelAOPageInner() {
     setUploading(true)
     const supabase = createClient()
 
-    // Créer l'AO
-    const boampNote = boampUrl
-      ? `Annonce BOAMP : ${boampUrl}${boampIdweb ? ` (réf. ${boampIdweb})` : ''}`
-      : boampIdweb
-        ? `Référence BOAMP : ${boampIdweb}`
-        : null
-    const { data: ao, error } = await supabase.from('appels_offres').insert({
-      organization_id: orgId,
-      titre,
-      acheteur: acheteur || null,
-      reference_marche: referencemarche || null,
-      date_limite_reponse: dateLimite || null,
-      statut: 'en_cours',
-      ...(boampNote ? { notes_utilisateur: boampNote } : {}),
-    }).select().single()
+    try {
+      // Créer l'AO
+      const boampNote = boampUrl
+        ? `Annonce BOAMP : ${boampUrl}${boampIdweb ? ` (réf. ${boampIdweb})` : ''}`
+        : boampIdweb
+          ? `Référence BOAMP : ${boampIdweb}`
+          : null
+      const { data: ao, error } = await supabase.from('appels_offres').insert({
+        organization_id: orgId,
+        titre,
+        acheteur: acheteur || null,
+        reference_marche: referencemarche || null,
+        date_limite_reponse: dateLimite || null,
+        statut: 'en_cours',
+        ...(boampNote ? { notes_utilisateur: boampNote } : {}),
+      }).select().single()
 
-    if (error || !ao) {
-      alert('Erreur lors de la création de l\'AO: ' + error?.message)
-      setUploading(false)
-      return
-    }
-    setAoId(ao.id)
-
-    // Upload files
-    const uploaded = []
-    for (const { file, type } of files) {
-      const formData = new FormData()
-      formData.append('file', file)
-      formData.append('ao_id', ao.id)
-      formData.append('type', type)
-      const res = await fetch('/api/upload', { method: 'POST', body: formData })
-      if (res.ok) {
-        const data = await res.json()
-        uploaded.push({ nom: file.name, url: data.url, type, taille: file.size })
+      if (error || !ao) {
+        alert('Erreur lors de la création de l\'AO: ' + error?.message)
+        return
       }
+      setAoId(ao.id)
+
+      // Upload files
+      const uploaded: { nom: string; url: string; type: string; taille: number }[] = []
+      for (const { file, type } of files) {
+        const formData = new FormData()
+        formData.append('file', file)
+        formData.append('ao_id', ao.id)
+        formData.append('type', type)
+        try {
+          const res = await fetch('/api/upload', { method: 'POST', body: formData })
+          if (res.ok) {
+            const data = await res.json()
+            uploaded.push({ nom: file.name, url: data.url, type, taille: file.size })
+          } else {
+            console.error('[upload] Fichier échoué:', file.name, res.status)
+          }
+        } catch (uploadErr) {
+          console.error('[upload] Erreur réseau pour', file.name, uploadErr)
+        }
+      }
+      setUploadedFiles(uploaded)
+
+      // Update AO with files
+      await supabase.from('appels_offres').update({
+        fichiers_source: uploaded
+      }).eq('id', ao.id)
+
+      setStep(2)
+    } catch (err) {
+      console.error('[handleUpload] Erreur inattendue:', err)
+      alert('Une erreur inattendue s\'est produite. Veuillez réessayer.')
+    } finally {
+      setUploading(false)
     }
-    setUploadedFiles(uploaded)
-
-    // Update AO with files
-    await supabase.from('appels_offres').update({
-      fichiers_source: uploaded
-    }).eq('id', ao.id)
-
-    setUploading(false)
-    setStep(2)
   }
 
   async function handleAnalyse() {
@@ -162,50 +173,68 @@ function NouvelAOPageInner() {
     setAnalysing(true)
     setAnalyseError('')
 
-    const rcFile = uploadedFiles.find(f => f.type === 'rc')
-    const cctpFile = uploadedFiles.find(f => f.type === 'cctp')
+    try {
+      const rcFile = uploadedFiles.find(f => f.type === 'rc')
+      const cctpFile = uploadedFiles.find(f => f.type === 'cctp')
 
-    let rc = null
-    let cctp = null
+      let rc = null
+      let cctp = null
 
-    if (rcFile) {
-      const res = await fetch('/api/ai/analyze-rc', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ao_id: aoId, file_url: rcFile.url }),
-      })
-      if (res.ok) rc = (await res.json()).analyse
-    }
+      if (rcFile) {
+        try {
+          const res = await fetch('/api/ai/analyze-rc', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ao_id: aoId, file_url: rcFile.url }),
+          })
+          if (res.ok) rc = (await res.json()).analyse
+          else {
+            const errData = await res.json().catch(() => ({}))
+            setAnalyseError(`Analyse RC échouée : ${errData.error || res.statusText}`)
+          }
+        } catch (e) {
+          console.error('[handleAnalyse] Erreur analyze-rc:', e)
+          setAnalyseError('Impossible d\'analyser le RC. Vérifiez votre connexion et réessayez.')
+        }
+      }
 
-    if (cctpFile) {
-      const res = await fetch('/api/ai/analyze-cctp', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ao_id: aoId, file_url: cctpFile.url }),
-      })
-      if (res.ok) cctp = (await res.json()).analyse
-    }
+      if (cctpFile) {
+        try {
+          const res = await fetch('/api/ai/analyze-cctp', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ao_id: aoId, file_url: cctpFile.url }),
+          })
+          if (res.ok) cctp = (await res.json()).analyse
+        } catch (e) {
+          console.error('[handleAnalyse] Erreur analyze-cctp:', e)
+        }
+      }
 
-    if (!rc && !cctp) {
-      setAnalyseError('Aucun fichier RC ou CCTP trouvé. Uploadez au moins un de ces documents.')
+      if (!rc && !cctp) {
+        setAnalyseError('Aucun fichier RC ou CCTP trouvé. Uploadez au moins un de ces documents.')
+        return
+      }
+
+      setAnalyseRC(rc)
+      setAnalyseCCTP(cctp)
+
+      // Charger références et collaborateurs pour l'étape 3 (RLS filtre automatiquement par org)
+      const supabase = createClient()
+      const [{ data: refs }, { data: collabs }] = await Promise.all([
+        supabase.from('references').select('*').order('annee', { ascending: false }),
+        supabase.from('collaborateurs').select('*').order('nom'),
+      ])
+      setReferences(refs || [])
+      setCollaborateurs(collabs || [])
+
+      setStep(3)
+    } catch (err) {
+      console.error('[handleAnalyse] Erreur inattendue:', err)
+      setAnalyseError('Une erreur inattendue s\'est produite. Veuillez réessayer.')
+    } finally {
       setAnalysing(false)
-      return
     }
-
-    setAnalyseRC(rc)
-    setAnalyseCCTP(cctp)
-
-    // Charger références et collaborateurs pour l'étape 3 (RLS filtre automatiquement par org)
-    const supabase = createClient()
-    const [{ data: refs }, { data: collabs }] = await Promise.all([
-      supabase.from('references').select('*').order('annee', { ascending: false }),
-      supabase.from('collaborateurs').select('*').order('nom'),
-    ])
-    setReferences(refs || [])
-    setCollaborateurs(collabs || [])
-
-    setAnalysing(false)
-    setStep(3)
   }
 
   async function handleSaveSelection() {

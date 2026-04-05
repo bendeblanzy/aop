@@ -4,5 +4,15 @@
       "path": "/api/cron/sync-boamp",
       "schedule": "0 5 * * *"
     }
-  ]
+  ],
+  "functions": {
+    "src/app/api/ai/analyze-rc/route.ts": { "maxDuration": 60 },
+    "src/app/api/ai/analyze-cctp/route.ts": { "maxDuration": 60 },
+    "src/app/api/ai/generate-memoire/route.ts": { "maxDuration": 60 },
+    "src/app/api/ai/generate-dc1/route.ts": { "maxDuration": 60 },
+    "src/app/api/ai/generate-dc2/route.ts": { "maxDuration": 60 },
+    "src/app/api/ai/generate-dc4/route.ts": { "maxDuration": 60 },
+    "src/app/api/ai/generate-dume/route.ts": { "maxDuration": 60 },
+    "src/app/api/cron/sync-boamp/route.ts": { "maxDuration": 300 }
+  }
 }
