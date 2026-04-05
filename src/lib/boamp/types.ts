@@ -8,8 +8,8 @@ export interface BoampRecord {
   dateparution: string | null
   datelimitereponse: string | null
   nomacheteur: string | null
-  descripteur_code: string | null  // JSON string: '["285","22"]'
-  descripteur_libelle: string | null  // JSON string: '["Publicité","Conseil"]'
+  descripteur_code: string[] | null  // Array from API: ["285","22"]
+  descripteur_libelle: string[] | null  // Array from API: ["Publicité","Conseil"]
   url_avis: string | null
   donnees: string | null  // JSON string eForms
 }

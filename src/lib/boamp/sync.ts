@@ -4,9 +4,12 @@ const BOAMP_BASE_URL = 'https://www.boamp.fr/api/explore/v2.1/catalog/datasets/b
 const PAGE_SIZE = 100
 const DELAY_MS = 600 // Respecter le rate limit BOAMP (~60 req/min)
 
-/** Parse le champ descripteur_code (JSON string) en tableau */
-function parseJsonArray(value: string | null): string[] {
+/** Normalise un champ qui peut être un tableau ou une JSON string en tableau */
+function parseJsonArray(value: string | string[] | null): string[] {
   if (!value) return []
+  // L'API BOAMP v2.1 retourne directement des tableaux
+  if (Array.isArray(value)) return value.map(String)
+  // Fallback : essai de parsing JSON string (ancien format)
   try {
     const parsed = JSON.parse(value)
     return Array.isArray(parsed) ? parsed.map(String) : []
