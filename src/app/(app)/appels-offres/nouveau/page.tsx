@@ -209,7 +209,11 @@ function NouvelAOPageInner() {
       }
 
       if (!rc && !cctp) {
-        setAnalyseError('Aucun fichier RC ou CCTP trouvé. Uploadez au moins un de ces documents.')
+        // Si aucun fichier RC/CCTP n'a été uploadé, signaler le problème.
+        // Si des fichiers ont été trouvés mais que l'API a échoué, l'erreur est déjà définie — ne pas l'écraser.
+        if (!rcFile && !cctpFile) {
+          setAnalyseError('Aucun fichier RC ou CCTP trouvé. Uploadez au moins un de ces documents.')
+        }
         return
       }
 

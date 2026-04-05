@@ -5,7 +5,7 @@ export const anthropic = new Anthropic({
 })
 
 export async function callClaude(systemPrompt: string, userMessage: string, model: 'sonnet' | 'haiku' = 'sonnet'): Promise<string> {
-  const modelId = model === 'sonnet' ? 'claude-sonnet-4-20250514' : 'claude-haiku-4-5-20251001'
+  const modelId = model === 'sonnet' ? 'claude-sonnet-4-6' : 'claude-haiku-4-5-20251001'
 
   const response = await anthropic.messages.create({
     model: modelId,
