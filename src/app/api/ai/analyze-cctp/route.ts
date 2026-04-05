@@ -7,29 +7,91 @@ import { extractTextFromPDF } from '@/lib/documents/pdf-parser'
 import { extractTextFromDocx } from '@/lib/documents/docx-parser'
 
 export async function POST(request: NextRequest) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  try {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const orgId = await getOrgIdForUser(user.id)
-  if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 403 })
+    const orgId = await getOrgIdForUser(user.id)
+    if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 403 })
 
-  const { ao_id, file_url } = await request.json()
+    const { ao_id, file_url } = await request.json()
+    if (!ao_id || !file_url) {
+      return NextResponse.json({ error: 'ao_id et file_url sont requis' }, { status: 400 })
+    }
+    console.log('[analyze-cctp] Téléchargement:', file_url)
 
-  const res = await fetch(file_url)
-  if (!res.ok) return NextResponse.json({ error: 'Cannot fetch file' }, { status: 400 })
+    let res: Response
+    try {
+      res = await fetch(file_url)
+    } catch (fetchErr) {
+      console.error('[analyze-cctp] Erreur réseau fetch:', fetchErr)
+      return NextResponse.json({ error: 'Impossible de télécharger le fichier.' }, { status: 400 })
+    }
 
-  const buffer = Buffer.from(await res.arrayBuffer())
-  const isDocx = file_url.toLowerCase().includes('.docx')
-  const text = isDocx ? await extractTextFromDocx(buffer) : await extractTextFromPDF(buffer)
-  const truncated = text.slice(0, 60000)
+    if (!res.ok) {
+      console.error('[analyze-cctp] Fetch échoué:', res.status)
+      return NextResponse.json({ error: `Impossible de télécharger le fichier (${res.status}).` }, { status: 400 })
+    }
 
-  const raw = await callClaude(PROMPTS.analyzeCCTP, `Voici le texte du CCTP à analyser :\n\n${truncated}`, 'sonnet')
-  const jsonMatch = raw.match(/\{[\s\S]*\}/)
-  if (!jsonMatch) return NextResponse.json({ error: 'Invalid AI response' }, { status: 500 })
+    const buffer = Buffer.from(await res.arrayBuffer())
+    if (buffer.length === 0) {
+      return NextResponse.json({ error: 'Le fichier téléchargé est vide.' }, { status: 400 })
+    }
 
-  const analyse = JSON.parse(jsonMatch[0])
-  await adminClient.from('appels_offres').update({ analyse_cctp: analyse }).eq('id', ao_id).eq('organization_id', orgId)
+    const isDocx = file_url.toLowerCase().includes('.docx')
+    let text: string
+    try {
+      text = isDocx ? await extractTextFromDocx(buffer) : await extractTextFromPDF(buffer)
+    } catch (parseErr) {
+      console.error('[analyze-cctp] Erreur extraction texte:', parseErr)
+      return NextResponse.json({ error: 'Impossible d\'extraire le texte du document.' }, { status: 400 })
+    }
 
-  return NextResponse.json({ analyse })
+    console.log('[analyze-cctp] Texte extrait:', text?.length ?? 0, 'caractères')
+
+    if (!text || text.trim().length < 30) {
+      return NextResponse.json({
+        error: 'Le document semble vide ou illisible. Vérifiez que le PDF n\'est pas scanné sans OCR.'
+      }, { status: 400 })
+    }
+
+    const truncated = text.slice(0, 60000)
+
+    let raw: string
+    try {
+      raw = await callClaude(PROMPTS.analyzeCCTP, `Voici le texte du CCTP à analyser :\n\n${truncated}`, 'sonnet')
+    } catch (e) {
+      console.error('[analyze-cctp] Erreur Claude:', e)
+      const errMsg = e instanceof Error ? e.message : String(e)
+      if (errMsg.includes('429') || errMsg.includes('rate')) {
+        return NextResponse.json({ error: 'Trop de requêtes IA. Réessayez dans quelques secondes.' }, { status: 429 })
+      }
+      return NextResponse.json({ error: 'Erreur lors de l\'appel à l\'IA Claude. Réessayez.' }, { status: 500 })
+    }
+
+    const jsonMatch = raw.match(/\{[\s\S]*\}/)
+    if (!jsonMatch) {
+      console.error('[analyze-cctp] Pas de JSON:', raw.slice(0, 300))
+      return NextResponse.json({ error: 'Réponse IA invalide. Réessayez.' }, { status: 500 })
+    }
+
+    let analyse: object
+    try {
+      analyse = JSON.parse(jsonMatch[0])
+    } catch {
+      console.error('[analyze-cctp] JSON parse error')
+      return NextResponse.json({ error: 'Impossible de parser la réponse IA.' }, { status: 500 })
+    }
+
+    await adminClient.from('appels_offres').update({ analyse_cctp: analyse }).eq('id', ao_id).eq('organization_id', orgId)
+    console.log('[analyze-cctp] Analyse sauvegardée pour AO:', ao_id)
+
+    return NextResponse.json({ analyse })
+
+  } catch (err) {
+    console.error('[analyze-cctp] Erreur inattendue:', err)
+    const message = err instanceof Error ? err.message : 'Erreur interne du serveur'
+    return NextResponse.json({ error: `Erreur inattendue : ${message}` }, { status: 500 })
+  }
 }

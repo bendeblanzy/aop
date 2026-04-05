@@ -194,24 +194,43 @@ export default function RepondreAOPage({ params }: { params: Promise<{ id: strin
     let cctp = null
 
     if (rcFile) {
-      const res = await fetch('/api/ai/analyze-rc', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ao_id: id, file_url: rcFile.url }),
-      })
-      if (res.ok) rc = (await res.json()).analyse
+      try {
+        const res = await fetch('/api/ai/analyze-rc', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ao_id: id, file_url: rcFile.url }),
+        })
+        if (res.ok) rc = (await res.json()).analyse
+        else {
+          const errData = await res.json().catch(() => ({}))
+          setAnalyseError(`Analyse RC échouée : ${errData.error || res.statusText}`)
+        }
+      } catch (e) {
+        console.error('[handleAnalyse] Erreur analyze-rc:', e)
+        setAnalyseError('Impossible d\'analyser le RC. Vérifiez votre connexion et réessayez.')
+      }
     }
     if (cctpFile) {
-      const res = await fetch('/api/ai/analyze-cctp', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ao_id: id, file_url: cctpFile.url }),
-      })
-      if (res.ok) cctp = (await res.json()).analyse
+      try {
+        const res = await fetch('/api/ai/analyze-cctp', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ao_id: id, file_url: cctpFile.url }),
+        })
+        if (res.ok) cctp = (await res.json()).analyse
+        else {
+          const errData = await res.json().catch(() => ({}))
+          if (!rc) setAnalyseError(`Analyse CCTP échouée : ${errData.error || res.statusText}`)
+        }
+      } catch (e) {
+        console.error('[handleAnalyse] Erreur analyze-cctp:', e)
+      }
     }
 
     if (!rc && !cctp) {
-      setAnalyseError('Aucun fichier RC ou CCTP trouvé. Retournez à l\'étape 1 et ajoutez vos documents.')
+      if (!rcFile && !cctpFile) {
+        setAnalyseError('Aucun fichier RC ou CCTP trouvé. Retournez à l\'étape 1 et ajoutez vos documents.')
+      }
       setAnalysing(false)
       return
     }
