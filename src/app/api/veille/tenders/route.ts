@@ -101,6 +101,7 @@ export async function GET(request: NextRequest) {
   return NextResponse.json({
     tenders: filtered,
     total: count ?? 0,
+    filteredTotal: filtered.length,
     page,
     limit,
     hasBoampCodes: boampCodes.length > 0,

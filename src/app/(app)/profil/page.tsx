@@ -100,15 +100,18 @@ export default function ProfilPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-text-primary flex items-center gap-2"><Building2 className="w-6 h-6 text-primary" /> Mon profil entreprise</h1>
-          <p className="text-text-secondary mt-1">Ces informations servent à remplir automatiquement vos formulaires</p>
+      <div className="sticky top-0 z-10 bg-surface -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 py-4 -mt-4 mb-6 border-b border-border">
+        <div className="flex items-center justify-between">
+          <div className="min-w-0 mr-4">
+            <h1 className="text-lg sm:text-2xl font-bold text-text-primary flex items-center gap-2 truncate"><Building2 className="w-5 h-5 sm:w-6 sm:h-6 text-primary shrink-0" /> Mon profil entreprise</h1>
+            <p className="text-text-secondary mt-1 text-xs sm:text-sm hidden sm:block">Ces informations servent à remplir automatiquement vos formulaires</p>
+          </div>
+          <button onClick={save} disabled={saving} className="flex items-center gap-2 bg-primary hover:bg-primary-hover text-white rounded-lg px-3 sm:px-5 py-2 sm:py-2.5 text-xs sm:text-sm font-medium transition-colors disabled:opacity-60 shrink-0">
+            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+            <span className="hidden sm:inline">Sauvegarder</span>
+            <span className="sm:hidden">Sauver</span>
+          </button>
         </div>
-        <button onClick={save} disabled={saving} className="flex items-center gap-2 bg-primary hover:bg-primary-hover text-white rounded-lg px-5 py-2.5 text-sm font-medium transition-colors disabled:opacity-60">
-          {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-          Sauvegarder
-        </button>
       </div>
 
       {/* Barre de progression */}
@@ -125,10 +128,10 @@ export default function ProfilPage() {
 
       {/* Tabs */}
       <div className="bg-white rounded-xl border border-border">
-        <div className="flex border-b border-border overflow-x-auto">
+        <div className="flex border-b border-border overflow-x-auto scrollbar-hide">
           {tabs.map(tab => (
             <button key={tab.id} onClick={() => setActiveTab(tab.id)}
-              className={cn('px-5 py-3.5 text-sm font-medium whitespace-nowrap transition-colors border-b-2 -mb-px',
+              className={cn('px-3 sm:px-5 py-3 sm:py-3.5 text-xs sm:text-sm font-medium whitespace-nowrap transition-colors border-b-2 -mb-px shrink-0',
                 activeTab === tab.id ? 'border-primary text-primary' : 'border-transparent text-text-secondary hover:text-text-primary'
               )}>
               {tab.label}

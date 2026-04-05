@@ -30,6 +30,7 @@ interface TenderItem {
 interface ApiResponse {
   tenders: TenderItem[]
   total: number
+  filteredTotal: number
   page: number
   limit: number
   hasBoampCodes: boolean
@@ -82,6 +83,7 @@ export default function VeillePage() {
   const router = useRouter()
   const [tenders, setTenders] = useState<TenderItem[]>([])
   const [total, setTotal] = useState(0)
+  const [filteredTotal, setFilteredTotal] = useState(0)
   const [page, setPage] = useState(0)
   const [loading, setLoading] = useState(true)
   const [scoring, setScoring] = useState(false)
@@ -109,6 +111,7 @@ export default function VeillePage() {
       const data: ApiResponse = await res.json()
       setTenders(data.tenders)
       setTotal(data.total)
+      setFilteredTotal(data.filteredTotal)
       setPage(p)
       setHasBoampCodes(data.hasBoampCodes)
       setHasActiviteMetier(data.hasActiviteMetier)
@@ -200,22 +203,22 @@ export default function VeillePage() {
   return (
     <div>
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-        <div>
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-6">
+        <div className="min-w-0 flex-1">
           <h1 className="text-xl sm:text-2xl font-bold text-text-primary">Veille BOAMP</h1>
           <p className="text-text-secondary mt-1 text-xs sm:text-sm">
             Annonces publiées sur le Bulletin Officiel des Annonces des Marchés Publics
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 shrink-0">
           <button
             onClick={handleManualScore}
             disabled={scoring || tenders.length === 0}
-            className="flex items-center gap-2 bg-primary hover:bg-primary-hover disabled:opacity-50 text-white rounded-lg px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium transition-colors"
+            className="flex items-center gap-2 bg-primary hover:bg-primary-hover disabled:opacity-50 text-white rounded-lg px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium transition-colors whitespace-nowrap"
           >
             {scoring
-              ? <><RefreshCw className="w-4 h-4 animate-spin" /> Scoring en cours…</>
-              : <><Zap className="w-4 h-4" /> Scorer avec l'IA</>
+              ? <><RefreshCw className="w-4 h-4 animate-spin" /> Scoring…</>
+              : <><Zap className="w-4 h-4" /> Scorer avec l&apos;IA</>
             }
           </button>
         </div>
@@ -300,7 +303,7 @@ export default function VeillePage() {
 
           {/* Compteur */}
           <span className="text-xs text-text-secondary ml-auto">
-            {total} annonce{total > 1 ? 's' : ''}
+            {minScore !== null ? `${filteredTotal} / ${total}` : total} annonce{(minScore !== null ? filteredTotal : total) > 1 ? 's' : ''}
           </span>
         </div>
       </div>
