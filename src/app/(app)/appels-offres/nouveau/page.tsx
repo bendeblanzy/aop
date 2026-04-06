@@ -43,8 +43,12 @@ function detectFileType(name: string): 'rc' | 'cctp' | 'avis' | 'autre' {
   const n = name.toLowerCase().replace(/\.[^.]+$/, '')
   const words = n.split(/[\s\-_./\\]+/)
   if (words.includes('rc') || n.includes('reglement') || n.includes('règlement') || n.includes('consultation')) return 'rc'
-  if (words.includes('cctp') || n.includes('cahier des charges') || n.includes('technique') || n.includes('prescriptions')) return 'cctp'
-  if (words.includes('ccap')) return 'cctp' // on regroupe CCAP comme "autre cahier" détecté
+  if (
+    words.includes('cctp') || words.includes('ccft') || words.includes('ccap') || words.includes('cct') ||
+    words.includes('dpgf') || words.includes('bpu') || words.includes('dqe') || words.includes('bordereau') ||
+    n.includes('cahier des charges') || n.includes('technique') || n.includes('prescriptions') ||
+    n.includes('clauses techniques') || n.includes('clauses financières') || n.includes('clauses fonctionnelles')
+  ) return 'cctp'
   if (words.includes('avis') || n.includes('avis de marche') || n.includes('annonce')) return 'avis'
   return 'autre'
 }
@@ -236,7 +240,8 @@ function NouvelAOPageInner() {
       f.type === 'application/pdf' ||
       f.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
       f.type === 'application/msword' ||
-      f.name.endsWith('.pdf') || f.name.endsWith('.docx') || f.name.endsWith('.doc') || f.name.endsWith('.xlsx') || f.name.endsWith('.zip'),
+      f.type === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
+      f.name.endsWith('.pdf') || f.name.endsWith('.docx') || f.name.endsWith('.doc') || f.name.endsWith('.xlsx') || f.name.endsWith('.xls'),
     )
     if (!dropped.length) return
     setFiles(prev => [...prev, ...dropped.map(f => ({ file: f, type: detectFileType(f.name) }))])
@@ -559,11 +564,11 @@ function NouvelAOPageInner() {
               <span className={cn('text-sm font-medium', isDragOver ? 'text-primary' : 'text-text-secondary')}>
                 {isDragOver ? 'Relâchez pour ajouter les fichiers' : 'Glissez vos fichiers ici ou cliquez pour sélectionner'}
               </span>
-              <span className="text-xs text-text-secondary">ZIP, PDF, DOCX, XLS — 100 Mo max</span>
+              <span className="text-xs text-text-secondary">PDF, DOCX, DOC, XLSX — 100 Mo max</span>
               <input
                 type="file"
                 multiple
-                accept=".pdf,.docx,.doc,.xlsx,.xls,.zip"
+                accept=".pdf,.docx,.doc,.xlsx,.xls"
                 onChange={e => {
                   const added = Array.from(e.target.files || [])
                   setFiles(prev => [...prev, ...added.map(f => ({ file: f, type: detectFileType(f.name) }))])
