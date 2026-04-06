@@ -59,7 +59,7 @@ export default function ReferencesPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-6 pb-2 border-b border-border">
         <div>
           <h1 className="text-2xl font-bold text-text-primary flex items-center gap-2"><BookMarked className="w-6 h-6 text-primary" /> Références</h1>
           <p className="text-text-secondary mt-1">Vos marchés passés — utilisés pour valoriser vos candidatures</p>
@@ -92,7 +92,7 @@ export default function ReferencesPage() {
         ) : (
           <div className="grid gap-4">
             {filtered.map(ref => (
-              <div key={ref.id} className="bg-white rounded-xl border border-border p-5 hover:shadow-sm transition-shadow">
+              <div key={ref.id} className="bg-white rounded-xl border border-border p-5 shadow-sm overflow-hidden hover:shadow-sm transition-shadow">
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-1">
@@ -121,7 +121,7 @@ export default function ReferencesPage() {
       {/* Modal */}
       {showModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-xl">
             <div className="flex items-center justify-between p-6 border-b border-border">
               <h2 className="font-bold text-lg text-text-primary">{editing.id ? 'Modifier la référence' : 'Nouvelle référence'}</h2>
               <button onClick={() => setShowModal(false)} className="text-text-secondary hover:text-text-primary text-xl">✕</button>

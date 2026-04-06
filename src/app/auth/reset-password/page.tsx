@@ -2,7 +2,8 @@
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import Link from 'next/link'
-import { FileText, Loader2, CheckCircle } from 'lucide-react'
+import Image from 'next/image'
+import { Loader2, CheckCircle } from 'lucide-react'
 
 export default function ResetPasswordPage() {
   const [email, setEmail] = useState('')
@@ -48,11 +49,8 @@ export default function ResetPasswordPage() {
     <div className="min-h-screen bg-surface flex items-center justify-center px-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
-          <div className="inline-flex items-center gap-3 mb-6">
-            <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center">
-              <FileText className="w-5 h-5 text-white" />
-            </div>
-            <span className="font-bold text-2xl text-primary">AOP</span>
+          <div className="flex justify-center mb-2">
+            <Image src="/logo-ladn.svg" alt="L'ADN Intelligence" width={180} height={64} priority />
           </div>
           <h1 className="text-2xl font-bold text-text-primary">Mot de passe oublié</h1>
           <p className="text-text-secondary mt-1">Entrez votre email pour recevoir un lien de réinitialisation</p>

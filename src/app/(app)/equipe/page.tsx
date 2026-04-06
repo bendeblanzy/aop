@@ -162,7 +162,7 @@ export default function EquipePage() {
   return (
     <div>
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-6 pb-2 border-b border-border">
         <div>
           <h1 className="text-2xl font-bold text-text-primary flex items-center gap-2">
             <Users className="w-6 h-6 text-primary" /> Équipe
@@ -191,16 +191,16 @@ export default function EquipePage() {
       <div className="flex gap-6 border-b border-border mb-6">
         <button
           onClick={() => setTab('membres')}
-          className={`pb-3 text-sm font-medium transition-colors border-b-2 -mb-px ${
-            tab === 'membres' ? 'border-primary text-primary' : 'border-transparent text-text-secondary hover:text-text-primary'
+          className={`px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+            tab === 'membres' ? 'bg-primary text-white' : 'text-text-secondary hover:bg-surface'
           }`}
         >
           Membres
         </button>
         <button
           onClick={() => setTab('collaborateurs')}
-          className={`pb-3 text-sm font-medium transition-colors border-b-2 -mb-px ${
-            tab === 'collaborateurs' ? 'border-primary text-primary' : 'border-transparent text-text-secondary hover:text-text-primary'
+          className={`px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+            tab === 'collaborateurs' ? 'bg-primary text-white' : 'text-text-secondary hover:bg-surface'
           }`}
         >
           Collaborateurs
@@ -224,7 +224,7 @@ export default function EquipePage() {
               </div>
             )
             : (
-              <div className="bg-white rounded-xl border border-border divide-y divide-border">
+              <div className="bg-white rounded-xl border border-border divide-y divide-border shadow-sm overflow-hidden">
                 {members.map(m => (
                   <div key={m.id} className="flex items-center justify-between px-5 py-4">
                     <div className="flex items-center gap-3">
@@ -279,7 +279,7 @@ export default function EquipePage() {
             : (
               <div className="grid grid-cols-2 gap-4">
                 {collabs.map(c => (
-                  <div key={c.id} className="bg-white rounded-xl border border-border p-5">
+                  <div key={c.id} className="bg-white rounded-xl border border-border p-5 shadow-sm overflow-hidden">
                     <div className="flex justify-between items-start mb-3">
                       <div>
                         <h3 className="font-semibold text-text-primary">{c.prenom} {c.nom}</h3>
@@ -312,7 +312,7 @@ export default function EquipePage() {
       {/* ── Modal: Inviter un membre ── */}
       {showInviteModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl w-full max-w-md">
+          <div className="bg-white rounded-2xl w-full max-w-md shadow-xl">
             <div className="flex items-center justify-between p-6 border-b border-border">
               <h2 className="font-bold text-lg text-text-primary flex items-center gap-2">
                 <UserPlus className="w-5 h-5 text-primary" /> Inviter un membre
@@ -345,7 +345,7 @@ export default function EquipePage() {
       {/* ── Modal: Collaborateur ── */}
       {showCollabModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-xl">
             <div className="flex items-center justify-between p-6 border-b border-border">
               <h2 className="font-bold text-lg text-text-primary">{editing.id ? 'Modifier' : 'Nouveau collaborateur'}</h2>
               <button onClick={() => setShowCollabModal(false)} className="text-text-secondary hover:text-text-primary text-xl">✕</button>

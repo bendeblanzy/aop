@@ -15,7 +15,7 @@ export default async function AppelsOffresPage() {
 
   return (
     <div>
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 pb-2 border-b border-border">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-text-primary">Appels d&apos;offres</h1>
           <p className="text-text-secondary mt-1 text-sm">{aos?.length ?? 0} appel{(aos?.length ?? 0) > 1 ? 's' : ''} d&apos;offres</p>
@@ -40,7 +40,7 @@ export default async function AppelsOffresPage() {
           </Link>
         </div>
       ) : (
-        <div className="bg-white rounded-xl border border-border divide-y divide-border">
+        <div className="bg-white rounded-xl border border-border divide-y divide-border shadow-sm overflow-hidden">
           {aos.map((ao) => (
             <div key={ao.id} className="flex flex-col sm:flex-row sm:items-center justify-between px-4 sm:px-6 py-4 sm:py-5 hover:bg-surface transition-colors group gap-3">
               <Link href={`/appels-offres/${ao.id}`} className="flex-1 min-w-0">

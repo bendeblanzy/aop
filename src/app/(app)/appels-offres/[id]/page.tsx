@@ -31,7 +31,7 @@ export default async function AODetailPage({ params }: { params: Promise<{ id: s
   return (
     <div>
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-8">
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-6 pb-2 border-b border-border">
         <div>
           <div className="flex items-center gap-3 mb-2">
             <Link href="/appels-offres" className="text-text-secondary hover:text-primary text-sm">← Retour</Link>
@@ -67,7 +67,7 @@ export default async function AODetailPage({ params }: { params: Promise<{ id: s
 
           {/* Analyse RC */}
           {ao.analyse_rc && (
-            <div className="bg-white rounded-xl border border-border p-6">
+            <div className="bg-white rounded-xl border border-border p-6 shadow-sm overflow-hidden">
               <h2 className="font-semibold text-text-primary mb-4">Analyse du Règlement de Consultation</h2>
               {ao.analyse_rc.objet && (
                 <div className="mb-4">
@@ -104,7 +104,7 @@ export default async function AODetailPage({ params }: { params: Promise<{ id: s
 
           {/* Analyse CCTP */}
           {ao.analyse_cctp && (
-            <div className="bg-white rounded-xl border border-border p-6">
+            <div className="bg-white rounded-xl border border-border p-6 shadow-sm overflow-hidden">
               <h2 className="font-semibold text-text-primary mb-4">Analyse du CCTP</h2>
               {ao.analyse_cctp.prestations_attendues && (
                 <div className="mb-4">
@@ -125,7 +125,7 @@ export default async function AODetailPage({ params }: { params: Promise<{ id: s
 
           {/* Notes */}
           {ao.notes_utilisateur && (
-            <div className="bg-white rounded-xl border border-border p-6">
+            <div className="bg-white rounded-xl border border-border p-6 shadow-sm overflow-hidden">
               <h2 className="font-semibold text-text-primary mb-3">Notes</h2>
               <p className="text-sm text-text-primary">{ao.notes_utilisateur}</p>
             </div>
@@ -136,7 +136,7 @@ export default async function AODetailPage({ params }: { params: Promise<{ id: s
         <div className="space-y-6">
 
           {/* Documents générés */}
-          <div className="bg-white rounded-xl border border-border p-5">
+          <div className="bg-white rounded-xl border border-border p-5 shadow-sm overflow-hidden">
             <h2 className="font-semibold text-text-primary mb-4">Documents générés</h2>
             {!ao.documents_generes || ao.documents_generes.length === 0 ? (
               <div className="text-center py-4">
@@ -167,7 +167,7 @@ export default async function AODetailPage({ params }: { params: Promise<{ id: s
 
           {/* Fichiers sources */}
           {ao.fichiers_source && ao.fichiers_source.length > 0 && (
-            <div className="bg-white rounded-xl border border-border p-5">
+            <div className="bg-white rounded-xl border border-border p-5 shadow-sm overflow-hidden">
               <h2 className="font-semibold text-text-primary mb-4">Fichiers sources</h2>
               <div className="space-y-2">
                 {ao.fichiers_source.map((f, i) => (
@@ -182,7 +182,7 @@ export default async function AODetailPage({ params }: { params: Promise<{ id: s
           )}
 
           {/* Infos */}
-          <div className="bg-white rounded-xl border border-border p-5">
+          <div className="bg-white rounded-xl border border-border p-5 shadow-sm overflow-hidden">
             <h2 className="font-semibold text-text-primary mb-3">Informations</h2>
             <dl className="space-y-2 text-sm">
               <div className="flex justify-between">

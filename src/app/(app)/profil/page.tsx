@@ -100,7 +100,7 @@ export default function ProfilPage() {
 
   return (
     <div>
-      <div className="sticky top-0 z-10 bg-surface -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 py-4 -mt-4 mb-6 border-b border-border">
+      <div className="mb-6 pb-2 border-b border-border">
         <div className="flex items-center justify-between">
           <div className="min-w-0 mr-4">
             <h1 className="text-lg sm:text-2xl font-bold text-text-primary flex items-center gap-2 truncate"><Building2 className="w-5 h-5 sm:w-6 sm:h-6 text-primary shrink-0" /> Mon profil entreprise</h1>
@@ -112,10 +112,10 @@ export default function ProfilPage() {
             <span className="sm:hidden">Sauver</span>
           </button>
         </div>
-      </div>
+
 
       {/* Barre de progression */}
-      <div className="bg-white rounded-xl border border-border p-4 mb-6">
+      <div className="bg-white rounded-xl border border-border p-4 mb-6 shadow-sm overflow-hidden">
         <div className="flex items-center justify-between mb-2">
           <span className="text-sm font-medium text-text-primary">Complétion du profil</span>
           <span className={cn('text-sm font-bold', completion >= 80 ? 'text-secondary' : completion >= 50 ? 'text-warning' : 'text-danger')}>{completion}%</span>
@@ -127,12 +127,12 @@ export default function ProfilPage() {
       </div>
 
       {/* Tabs */}
-      <div className="bg-white rounded-xl border border-border">
+      <div className="bg-white rounded-xl border border-border shadow-sm overflow-hidden">
         <div className="flex border-b border-border overflow-x-auto scrollbar-hide">
           {tabs.map(tab => (
             <button key={tab.id} onClick={() => setActiveTab(tab.id)}
-              className={cn('px-3 sm:px-5 py-3 sm:py-3.5 text-xs sm:text-sm font-medium whitespace-nowrap transition-colors border-b-2 -mb-px shrink-0',
-                activeTab === tab.id ? 'border-primary text-primary' : 'border-transparent text-text-secondary hover:text-text-primary'
+              className={cn('px-3 sm:px-5 py-3 sm:py-3.5 text-xs sm:text-sm font-medium whitespace-nowrap transition-colors shrink-0',
+                activeTab === tab.id ? 'bg-primary text-white font-semibold' : 'text-text-secondary hover:bg-surface'
               )}>
               {tab.label}
             </button>

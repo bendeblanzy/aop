@@ -26,12 +26,12 @@ export default function ParametresPage() {
 
   return (
     <div>
-      <div className="mb-6">
+      <div className="mb-6 pb-2 border-b border-border">
         <h1 className="text-2xl font-bold text-text-primary flex items-center gap-2"><Settings className="w-6 h-6 text-primary" /> Paramètres</h1>
         <p className="text-text-secondary mt-1">Gérez votre compte et vos préférences</p>
       </div>
       <div className="max-w-2xl space-y-6">
-        <div className="bg-white rounded-xl border border-border p-6">
+        <div className="bg-white rounded-xl border border-border p-6 shadow-sm">
           <h2 className="font-semibold text-text-primary flex items-center gap-2 mb-4"><User className="w-4 h-4 text-primary" /> Mon compte</h2>
           <div>
             <label className="block text-sm font-medium text-text-primary mb-1.5">Adresse email</label>
@@ -39,7 +39,7 @@ export default function ParametresPage() {
             <p className="text-xs text-text-secondary mt-1">Pour changer votre email, contactez le support</p>
           </div>
         </div>
-        <div className="bg-white rounded-xl border border-border p-6">
+        <div className="bg-white rounded-xl border border-border p-6 shadow-sm">
           <h2 className="font-semibold text-text-primary flex items-center gap-2 mb-4"><Lock className="w-4 h-4 text-primary" /> Changer le mot de passe</h2>
           <div className="space-y-4">
             <div>
@@ -55,7 +55,7 @@ export default function ParametresPage() {
             </button>
           </div>
         </div>
-        <div className="bg-white rounded-xl border border-border p-6">
+        <div className="bg-white rounded-xl border border-border p-6 shadow-sm">
           <h2 className="font-semibold text-text-primary mb-2">Plan actuel</h2>
           <div className="flex items-center justify-between">
             <div>
