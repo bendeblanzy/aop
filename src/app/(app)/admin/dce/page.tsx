@@ -3,7 +3,7 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import {
   ExternalLink, EyeOff, Eye, FileText, CheckCircle2,
   Clock, Building2, Euro, Loader2, AlertCircle, Upload,
-  RefreshCw, ArrowRight, Zap, ChevronDown, ChevronUp,
+  RefreshCw, ArrowRight, Zap,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import Link from 'next/link'
@@ -397,8 +397,23 @@ export default function AdminDcePage() {
   const [tenders, setTenders] = useState<TenderItem[]>([])
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<TabKey>('pending')
-  const [showIgnored, setShowIgnored] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [counts, setCounts] = useState<Record<TabKey, number>>({ pending: 0, uploaded: 0, ignored: 0 })
+
+  const fetchCounts = useCallback(async () => {
+    try {
+      const [p, u, i] = await Promise.all([
+        fetch('/api/admin/dce?status=pending').then(r => r.json()),
+        fetch('/api/admin/dce?status=uploaded').then(r => r.json()),
+        fetch('/api/admin/dce?status=ignored').then(r => r.json()),
+      ])
+      setCounts({
+        pending: p.total ?? p.tenders?.length ?? 0,
+        uploaded: u.total ?? u.tenders?.length ?? 0,
+        ignored: i.total ?? i.tenders?.length ?? 0,
+      })
+    } catch { /* silencieux */ }
+  }, [])
 
   const fetchTenders = useCallback(async (tab: TabKey) => {
     setLoading(true)
@@ -410,7 +425,9 @@ export default function AdminDcePage() {
         throw new Error(data.error ?? 'Erreur serveur')
       }
       const data = await res.json()
-      setTenders(data.tenders ?? [])
+      const list = data.tenders ?? []
+      setTenders(list)
+      setCounts(prev => ({ ...prev, [tab]: data.total ?? list.length }))
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Erreur inconnue'
       setError(msg)
@@ -418,6 +435,10 @@ export default function AdminDcePage() {
       setLoading(false)
     }
   }, [])
+
+  useEffect(() => {
+    fetchCounts()
+  }, [fetchCounts])
 
   useEffect(() => {
     fetchTenders(activeTab)
@@ -430,6 +451,7 @@ export default function AdminDcePage() {
       body: JSON.stringify({ action: 'ignore', tender_idweb: idweb }),
     })
     setTenders(prev => prev.filter(t => t.idweb !== idweb))
+    setCounts(prev => ({ ...prev, pending: Math.max(0, prev.pending - 1), ignored: prev.ignored + 1 }))
     toast.success('AO ignoré')
   }, [])
 
@@ -440,6 +462,7 @@ export default function AdminDcePage() {
       body: JSON.stringify({ action: 'unignore', tender_idweb: idweb }),
     })
     setTenders(prev => prev.filter(t => t.idweb !== idweb))
+    setCounts(prev => ({ ...prev, ignored: Math.max(0, prev.ignored - 1), pending: prev.pending + 1 }))
     toast.success('AO remis dans la liste')
   }, [])
 
@@ -467,6 +490,7 @@ export default function AdminDcePage() {
     if (activeTab === 'pending') {
       setTimeout(() => {
         setTenders(prev => prev.filter(t => t.idweb !== idweb))
+        setCounts(prev => ({ ...prev, pending: Math.max(0, prev.pending - 1), uploaded: prev.uploaded + 1 }))
       }, 2000)
     }
   }, [activeTab])
@@ -483,6 +507,12 @@ export default function AdminDcePage() {
     { key: 'uploaded', label: 'Avec DCE', icon: <CheckCircle2 className="w-4 h-4" /> },
     { key: 'ignored', label: 'Ignorés', icon: <EyeOff className="w-4 h-4" /> },
   ]
+
+  const tabBadgeColor: Record<TabKey, string> = {
+    pending: 'bg-orange-100 text-orange-700',
+    uploaded: 'bg-green-100 text-green-700',
+    ignored: 'bg-gray-100 text-gray-500',
+  }
 
   return (
     <div className="max-w-3xl mx-auto">
@@ -522,6 +552,12 @@ export default function AdminDcePage() {
           >
             {tab.icon}
             {tab.label}
+            <span className={cn(
+              'ml-0.5 min-w-[1.25rem] h-5 px-1 rounded-full text-xs font-semibold inline-flex items-center justify-center',
+              activeTab === tab.key ? tabBadgeColor[tab.key] : 'bg-gray-100 text-gray-500'
+            )}>
+              {counts[tab.key]}
+            </span>
           </button>
         ))}
       </div>
