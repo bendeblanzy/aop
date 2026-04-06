@@ -6,7 +6,7 @@ import { usePathname, useSearchParams } from 'next/navigation'
 import {
   LayoutDashboard, Building2, BookMarked, Users,
   FileText, Settings, LogOut, Radar,
-  Menu, X, Star,
+  Menu, X, Star, FolderOpen,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
@@ -29,6 +29,7 @@ const navigation: NavItem[] = [
   { name: 'Références', href: '/references', icon: BookMarked },
   { name: 'Équipe', href: '/equipe', icon: Users },
   { name: 'Paramètres', href: '/parametres', icon: Settings },
+  { name: 'Gestion DCE', href: '/admin/dce', icon: FolderOpen },
 ]
 
 export function Sidebar() {

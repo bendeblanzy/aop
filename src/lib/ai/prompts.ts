@@ -91,6 +91,39 @@ Format STRICT à respecter (chaque valeur doit être une string) :
 Remplace tous les placeholders [entre crochets] par les données réelles du profil et de l'AO.
 Réponds UNIQUEMENT avec le JSON valide, sans commentaire ni explication.`,
 
+  analyzeDCE: `Tu es un expert en marchés publics français. Analyse le ou les documents fournis issus d'un Dossier de Consultation des Entreprises (DCE).
+
+Pour CHAQUE document (identifié par son nom de fichier en en-tête "=== DOCUMENT : nom ===") :
+- Identifie son type parmi : "rc" (Règlement de Consultation), "ccap" (Cahier des Clauses Administratives Particulières), "cctp" (Cahier des Clauses Techniques Particulières), "bpu" (Bordereau des Prix Unitaires), "ae" (Acte d'Engagement), "dpgf" (Décomposition du Prix Global et Forfaitaire), "avis" (Avis de marché), "autre"
+- Propose un label court et clair (ex: "RC — Règlement de Consultation")
+
+Si un document de type "rc" est présent, extrais TOUTE l'analyse du RC en JSON.
+
+Réponds UNIQUEMENT en JSON valide, sans commentaire ni balise markdown :
+{
+  "documents": [
+    { "filename": "nom_exact_du_fichier.pdf", "type": "rc", "label": "RC — Règlement de Consultation" }
+  ],
+  "analyse_rc": {
+    "objet": "description précise du marché",
+    "acheteur": "nom de l'acheteur public",
+    "lots": [{"numero": "1", "intitule": "Conception graphique", "montant_estime": 50000}],
+    "criteres_notation": [{"critere": "Valeur technique", "ponderation_pourcentage": 60}],
+    "pieces_exigees": ["DC1", "DC2", "Extrait K-bis", "Mémoire technique"],
+    "delai_reponse": "JJ/MM/AAAA à HH:MM",
+    "duree_marche": "12 mois renouvelable 2 fois",
+    "clauses_eliminatoires": ["Omission du DC1", "Offre non chiffrée"],
+    "forme_groupement": "groupement solidaire autorisé",
+    "variantes": "non autorisées",
+    "visite_obligatoire": "non",
+    "decision_go_nogo": "GO — marché communication éditoriale bien adapté / NO GO — motif principal",
+    "prestations_attendues": "résumé en 2-3 phrases des prestations attendues",
+    "risques_identifies": ["risque 1", "risque 2"]
+  }
+}
+
+Si aucun RC n'est trouvé parmi les documents, "analyse_rc" vaut null.`,
+
   generateMemoire: `Tu es un rédacteur expert de mémoires techniques pour les marchés publics français.
 Tu dois rédiger un mémoire technique percutant et personnalisé.
 

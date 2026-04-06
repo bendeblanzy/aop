@@ -117,6 +117,10 @@ export interface AppelOffre {
   references_selectionnees?: string[]
   collaborateurs_selectionnes?: string[]
   team_members?: string[]
+  // Lien vers le tender BOAMP source (migration 005)
+  tender_idweb?: string
+  url_avis?: string
+  url_profil_acheteur?: string
 }
 
 export interface FichierSource {
