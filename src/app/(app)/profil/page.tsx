@@ -112,6 +112,7 @@ export default function ProfilPage() {
             <span className="sm:hidden">Sauver</span>
           </button>
         </div>
+      </div>
 
 
       {/* Barre de progression */}
