@@ -579,10 +579,10 @@ export default function AdminDcePage() {
             </>
           )}
 
-          {/* AOs plus anciens */}
-          {olderTenders.length > 0 && (
+          {/* AOs plus anciens (onglet pending uniquement) */}
+          {activeTab === 'pending' && olderTenders.length > 0 && (
             <>
-              {activeTab === 'pending' && todayTenders.length > 0 && (
+              {todayTenders.length > 0 && (
                 <div className="flex items-center gap-2 pt-1">
                   <span className="text-xs font-semibold text-text-secondary uppercase tracking-wide">
                     En attente — {olderTenders.length}
@@ -602,7 +602,7 @@ export default function AdminDcePage() {
             </>
           )}
 
-          {/* Si pas de séparation (uploaded / ignored) */}
+          {/* Onglets uploaded / ignored : liste simple */}
           {activeTab !== 'pending' && tenders.map(t => (
             <TenderCard
               key={t.idweb}
