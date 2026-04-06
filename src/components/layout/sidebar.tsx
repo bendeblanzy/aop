@@ -1,11 +1,11 @@
 'use client'
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useSearchParams } from 'next/navigation'
 import {
   LayoutDashboard, Building2, BookMarked, Users,
   FileText, Settings, LogOut, ChevronRight, Radar,
-  Menu, X
+  Menu, X, Star,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
@@ -13,7 +13,8 @@ import { useRouter } from 'next/navigation'
 
 const navigation = [
   { name: 'Tableau de bord', href: '/dashboard', icon: LayoutDashboard },
-  { name: 'Veille BOAMP', href: '/veille', icon: Radar },
+  { name: 'Veille marchés', href: '/veille', icon: Radar, exact: true },
+  { name: 'Mes favoris', href: '/veille?tab=favorites', icon: Star, activeWhen: (p: string, s: string) => p === '/veille' && s.includes('tab=favorites') },
   { name: "Appels d'offres", href: '/appels-offres', icon: FileText },
   { name: 'Mon profil', href: '/profil', icon: Building2 },
   { name: 'Références', href: '/references', icon: BookMarked },
@@ -23,6 +24,7 @@ const navigation = [
 
 export function Sidebar() {
   const pathname = usePathname()
+  const searchParams = useSearchParams()
   const router = useRouter()
   const [mobileOpen, setMobileOpen] = useState(false)
 
@@ -59,7 +61,12 @@ export function Sidebar() {
       {/* Navigation */}
       <nav className="flex-1 px-3 py-4 space-y-1">
         {navigation.map((item) => {
-          const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
+          const searchString = searchParams.toString()
+          const isActive = item.activeWhen
+            ? item.activeWhen(pathname, searchString)
+            : item.exact
+              ? pathname === item.href
+              : pathname === item.href || pathname.startsWith(item.href + '/')
           return (
             <Link
               key={item.name}

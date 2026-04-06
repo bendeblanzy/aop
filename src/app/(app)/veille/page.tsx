@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useState, useCallback, useRef } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import {
   Search, Zap, AlertCircle, Settings, FileText, Building2, Calendar,
   Euro, Clock, ChevronRight, RefreshCw, Filter, X, Star, SortAsc,
@@ -233,6 +233,7 @@ function TenderCard({
 
 export default function VeillePage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
 
   // Tenders
   const [tenders, setTenders] = useState<TenderItem[]>([])
@@ -250,7 +251,9 @@ export default function VeillePage() {
   const [activeOnly, setActiveOnly] = useState(true)
   const [minScore, setMinScore] = useState<number | null>(null)
   const [sortBy, setSortBy] = useState<SortKey>('score')
-  const [tab, setTab] = useState<TabKey>('all')
+  const [tab, setTab] = useState<TabKey>(() =>
+    searchParams.get('tab') === 'favorites' ? 'favorites' : 'all'
+  )
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Favoris

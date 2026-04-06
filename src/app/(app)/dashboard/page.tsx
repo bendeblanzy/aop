@@ -21,7 +21,8 @@ interface TopTender {
   datelimitereponse: string | null
   valeur_estimee: number | null
   url_profil_acheteur: string | null
-  score: number
+  description_detail: string | null
+  score: number | null
   reason: string | null
 }
 
@@ -90,11 +91,32 @@ export default function DashboardPage() {
       if (favsRes?.favorites) setFavorites(new Set(favsRes.favorites))
 
       if (tendersRes?.tenders) {
-        // Filtrer sur les scorés et trier
-        const scored: TopTender[] = (tendersRes.tenders as (TopTender & { score: number | null })[])
+        const allTenders = tendersRes.tenders as TopTender[]
+
+        // Auto-scorer les annonces sans score (max 10)
+        const unscored = allTenders.filter(t => t.score === null).slice(0, 10)
+        if (unscored.length > 0) {
+          await Promise.allSettled(
+            unscored.map(t =>
+              fetch('/api/veille/score', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ idweb: t.idweb }),
+              }).then(r => r.ok ? r.json() : null).then(res => {
+                if (res?.score !== undefined) {
+                  t.score = res.score
+                  t.reason = res.reason ?? t.reason
+                }
+              }).catch(() => null)
+            )
+          )
+        }
+
+        // Filtrer sur les scorés ≥ 60% et trier
+        const scored: TopTender[] = allTenders
           .filter(t => t.score !== null && t.score >= 60)
           .sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
-          .slice(0, 5) as TopTender[]
+          .slice(0, 5)
         setTopTenders(scored)
       }
       setLoading(false)
@@ -306,7 +328,14 @@ export default function DashboardPage() {
                     </div>
                   </div>
 
-                  {/* Raison */}
+                  {/* Résumé */}
+                  {tender.description_detail && (
+                    <p className="text-xs text-text-secondary mb-2 line-clamp-2 leading-relaxed">
+                      {tender.description_detail}
+                    </p>
+                  )}
+
+                  {/* Raison IA */}
                   {tender.reason && (
                     <p className="text-xs text-primary italic mb-2 flex items-start gap-1">
                       <Zap className="w-3 h-3 shrink-0 mt-0.5" />

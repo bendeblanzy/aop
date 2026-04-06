@@ -17,7 +17,12 @@ export async function GET() {
     .eq('organization_id', orgId)
     .order('created_at', { ascending: false })
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  // Si la table n'existe pas encore (migration non appliquée), on retourne un tableau vide
+  if (error) {
+    const isMissingTable = error.message.includes('relation') || error.message.includes('does not exist') || error.code === '42P01'
+    if (isMissingTable) return NextResponse.json({ favorites: [], migrationPending: true })
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
 
   return NextResponse.json({ favorites: (data ?? []).map(f => f.tender_idweb) })
 }
@@ -41,8 +46,15 @@ export async function POST(request: NextRequest) {
     .from('tender_favorites')
     .insert({ tender_idweb: idweb, organization_id: orgId })
 
-  // Ignore "already exists" error (unique constraint)
-  if (error && !error.message.includes('duplicate')) {
+  if (error) {
+    // Ignore "already exists" (unique constraint)
+    if (error.message.includes('duplicate') || error.code === '23505') {
+      return NextResponse.json({ ok: true })
+    }
+    // Table manquante — migration non appliquée
+    if (error.message.includes('relation') || error.message.includes('does not exist') || error.code === '42P01') {
+      return NextResponse.json({ error: 'Migration 003 non appliquée — exécutez supabase/migrations/003_add_favorites.sql dans Supabase' }, { status: 503 })
+    }
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
@@ -70,7 +82,12 @@ export async function DELETE(request: NextRequest) {
     .eq('tender_idweb', idweb)
     .eq('organization_id', orgId)
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) {
+    if (error.message.includes('relation') || error.code === '42P01') {
+      return NextResponse.json({ ok: true }) // Table absente = rien à supprimer
+    }
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
 
   return NextResponse.json({ ok: true })
 }
