@@ -690,7 +690,8 @@ function NouvelAOPageInner() {
                     <ul className="mt-1 space-y-0.5">
                       {analyseRC.pieces_exigees.map((p, i) => (
                         <li key={i} className="text-sm text-text-primary flex items-center gap-1.5">
-                          <CheckCircle2 className="w-3.5 h-3.5 text-secondary shrink-0" />{p}
+                          <CheckCircle2 className="w-3.5 h-3.5 text-secondary shrink-0" />
+                          {typeof p === 'string' ? p : `${(p as { piece: string; detail?: string }).piece}${(p as { piece: string; detail?: string }).detail ? ` — ${(p as { piece: string; detail?: string }).detail}` : ''}`}
                         </li>
                       ))}
                     </ul>

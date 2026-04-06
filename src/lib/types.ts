@@ -131,7 +131,7 @@ export interface AnalyseRC {
   acheteur?: string
   lots?: { numero: string; intitule: string; montant_estime?: number }[]
   criteres_notation?: { critere: string; ponderation_pourcentage: number }[]
-  pieces_exigees?: string[]
+  pieces_exigees?: (string | { piece: string; detail?: string })[]
   delai_reponse?: string
   duree_marche?: string
   clauses_eliminatoires?: string[]
