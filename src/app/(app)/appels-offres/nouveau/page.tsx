@@ -12,6 +12,7 @@ import { cn } from '@/lib/utils'
 import { uploadFileToStorage } from '@/lib/upload'
 import { detectPlatform, getDefaultPlatform } from '@/lib/platforms'
 import type { AnalyseRC, AnalyseCCTP, Reference, Collaborateur } from '@/lib/types'
+import { toast } from 'sonner'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -191,8 +192,8 @@ function NouvelAOPageInner() {
 
   /** Crée l'AO en base lors du passage étape 1→2 */
   async function handleConfirmAO() {
-    if (!titre.trim()) return alert("Veuillez saisir un titre pour cet appel d'offres")
-    if (!orgId) return alert('Organisation non chargée, veuillez réessayer.')
+    if (!titre.trim()) { toast.error("Veuillez saisir un titre pour cet appel d'offres"); return }
+    if (!orgId) { toast.error('Organisation non chargée, veuillez réessayer.'); return }
     if (aoId) { goTo(2); return } // déjà créé
 
     setCreatingAO(true)
@@ -212,7 +213,7 @@ function NouvelAOPageInner() {
         ...(boampNote ? { notes_utilisateur: boampNote } : {}),
       }).select().single()
 
-      if (error || !ao) { alert("Erreur lors de la création de l'AO : " + error?.message); return }
+      if (error || !ao) { toast.error("Erreur lors de la création de l'AO : " + error?.message); return }
       setAoId(ao.id)
       goTo(2)
     } finally {
@@ -253,7 +254,7 @@ function NouvelAOPageInner() {
 
   async function handleUpload() {
     if (!aoId) return
-    if (!files.length) return alert('Ajoutez au moins un document avant de continuer.')
+    if (!files.length) { toast.error('Ajoutez au moins un document avant de continuer.'); return }
     setUploading(true)
     try {
       const uploaded: { nom: string; url: string; type: string; taille: number }[] = []
@@ -267,7 +268,7 @@ function NouvelAOPageInner() {
           failed.push(file.name)
         }
       }
-      if (failed.length) alert(`⚠️ ${failed.length} fichier(s) non uploadés :\n${failed.join('\n')}`)
+      if (failed.length) toast.warning(`${failed.length} fichier(s) non uploadés : ${failed.join(', ')}`)
       setUploadedFiles(uploaded)
       const supabase = createClient()
       await supabase.from('appels_offres').update({ fichiers_source: uploaded }).eq('id', aoId)

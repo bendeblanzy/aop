@@ -12,6 +12,7 @@ import { cn } from '@/lib/utils'
 import { uploadFileToStorage } from '@/lib/upload'
 import type { AppelOffre, AnalyseRC, AnalyseCCTP, Reference, Collaborateur } from '@/lib/types'
 import Link from 'next/link'
+import { toast } from 'sonner'
 
 const STEPS = [
   { id: 1, label: 'Documents', icon: Upload },
@@ -147,7 +148,7 @@ export default function RepondreAOPage({ params }: { params: Promise<{ id: strin
   }
 
   async function handleSaveStep1() {
-    if (!titre.trim()) return alert('Veuillez saisir un titre')
+    if (!titre.trim()) { toast.error('Veuillez saisir un titre'); return }
     setUploading(true)
     const supabase = createClient()
 
@@ -164,7 +165,7 @@ export default function RepondreAOPage({ params }: { params: Promise<{ id: strin
       }
     }
     if (failed.length > 0) {
-      alert(`⚠️ ${failed.length} fichier(s) n'ont pas pu être uploadés :\n${failed.join('\n')}`)
+      toast.warning(`${failed.length} fichier(s) n'ont pas pu être uploadés : ${failed.join(', ')}`)
     }
 
     // Mettre à jour l'AO (RLS filtre par org automatiquement)
