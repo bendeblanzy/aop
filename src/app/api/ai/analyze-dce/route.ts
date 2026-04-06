@@ -3,11 +3,12 @@ import { adminClient, getOrgIdForUser } from '@/lib/supabase/admin'
 import { NextRequest, NextResponse } from 'next/server'
 import { anthropic } from '@/lib/ai/claude-client'
 import { extractTextFromDocx } from '@/lib/documents/docx-parser'
-import type { ContentBlockParam } from '@anthropic-ai/sdk/resources/messages/messages'
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
 type FileEntry = { nom: string; url: string; type: string; taille: number }
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type ContentBlock = Record<string, any>
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -37,27 +38,7 @@ function isWord(filename: string): boolean {
   return ext === 'docx' || ext === 'doc'
 }
 
-async function excelToText(buffer: Buffer, filename: string): Promise<string> {
-  try {
-    // Dynamic import to avoid build issues if xlsx is not installed
-    const XLSX = await import('xlsx')
-    const workbook = XLSX.read(buffer, { type: 'buffer' })
-    const lines: string[] = []
-    for (const sheetName of workbook.SheetNames) {
-      const sheet = workbook.Sheets[sheetName]
-      const csv = XLSX.utils.sheet_to_csv(sheet, { skipHidden: true })
-      if (csv.trim()) {
-        lines.push(`=== Feuille : ${sheetName} ===`)
-        lines.push(csv)
-      }
-    }
-    return lines.join('\n\n')
-  } catch {
-    return `[Fichier Excel : ${filename} — contenu non extractible]`
-  }
-}
-
-async function fileToContentBlock(file: FileEntry): Promise<ContentBlockParam | null> {
+async function fileToContentBlock(file: FileEntry): Promise<ContentBlock | null> {
   let res: Response
   try {
     res = await fetch(file.url)
@@ -82,7 +63,7 @@ async function fileToContentBlock(file: FileEntry): Promise<ContentBlockParam | 
         data: buffer.toString('base64'),
       },
       title: name,
-    } as ContentBlockParam
+    }
   }
 
   // Image → bloc image natif Claude
@@ -94,14 +75,12 @@ async function fileToContentBlock(file: FileEntry): Promise<ContentBlockParam | 
         media_type: mediaType as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp',
         data: buffer.toString('base64'),
       },
-    } as ContentBlockParam
+    }
   }
 
-  // Excel → conversion CSV
+  // Excel → non parseable sans dépendance externe, on signale à Claude
   if (isExcel(name)) {
-    const csv = await excelToText(buffer, name)
-    if (!csv.trim()) return null
-    return { type: 'text', text: `[Fichier Excel : ${name}]\n\n${csv}` }
+    return { type: 'text', text: `[Fichier Excel : ${name} — contenu non extractible dans cette version]` }
   }
 
   // DOCX / DOC → extraction texte
@@ -178,7 +157,7 @@ export async function POST(request: NextRequest) {
     console.log(`[analyze-dce] ${files.length} fichier(s) pour AO ${ao_id}`)
 
     // Convertir chaque fichier en bloc Claude
-    const blocks: ContentBlockParam[] = []
+    const blocks: ContentBlock[] = []
     const skipped: string[] = []
 
     for (const file of files) {
@@ -197,10 +176,10 @@ export async function POST(request: NextRequest) {
     }
 
     // Ajouter le message texte de demande
-    const contentBlocks: ContentBlockParam[] = [
+    const contentBlocks = [
       ...blocks,
       {
-        type: 'text',
+        type: 'text' as const,
         text: `Analyse l'ensemble de ces ${blocks.length} document(s) de DCE et retourne le JSON structuré demandé.${skipped.length ? ` (${skipped.length} fichier(s) non lisibles ignorés : ${skipped.join(', ')})` : ''}`,
       },
     ]
@@ -211,7 +190,8 @@ export async function POST(request: NextRequest) {
       model: 'claude-sonnet-4-6',
       max_tokens: 8192,
       system: SYSTEM_PROMPT,
-      messages: [{ role: 'user', content: contentBlocks }],
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      messages: [{ role: 'user', content: contentBlocks as any }],
     })
 
     const rawText = response.content[0]?.type === 'text' ? response.content[0].text : ''
