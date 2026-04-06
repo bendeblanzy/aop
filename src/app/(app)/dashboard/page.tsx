@@ -198,25 +198,41 @@ export default function DashboardPage() {
       {/* Stats — cliquables */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         {[
-          { label: 'Total AO',  value: stats.total,   icon: FileText,    accent: 'border-l-primary',   href: '/appels-offres' },
-          { label: 'En cours',  value: stats.enCours, icon: Clock,       accent: 'border-l-warning',   href: '/appels-offres' },
-          { label: 'Générés',   value: stats.generes, icon: TrendingUp,  accent: 'border-l-primary',   href: '/appels-offres' },
-          { label: 'Soumis',    value: stats.soumis,  icon: CheckCircle, accent: 'border-l-secondary', href: '/appels-offres' },
+          {
+            label: 'Total AO',  value: stats.total,   icon: FileText,
+            href: '/appels-offres',
+            bg: 'bg-[#E8EDF8]', iconColor: 'text-[#0D1D4E]', textColor: 'text-[#0D1D4E]',
+          },
+          {
+            label: 'Mes favoris', value: favorites.size, icon: Star,
+            href: '/veille?tab=favorites',
+            bg: 'bg-amber-50', iconColor: 'text-amber-500', textColor: 'text-amber-900',
+          },
+          {
+            label: 'En cours',  value: stats.enCours, icon: Clock,
+            href: '/appels-offres?statut=en_cours',
+            bg: 'bg-sky-50', iconColor: 'text-sky-500', textColor: 'text-sky-900',
+          },
+          {
+            label: 'Générés & Soumis', value: stats.generes + stats.soumis, icon: CheckCircle,
+            href: '/appels-offres?statut=genere',
+            bg: 'bg-emerald-50', iconColor: 'text-emerald-500', textColor: 'text-emerald-900',
+          },
         ].map((stat) => (
           <Link
             key={stat.label}
             href={stat.href}
             className={cn(
-              'bg-white rounded-xl border border-border border-l-4 p-5 shadow-sm',
-              'flex items-center justify-between hover:shadow-md transition-shadow cursor-pointer',
-              stat.accent,
+              'rounded-xl border border-border/60 p-5 shadow-sm',
+              'flex items-center justify-between hover:shadow-md hover:brightness-95 transition-all cursor-pointer',
+              stat.bg,
             )}
           >
             <div>
-              <div className="text-3xl font-bold text-text-primary">{stat.value}</div>
-              <div className="text-xs font-medium text-text-secondary mt-1 uppercase tracking-wide">{stat.label}</div>
+              <div className={cn('text-3xl font-bold', stat.textColor)}>{stat.value}</div>
+              <div className={cn('text-xs font-semibold mt-1 uppercase tracking-wide opacity-70', stat.textColor)}>{stat.label}</div>
             </div>
-            <stat.icon className="w-7 h-7 text-border shrink-0" />
+            <stat.icon className={cn('w-8 h-8 shrink-0 opacity-40', stat.iconColor)} />
           </Link>
         ))}
       </div>
