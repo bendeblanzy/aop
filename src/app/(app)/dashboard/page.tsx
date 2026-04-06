@@ -20,10 +20,15 @@ interface TopTender {
   nomacheteur: string | null
   datelimitereponse: string | null
   valeur_estimee: number | null
+  budget_estime: number | null
   url_profil_acheteur: string | null
   description_detail: string | null
   score: number | null
   reason: string | null
+  procedure_libelle: string | null
+  type_procedure: string | null
+  nb_lots: number | null
+  code_departement: string[]
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -303,7 +308,9 @@ export default function DashboardPage() {
             {topTenders.map(tender => {
               const isFav = favorites.has(tender.idweb)
               const dl = formatDeadlineDays(tender.datelimitereponse)
-              const euros = formatEuros(tender.valeur_estimee)
+              const euros = formatEuros(tender.valeur_estimee ?? tender.budget_estime)
+              const procedureLabel = tender.procedure_libelle ?? tender.type_procedure ?? null
+              const depts = Array.isArray(tender.code_departement) ? tender.code_departement : []
               return (
                 <div key={tender.idweb} className={cn('px-5 py-4 hover:bg-surface/60 transition-colors', isFav ? 'bg-amber-50/30' : '')}>
                   {/* Titre + score + étoile */}
@@ -344,11 +351,21 @@ export default function DashboardPage() {
                   )}
 
                   {/* Méta */}
-                  <div className="flex items-center gap-4 text-xs text-text-secondary mb-3">
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-text-secondary mb-2">
                     {tender.nomacheteur && <span className="flex items-center gap-1"><Building2 className="w-3 h-3" />{tender.nomacheteur}</span>}
                     {euros && <span className="flex items-center gap-1 font-medium text-text-primary"><Euro className="w-3 h-3" />{euros}</span>}
+                    {tender.nb_lots !== null && tender.nb_lots > 0 && <span className="flex items-center gap-1"><FileText className="w-3 h-3" />{tender.nb_lots} lot{tender.nb_lots > 1 ? 's' : ''}</span>}
                     {tender.datelimitereponse && <span className="flex items-center gap-1"><Calendar className="w-3 h-3" />Limite : {new Date(tender.datelimitereponse).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' })}</span>}
                   </div>
+                  {/* Badges procédure + départements */}
+                  {(procedureLabel || depts.length > 0) && (
+                    <div className="flex gap-1 flex-wrap mb-3">
+                      {procedureLabel && <span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full border border-slate-200">{procedureLabel}</span>}
+                      {depts.slice(0, 3).map((d, i) => (
+                        <span key={i} className="text-xs bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full border border-blue-100">Dép. {d}</span>
+                      ))}
+                    </div>
+                  )}
 
                   {/* CTA */}
                   <button

@@ -36,6 +36,14 @@ function isSpecificUrl(url: string): boolean {
   }
 }
 
+/** Helper : extrait la valeur textuelle d'un champ eForms (peut être string ou { '#text': ... }) */
+function txt(v: unknown): string | undefined {
+  if (!v) return undefined
+  if (typeof v === 'string') return v || undefined
+  if (typeof v === 'object' && v !== null && '#text' in v) return String((v as Record<string, unknown>)['#text']) || undefined
+  return undefined
+}
+
 /** Extrait les infos utiles du champ `donnees` (eForms JSON) */
 function parseEforms(donneesStr: string | null): ParsedEforms {
   if (!donneesStr) return {}
@@ -47,95 +55,113 @@ function parseEforms(donneesStr: string | null): ParsedEforms {
     const cn = eforms.ContractNotice ?? eforms.ContractAwardNotice ?? eforms.PriorInformationNotice
     if (!cn) return {}
 
-    // Description détaillée
-    let description: string | undefined
+    const result: ParsedEforms = {}
+
+    // ── Description détaillée ──────────────────────────────────────────────────
     try {
       const lots = cn['cac:ProcurementProjectLot']
       const lot = Array.isArray(lots) ? lots[0] : lots
-      const desc = lot?.['cac:ProcurementProject']?.['cbc:Description']
-      description = desc?.['#text'] ?? desc ?? undefined
-    } catch {
-      // ignore
-    }
+      result.description = txt(lot?.['cac:ProcurementProject']?.['cbc:Description'])
+    } catch { /* ignore */ }
 
-    // Valeur estimée
-    let valeur_estimee: number | undefined
+    // ── Budget (MaximumAmount puis EstimatedOverallContractAmount) ─────────────
     try {
       const project = cn['cac:ProcurementProject']
-      const maxAmt =
-        project?.['cbc:RequestedTenderElement']?.['cbc:MaximumAmount']?.['#text'] ??
-        project?.['cac:RequestedTenderElement']?.['cbc:MaximumAmount']?.['#text']
-      if (maxAmt) valeur_estimee = Math.round(parseFloat(maxAmt))
-    } catch {
-      // ignore
-    }
+      const rtt = project?.['cac:RequestedTenderTotal']
+      const maxAmt = txt(rtt?.['cbc:MaximumAmount'])
+      const estAmt = txt(rtt?.['cbc:EstimatedOverallContractAmount'])
+      const raw = maxAmt ?? estAmt
+      if (raw) result.valeur_estimee = Math.round(parseFloat(raw))
+      // Budget estimé séparé (EstimatedOverallContractAmount)
+      if (estAmt) result.budget_estime = Math.round(parseFloat(estAmt))
+    } catch { /* ignore */ }
 
-    // Durée
-    let duree_mois: number | undefined
+    // ── Durée (premier lot) ────────────────────────────────────────────────────
     try {
       const lots = cn['cac:ProcurementProjectLot']
       const lot = Array.isArray(lots) ? lots[0] : lots
-      const dur = lot?.['cac:TenderingTerms']?.['cbc:DurationMeasure']?.['#text']
-      if (dur) duree_mois = parseInt(dur)
-    } catch {
-      // ignore
-    }
+      const dur = txt(lot?.['cac:TenderingTerms']?.['cbc:DurationMeasure'])
+      if (dur) result.duree_mois = parseInt(dur)
+    } catch { /* ignore */ }
 
-    // Type de marché
-    let type_marche: string | undefined
+    // ── Type de marché ─────────────────────────────────────────────────────────
     try {
-      const typeCode = cn['cbc:ContractTypeCode']?.['#text'] ?? cn['cbc:ContractTypeCode']
-      if (typeCode) type_marche = String(typeCode)
-    } catch {
-      // ignore
-    }
+      const typeCode = txt(cn['cbc:ContractTypeCode'])
+      if (typeCode) result.type_marche = typeCode
+    } catch { /* ignore */ }
 
-    // URL profil acheteur (lien vers le DCE sur la plateforme de dématérialisation)
-    let url_profil_acheteur: string | undefined
+    // ── CPV codes ─────────────────────────────────────────────────────────────
+    try {
+      const project = cn['cac:ProcurementProject']
+      const cpvSet = new Set<string>()
+      const main = project?.['cac:MainCommodityClassification']
+      const mainList = Array.isArray(main) ? main : main ? [main] : []
+      for (const c of mainList) { const v = txt(c['cbc:ItemClassificationCode']); if (v) cpvSet.add(v) }
+      const add = project?.['cac:AdditionalCommodityClassification']
+      const addList = Array.isArray(add) ? add : add ? [add] : []
+      for (const c of addList) { const v = txt(c['cbc:ItemClassificationCode']); if (v) cpvSet.add(v) }
+      if (cpvSet.size > 0) result.cpv_codes = [...cpvSet]
+    } catch { /* ignore */ }
+
+    // ── Lieu d'exécution (code NUTS) ──────────────────────────────────────────
+    try {
+      const project = cn['cac:ProcurementProject']
+      const loc = project?.['cac:RealizedLocation']
+      const locList = Array.isArray(loc) ? loc : loc ? [loc] : []
+      const nuts = new Set<string>()
+      for (const l of locList) {
+        const v = txt(l?.['cac:Address']?.['cbc:CountrySubentityCode'])
+        if (v) nuts.add(v)
+      }
+      if (nuts.size > 0) result.code_nuts = [...nuts].join(',')
+    } catch { /* ignore */ }
+
+    // ── Lots (nombre + titres) ─────────────────────────────────────────────────
+    try {
+      const lots = cn['cac:ProcurementProjectLot']
+      const lotList = Array.isArray(lots) ? lots : lots ? [lots] : []
+      result.nb_lots = lotList.length
+      const titres: string[] = []
+      for (const lot of lotList) {
+        const t = txt(lot?.['cac:ProcurementProject']?.['cbc:Name'])
+        if (t) titres.push(t)
+      }
+      if (titres.length > 0) result.lots_titres = titres
+    } catch { /* ignore */ }
+
+    // ── URL profil acheteur ────────────────────────────────────────────────────
     try {
       const lots = cn['cac:ProcurementProjectLot']
       const lot = Array.isArray(lots) ? lots[0] : lots
       const terms = lot?.['cac:TenderingTerms']
-
-      // Chemin principal : ProcurementProjectLot > TenderingTerms > CallForTendersDocumentReference > Attachment > ExternalReference > URI
       const docRef = terms?.['cac:CallForTendersDocumentReference']
       const ref = Array.isArray(docRef) ? docRef[0] : docRef
-      const uri = ref?.['cac:Attachment']?.['cac:ExternalReference']?.['cbc:URI']
-      const uriStr = uri?.['#text'] ?? uri
-      if (uriStr && typeof uriStr === 'string') {
-        const clean = uriStr.replace(/&amp;/g, '&')
-        if (clean.startsWith('http') && isSpecificUrl(clean)) url_profil_acheteur = clean
+      const uri = txt(ref?.['cac:Attachment']?.['cac:ExternalReference']?.['cbc:URI'])
+      if (uri) {
+        const clean = uri.replace(/&amp;/g, '&')
+        if (clean.startsWith('http') && isSpecificUrl(clean)) result.url_profil_acheteur = clean
       }
 
-      // Fallback 1 : BuyerProfileURI (souvent générique — on ne garde que si spécifique)
-      if (!url_profil_acheteur) {
-        const bpUri = cn['cac:ContractingParty']?.['cbc:BuyerProfileURI']
-        const bpStr = bpUri?.['#text'] ?? bpUri
-        if (bpStr && typeof bpStr === 'string' && bpStr.startsWith('http') && isSpecificUrl(bpStr)) {
-          url_profil_acheteur = bpStr
-        }
+      if (!result.url_profil_acheteur) {
+        const bpStr = txt(cn['cac:ContractingParty']?.['cbc:BuyerProfileURI'])
+        if (bpStr?.startsWith('http') && isSpecificUrl(bpStr)) result.url_profil_acheteur = bpStr
       }
 
-      // Fallback 2 : Organization EndpointID
-      if (!url_profil_acheteur) {
+      if (!result.url_profil_acheteur) {
         const orgs = cn['ext:UBLExtensions']?.['ext:UBLExtension']?.['ext:ExtensionContent']
           ?.['efext:EformsExtension']?.['efac:Organizations']?.['efac:Organization']
         const orgList = Array.isArray(orgs) ? orgs : orgs ? [orgs] : []
         for (const org of orgList) {
-          const ep = org?.['efac:Company']?.['cbc:EndpointID']
-          const epStr = ep?.['#text'] ?? ep
-          if (epStr && typeof epStr === 'string' && epStr.startsWith('http')
-              && !epStr.includes('tribunal') && isSpecificUrl(epStr)) {
-            url_profil_acheteur = epStr.replace(/&amp;/g, '&')
+          const epStr = txt(org?.['efac:Company']?.['cbc:EndpointID'])
+          if (epStr?.startsWith('http') && !epStr.includes('tribunal') && isSpecificUrl(epStr)) {
+            result.url_profil_acheteur = epStr.replace(/&amp;/g, '&')
             break
           }
         }
       }
-    } catch {
-      // ignore
-    }
+    } catch { /* ignore */ }
 
-    return { description, valeur_estimee, duree_mois, type_marche, url_profil_acheteur }
+    return result
   } catch {
     return {}
   }
@@ -157,7 +183,7 @@ function buildBoampParams(offset: number, dateFrom: string, dateTo: string): URL
   )
   params.set(
     'select',
-    'idweb,objet,famille,nature,dateparution,datelimitereponse,nomacheteur,descripteur_code,descripteur_libelle,url_avis,donnees'
+    'idweb,objet,famille,nature,nature_libelle,dateparution,datelimitereponse,datefindiffusion,nomacheteur,descripteur_code,descripteur_libelle,url_avis,code_departement,type_procedure,procedure_libelle,type_marche,donnees'
   )
   params.set('order_by', 'dateparution DESC')
   return params
@@ -189,16 +215,28 @@ export function transformRecord(record: BoampRecord) {
     nomacheteur: record.nomacheteur ?? null,
     famille: record.famille ?? null,
     nature: record.nature ?? null,
+    nature_libelle: record.nature_libelle ?? null,
     dateparution: record.dateparution ?? null,
     datelimitereponse: record.datelimitereponse ?? null,
+    datefindiffusion: record.datefindiffusion ?? null,
     descripteur_codes: parseJsonArray(record.descripteur_code),
     descripteur_libelles: parseJsonArray(record.descripteur_libelle),
-    type_marche: eforms.type_marche ?? null,
+    // type_marche : préférer la valeur directe BOAMP (tableau → premier élément)
+    type_marche: (Array.isArray(record.type_marche) ? record.type_marche[0] : record.type_marche) ?? eforms.type_marche ?? null,
     url_avis: record.url_avis ?? null,
+    code_departement: parseJsonArray(record.code_departement),
+    type_procedure: record.type_procedure ?? null,
+    procedure_libelle: record.procedure_libelle ?? null,
+    // Champs eForms
     url_profil_acheteur: eforms.url_profil_acheteur ?? null,
     description_detail: eforms.description ?? null,
     valeur_estimee: eforms.valeur_estimee ?? null,
+    budget_estime: eforms.budget_estime ?? null,
     duree_mois: eforms.duree_mois ?? null,
+    cpv_codes: eforms.cpv_codes ?? [],
+    code_nuts: eforms.code_nuts ?? null,
+    nb_lots: eforms.nb_lots ?? null,
+    lots_titres: eforms.lots_titres ?? [],
     updated_at: new Date().toISOString(),
   }
 }

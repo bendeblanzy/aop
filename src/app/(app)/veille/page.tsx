@@ -21,11 +21,21 @@ interface TenderItem {
   datelimitereponse: string | null
   descripteur_libelles: string[]
   valeur_estimee: number | null
+  budget_estime: number | null
   duree_mois: number | null
   url_profil_acheteur: string | null
   description_detail: string | null
   score: number | null
   reason: string | null
+  // Champs migration 004
+  nature_libelle: string | null
+  type_procedure: string | null
+  procedure_libelle: string | null
+  code_departement: string[]
+  cpv_codes: string[]
+  code_nuts: string | null
+  nb_lots: number | null
+  lots_titres: string[]
 }
 
 interface ApiResponse {
@@ -142,10 +152,12 @@ function TenderCard({
 }) {
   const [expanded, setExpanded] = useState(false)
   const deadline = formatDeadline(tender.datelimitereponse)
-  const euros = formatEuros(tender.valeur_estimee)
+  const euros = formatEuros(tender.valeur_estimee ?? tender.budget_estime)
   const hasDescription = !!tender.description_detail?.trim()
   const descShort = tender.description_detail?.slice(0, 220)
   const needsTruncate = (tender.description_detail?.length ?? 0) > 220
+  const procedureLabel = tender.procedure_libelle ?? tender.type_procedure ?? null
+  const depts = Array.isArray(tender.code_departement) ? tender.code_departement : []
 
   return (
     <div className={cn(
@@ -205,16 +217,24 @@ function TenderCard({
         {tender.duree_mois && (
           <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{tender.duree_mois} mois</span>
         )}
+        {tender.nb_lots !== null && tender.nb_lots > 0 && (
+          <span className="flex items-center gap-1"><FileText className="w-3 h-3" />{tender.nb_lots} lot{tender.nb_lots > 1 ? 's' : ''}</span>
+        )}
         <span className="flex items-center gap-1"><Calendar className="w-3 h-3" />Paru le {formatDate(tender.dateparution)}</span>
       </div>
 
-      {Array.isArray(tender.descripteur_libelles) && tender.descripteur_libelles.length > 0 && (
-        <div className="flex gap-1 flex-wrap mb-3">
-          {tender.descripteur_libelles.slice(0, 5).map((lib, i) => (
-            <span key={i} className="text-xs bg-primary-light text-primary px-2 py-0.5 rounded-full">{lib}</span>
-          ))}
-        </div>
-      )}
+      {/* Badges : procédure + départements + descripteurs */}
+      <div className="flex gap-1 flex-wrap mb-3">
+        {procedureLabel && (
+          <span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full border border-slate-200">{procedureLabel}</span>
+        )}
+        {depts.slice(0, 4).map((d, i) => (
+          <span key={i} className="text-xs bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full border border-blue-100">Dép. {d}</span>
+        ))}
+        {Array.isArray(tender.descripteur_libelles) && tender.descripteur_libelles.slice(0, 4).map((lib, i) => (
+          <span key={i} className="text-xs bg-primary-light text-primary px-2 py-0.5 rounded-full">{lib}</span>
+        ))}
+      </div>
 
       {/* Actions */}
       <div className="flex items-center justify-end gap-2">

@@ -5,12 +5,18 @@ export interface BoampRecord {
   objet: string | null
   famille: string | null
   nature: string | null
+  nature_libelle: string | null
   dateparution: string | null
   datelimitereponse: string | null
+  datefindiffusion: string | null
   nomacheteur: string | null
-  descripteur_code: string[] | null  // Array from API: ["285","22"]
-  descripteur_libelle: string[] | null  // Array from API: ["Publicité","Conseil"]
+  descripteur_code: string[] | null
+  descripteur_libelle: string[] | null
   url_avis: string | null
+  code_departement: string[] | null
+  type_procedure: string | null
+  procedure_libelle: string | null
+  type_marche: string[] | string | null
   donnees: string | null  // JSON string eForms
 }
 
@@ -22,9 +28,14 @@ export interface BoampApiResponse {
 export interface ParsedEforms {
   description?: string
   valeur_estimee?: number
+  budget_estime?: number
   duree_mois?: number
   type_marche?: string
   url_profil_acheteur?: string
+  cpv_codes?: string[]
+  code_nuts?: string
+  nb_lots?: number
+  lots_titres?: string[]
 }
 
 /** Annonce BOAMP en base de données */
@@ -35,8 +46,10 @@ export interface Tender {
   nomacheteur: string | null
   famille: string | null
   nature: string | null
+  nature_libelle: string | null
   dateparution: string | null
   datelimitereponse: string | null
+  datefindiffusion: string | null
   descripteur_codes: string[]
   descripteur_libelles: string[]
   type_marche: string | null
@@ -44,8 +57,16 @@ export interface Tender {
   url_profil_acheteur: string | null
   description_detail: string | null
   valeur_estimee: number | null
+  budget_estime: number | null
   duree_mois: number | null
   short_summary: string | null
+  code_departement: string[]
+  type_procedure: string | null
+  procedure_libelle: string | null
+  cpv_codes: string[]
+  code_nuts: string | null
+  nb_lots: number | null
+  lots_titres: string[]
   created_at: string
   updated_at: string
 }
