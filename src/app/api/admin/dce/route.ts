@@ -27,19 +27,33 @@ export async function GET(request: NextRequest) {
 
   const boampCodes: string[] = Array.isArray(profile?.boamp_codes) ? profile.boamp_codes : []
 
-  // 1. Récupérer les tenders actifs filtrés par codes BOAMP
-  let tendersQuery = adminClient
+  // Mots-clés métier : tenders pertinents même sans code BOAMP correspondant
+  const COMM_KEYWORDS = [
+    'communication', 'publicité', 'marketing', 'médias', 'média',
+    'relations publiques', 'rédactionnel', 'édition', 'graphisme',
+    'audiovisuel', 'vidéo', 'podcast', 'événementiel', 'événement',
+    'digital', 'numérique', 'réseaux sociaux', 'influence', 'influenceur',
+    'stratégie de marque', 'identité visuelle', 'print', 'affichage',
+    'campagne', 'agence conseil', 'conseil en image',
+  ]
+
+  // 1. Récupérer les tenders actifs : codes BOAMP OU mots-clés dans l'objet
+  const keywordFilter = COMM_KEYWORDS
+    .map(kw => `objet.ilike.*${kw}*`)
+    .join(',')
+
+  const orParts: string[] = [keywordFilter]
+  if (boampCodes.length > 0) {
+    orParts.unshift(`descripteur_codes.ov.{${boampCodes.join(',')}}`)
+  }
+
+  const { data: tenders, error: tendersError } = await adminClient
     .from('tenders')
     .select('idweb, objet, nomacheteur, dateparution, datelimitereponse, url_profil_acheteur, url_avis, descripteur_libelles, valeur_estimee, famille, type_procedure')
     .gt('datelimitereponse', new Date().toISOString())
+    .or(orParts.join(','))
     .order('datelimitereponse', { ascending: true })
-    .limit(200)
-
-  if (boampCodes.length > 0) {
-    tendersQuery = tendersQuery.overlaps('descripteur_codes', boampCodes)
-  }
-
-  const { data: tenders, error: tendersError } = await tendersQuery
+    .limit(500)
   if (tendersError) {
     console.error('[admin/dce] tenders error:', tendersError.message)
     return NextResponse.json({ error: tendersError.message }, { status: 500 })
