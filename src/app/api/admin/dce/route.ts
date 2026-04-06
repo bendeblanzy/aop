@@ -77,7 +77,7 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  // 4. Fusionner et filtrer
+  // 4. Fusionner
   const merged = (tenders ?? []).map(t => ({
     ...t,
     score: scoreMap[t.idweb] ?? null,
@@ -85,9 +85,27 @@ export async function GET(request: NextRequest) {
     dce_status: dceMap[t.idweb]?.status ?? 'pending',
   }))
 
+  // 5. Exclure les AOs bâtiment/travaux non pertinents pour la communication
+  const EXCLUDED_LIBELLE_KEYWORDS = [
+    'travaux', 'bâtiment', 'maçonnerie', 'menuiserie', 'plomberie',
+    'ravalement', 'couverture', 'charpente', 'bardage', 'métallerie',
+    'chauffage', 'ascenseur', 'cloison', 'gros oeuvre', 'électricité',
+    'voirie', 'terrassement', 'génie civil', 'aménagement paysager',
+    'nettoyage', 'gardiennage', 'restauration collective', 'traiteur',
+  ]
+
+  const relevant = merged.filter(t => {
+    const libelles = (t.descripteur_libelles as string[] ?? [])
+      .map(l => l.toLowerCase())
+    return !libelles.some(l =>
+      EXCLUDED_LIBELLE_KEYWORDS.some(kw => l.includes(kw))
+    )
+  })
+
+  // 6. Filtrer par statut DCE
   const filtered = status === 'all'
-    ? merged
-    : merged.filter(t => t.dce_status === status)
+    ? relevant
+    : relevant.filter(t => t.dce_status === status)
 
   return NextResponse.json({ tenders: filtered, total: filtered.length })
 }
