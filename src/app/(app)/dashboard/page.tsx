@@ -195,19 +195,29 @@ export default function DashboardPage() {
         <p className="text-text-secondary mt-1 text-sm">Voici un résumé de votre activité</p>
       </div>
 
-      {/* Stats */}
+      {/* Stats — cliquables */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         {[
-          { label: 'Total AO', value: stats.total, icon: FileText, accent: 'border-l-primary' },
-          { label: 'En cours', value: stats.enCours, icon: Clock, accent: 'border-l-warning' },
-          { label: 'Générés', value: stats.generes, icon: TrendingUp, accent: 'border-l-primary' },
-          { label: 'Soumis', value: stats.soumis, icon: CheckCircle, accent: 'border-l-secondary' },
+          { label: 'Total AO',  value: stats.total,   icon: FileText,    accent: 'border-l-primary',   href: '/appels-offres' },
+          { label: 'En cours',  value: stats.enCours, icon: Clock,       accent: 'border-l-warning',   href: '/appels-offres' },
+          { label: 'Générés',   value: stats.generes, icon: TrendingUp,  accent: 'border-l-primary',   href: '/appels-offres' },
+          { label: 'Soumis',    value: stats.soumis,  icon: CheckCircle, accent: 'border-l-secondary', href: '/appels-offres' },
         ].map((stat) => (
-          <div key={stat.label} className={`bg-white rounded-xl border border-border border-l-4 ${stat.accent} p-5 shadow-sm`}>
-            <stat.icon className="w-4 h-4 text-text-secondary mb-3" />
-            <div className="text-3xl font-bold text-text-primary">{stat.value}</div>
-            <div className="text-xs font-medium text-text-secondary mt-1 uppercase tracking-wide">{stat.label}</div>
-          </div>
+          <Link
+            key={stat.label}
+            href={stat.href}
+            className={cn(
+              'bg-white rounded-xl border border-border border-l-4 p-5 shadow-sm',
+              'flex items-center justify-between hover:shadow-md transition-shadow cursor-pointer',
+              stat.accent,
+            )}
+          >
+            <div>
+              <div className="text-3xl font-bold text-text-primary">{stat.value}</div>
+              <div className="text-xs font-medium text-text-secondary mt-1 uppercase tracking-wide">{stat.label}</div>
+            </div>
+            <stat.icon className="w-7 h-7 text-border shrink-0" />
+          </Link>
         ))}
       </div>
 
@@ -231,13 +241,13 @@ export default function DashboardPage() {
 
       {/* Réponses en cours */}
       {aoEnCours.length > 0 && (
-        <div className="bg-white rounded-xl border border-border">
-          <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+        <div className="bg-white rounded-xl border border-border shadow-sm overflow-hidden">
+          <div className="flex items-center justify-between px-5 py-4 bg-surface border-b border-border">
             <div>
               <h2 className="font-semibold text-text-primary">Réponses en cours</h2>
               <p className="text-xs text-text-secondary mt-0.5">AO non finalisés — à compléter avant la date limite</p>
             </div>
-            <Link href="/appels-offres" className="text-xs text-primary hover:underline flex items-center gap-1">
+            <Link href="/appels-offres" className="text-xs text-primary font-medium hover:underline flex items-center gap-1">
               Voir tout <ArrowRight className="w-3 h-3" />
             </Link>
           </div>
@@ -279,8 +289,8 @@ export default function DashboardPage() {
       )}
 
       {/* Meilleurs matchs BOAMP */}
-      <div className="bg-white rounded-xl border border-border">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+      <div className="bg-white rounded-xl border border-border shadow-sm overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-4 bg-surface border-b border-border">
           <div>
             <h2 className="font-semibold text-text-primary flex items-center gap-2">
               <Zap className="w-4 h-4 text-primary" />
@@ -288,7 +298,7 @@ export default function DashboardPage() {
             </h2>
             <p className="text-xs text-text-secondary mt-0.5">Annonces scorées ≥ 60% par l&apos;IA selon votre profil</p>
           </div>
-          <Link href="/veille" className="text-xs text-primary hover:underline flex items-center gap-1">
+          <Link href="/veille" className="text-xs text-primary font-medium hover:underline flex items-center gap-1">
             Toute la veille <ArrowRight className="w-3 h-3" />
           </Link>
         </div>
@@ -380,8 +390,8 @@ export default function DashboardPage() {
       </div>
 
       {/* Tous les AO récents */}
-      <div className="bg-white rounded-xl border border-border">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+      <div className="bg-white rounded-xl border border-border shadow-sm overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-4 bg-surface border-b border-border">
           <h2 className="font-semibold text-text-primary">Derniers appels d&apos;offres</h2>
           <Link
             href="/appels-offres/nouveau"
