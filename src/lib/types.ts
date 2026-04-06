@@ -139,6 +139,19 @@ export interface AnalyseRC {
   variantes?: string
   visite_obligatoire?: string
   decision_go_nogo?: string
+  // Champs enrichis par l'analyse DCE unifiée
+  prestations_attendues?: string
+  normes_exigees?: string[]
+  certifications_requises?: string[]
+  moyens_humains_exiges?: string
+  moyens_techniques_exiges?: string
+  contraintes_techniques?: string
+  planning_prevu?: string
+  penalites?: string
+  livrables?: string[]
+  clauses_contractuelles_cles?: string
+  criteres_rse?: string
+  risques_identifies?: string[]
 }
 
 export interface AnalyseCCTP {

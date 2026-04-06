@@ -241,7 +241,11 @@ function NouvelAOPageInner() {
       f.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
       f.type === 'application/msword' ||
       f.type === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
-      f.name.endsWith('.pdf') || f.name.endsWith('.docx') || f.name.endsWith('.doc') || f.name.endsWith('.xlsx') || f.name.endsWith('.xls'),
+      f.type.startsWith('image/') ||
+      f.name.endsWith('.pdf') || f.name.endsWith('.docx') || f.name.endsWith('.doc') ||
+      f.name.endsWith('.xlsx') || f.name.endsWith('.xls') ||
+      f.name.endsWith('.png') || f.name.endsWith('.jpg') || f.name.endsWith('.jpeg') ||
+      f.name.endsWith('.gif') || f.name.endsWith('.webp'),
     )
     if (!dropped.length) return
     setFiles(prev => [...prev, ...dropped.map(f => ({ file: f, type: detectFileType(f.name) }))])
@@ -287,29 +291,29 @@ function NouvelAOPageInner() {
     setAnalysing(true)
     setAnalyseError('')
     try {
-      const rcFile = uploadedFiles.find(f => f.type === 'rc')
-      const cctpFile = uploadedFiles.find(f => f.type === 'cctp')
-      let rc = null; let cctp = null
-
-      if (rcFile) {
-        try {
-          const res = await fetch('/api/ai/analyze-rc', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ao_id: aoId, file_url: rcFile.url }) })
-          if (res.ok) rc = (await res.json()).analyse
-          else setAnalyseError(`Analyse RC échouée : ${(await res.json().catch(() => ({}))).error || res.statusText}`)
-        } catch (e) { console.error(e); setAnalyseError("Impossible d'analyser le RC.") }
-      }
-      if (cctpFile) {
-        try {
-          const res = await fetch('/api/ai/analyze-cctp', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ao_id: aoId, file_url: cctpFile.url }) })
-          if (res.ok) cctp = (await res.json()).analyse
-        } catch (e) { console.error(e) }
-      }
-      if (!rc && !cctp && !rcFile && !cctpFile) {
-        setAnalyseError('Aucun fichier RC ou CCTP trouvé. Uploadez au moins un de ces documents.')
+      if (!uploadedFiles.length) {
+        setAnalyseError('Aucun fichier uploadé. Ajoutez au moins un document DCE.')
         return
       }
-      setAnalyseRC(rc)
-      setAnalyseCCTP(cctp)
+
+      const res = await fetch('/api/ai/analyze-dce', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ao_id: aoId, files: uploadedFiles }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setAnalyseError(data.error || 'Erreur lors de l\'analyse.')
+        return
+      }
+
+      const analyse = data.analyse
+      // On alimente les deux états avec la même analyse unifiée
+      setAnalyseRC(analyse)
+      setAnalyseCCTP(analyse)
+      if (data.skipped?.length) {
+        console.warn('[analyze-dce] Fichiers ignorés:', data.skipped)
+      }
 
       // Charger refs + collabs pour l'étape 6
       const supabase = createClient()
@@ -564,11 +568,11 @@ function NouvelAOPageInner() {
               <span className={cn('text-sm font-medium', isDragOver ? 'text-primary' : 'text-text-secondary')}>
                 {isDragOver ? 'Relâchez pour ajouter les fichiers' : 'Glissez vos fichiers ici ou cliquez pour sélectionner'}
               </span>
-              <span className="text-xs text-text-secondary">PDF, DOCX, DOC, XLSX — 100 Mo max</span>
+              <span className="text-xs text-text-secondary">PDF, DOCX, DOC, XLSX, Images — 100 Mo max</span>
               <input
                 type="file"
                 multiple
-                accept=".pdf,.docx,.doc,.xlsx,.xls"
+                accept=".pdf,.docx,.doc,.xlsx,.xls,.png,.jpg,.jpeg,.gif,.webp"
                 onChange={e => {
                   const added = Array.from(e.target.files || [])
                   setFiles(prev => [...prev, ...added.map(f => ({ file: f, type: detectFileType(f.name) }))])
