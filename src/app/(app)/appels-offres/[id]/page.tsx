@@ -95,7 +95,12 @@ export default async function AODetailPage({ params }: { params: Promise<{ id: s
                 <div>
                   <p className="text-xs font-medium text-text-secondary uppercase mb-2">Pièces exigées</p>
                   <ul className="space-y-1">
-                    {ao.analyse_rc.pieces_exigees.map((p, i) => <li key={i} className="text-sm text-text-primary flex items-start gap-2"><span className="text-primary">•</span>{p}</li>)}
+                    {ao.analyse_rc.pieces_exigees.map((p: string | { piece: string; detail?: string }, i: number) => (
+                      <li key={i} className="text-sm text-text-primary flex items-start gap-2">
+                        <span className="text-primary">•</span>
+                        {typeof p === 'string' ? p : `${p.piece}${p.detail ? ` — ${p.detail}` : ''}`}
+                      </li>
+                    ))}
                   </ul>
                 </div>
               )}

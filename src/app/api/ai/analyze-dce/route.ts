@@ -3,13 +3,11 @@ import { adminClient, getOrgIdForUser } from '@/lib/supabase/admin'
 import { NextRequest, NextResponse } from 'next/server'
 import { anthropic } from '@/lib/ai/claude-client'
 import { extractTextFromDocx } from '@/lib/documents/docx-parser'
-import type Anthropic from '@anthropic-ai/sdk'
+import type { ContentBlockParam } from '@anthropic-ai/sdk/resources/messages/messages'
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
 type FileEntry = { nom: string; url: string; type: string; taille: number }
-type MessageContent = Anthropic.Messages.MessageParam['content']
-type ContentBlockParam = Exclude<MessageContent, string>[number]
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
