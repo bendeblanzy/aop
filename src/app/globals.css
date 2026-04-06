@@ -1,46 +1,48 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,700;1,600&display=swap');
 
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  --primary: #1B0DB3;
-  --primary-hover: #150A8A;
-  --primary-light: #EDE9FF;
-  --secondary: #0F9D58;
+  /* L'ADN Intelligence — Navy palette */
+  --primary: #0D1D4E;
+  --primary-hover: #0a1640;
+  --primary-light: #E8EDF8;
+  --secondary: #1A6B4A;
   --background: #FFFFFF;
-  --surface: #F7F7FA;
-  --border: #E5E5EE;
-  --text-primary: #1A1A2E;
+  --surface: #F5F6FA;
+  --border: #E2E6F0;
+  --text-primary: #0D1D4E;
   --text-secondary: #6B7280;
   --danger: #DC2626;
   --warning: #F59E0B;
-  --radius: 0.5rem;
+  --radius: 0.625rem;
 
   /* shadcn compatibility */
-  --foreground: #1A1A2E;
+  --foreground: #0D1D4E;
   --card: #FFFFFF;
-  --card-foreground: #1A1A2E;
+  --card-foreground: #0D1D4E;
   --popover: #FFFFFF;
-  --popover-foreground: #1A1A2E;
+  --popover-foreground: #0D1D4E;
   --primary-foreground: #FFFFFF;
   --secondary-foreground: #FFFFFF;
-  --muted: #F7F7FA;
+  --muted: #F5F6FA;
   --muted-foreground: #6B7280;
-  --accent: #EDE9FF;
-  --accent-foreground: #1B0DB3;
+  --accent: #E8EDF8;
+  --accent-foreground: #0D1D4E;
   --destructive: #DC2626;
-  --input: #E5E5EE;
-  --ring: #1B0DB3;
-  --sidebar: #F7F7FA;
-  --sidebar-foreground: #1A1A2E;
-  --sidebar-primary: #1B0DB3;
+  --input: #E2E6F0;
+  --ring: #0D1D4E;
+  --sidebar: #FFFFFF;
+  --sidebar-foreground: #0D1D4E;
+  --sidebar-primary: #0D1D4E;
   --sidebar-primary-foreground: #FFFFFF;
-  --sidebar-accent: #EDE9FF;
-  --sidebar-accent-foreground: #1B0DB3;
-  --sidebar-border: #E5E5EE;
-  --sidebar-ring: #1B0DB3;
+  --sidebar-accent: #E8EDF8;
+  --sidebar-accent-foreground: #0D1D4E;
+  --sidebar-border: #E2E6F0;
+  --sidebar-ring: #0D1D4E;
 }
 
 @theme inline {
@@ -56,6 +58,7 @@
   --color-danger: var(--danger);
   --color-warning: var(--warning);
   --font-sans: 'Inter', sans-serif;
+  --font-serif: 'Playfair Display', Georgia, serif;
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);

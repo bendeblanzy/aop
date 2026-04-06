@@ -1,10 +1,11 @@
 'use client'
 import React, { useState, useEffect } from 'react'
 import Link from 'next/link'
+import Image from 'next/image'
 import { usePathname, useSearchParams } from 'next/navigation'
 import {
   LayoutDashboard, Building2, BookMarked, Users,
-  FileText, Settings, LogOut, ChevronRight, Radar,
+  FileText, Settings, LogOut, Radar,
   Menu, X, Star,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -50,13 +51,16 @@ export function Sidebar() {
   const sidebarContent = (
     <>
       {/* Logo */}
-      <div className="flex items-center justify-between px-6 py-5 border-b border-border">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-            <FileText className="w-4 h-4 text-white" />
-          </div>
-          <span className="font-bold text-lg text-primary">AOP</span>
-        </div>
+      <div className="flex items-center justify-between px-5 py-5 border-b border-border">
+        <Link href="/dashboard">
+          <Image
+            src="/logo-ladn.svg"
+            alt="L'ADN Intelligence"
+            width={160}
+            height={56}
+            priority
+          />
+        </Link>
         {/* Bouton fermer (mobile uniquement) */}
         <button
           onClick={() => setMobileOpen(false)}
@@ -67,7 +71,7 @@ export function Sidebar() {
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 px-3 py-4 space-y-1">
+      <nav className="flex-1 px-3 py-4 space-y-0.5">
         {navigation.map((item) => {
           const searchString = searchParams.toString()
           const isActive = item.activeWhen
@@ -80,15 +84,14 @@ export function Sidebar() {
               key={item.name}
               href={item.href}
               className={cn(
-                'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors group',
+                'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors group',
                 isActive
-                  ? 'bg-primary-light text-primary'
-                  : 'text-text-secondary hover:bg-gray-100 hover:text-text-primary'
+                  ? 'bg-primary text-white font-semibold'
+                  : 'text-text-secondary font-medium hover:bg-surface hover:text-text-primary'
               )}
             >
-              <item.icon className={cn('w-4 h-4', isActive ? 'text-primary' : 'text-text-secondary group-hover:text-text-primary')} />
+              <item.icon className={cn('w-4 h-4 shrink-0', isActive ? 'text-white' : 'text-text-secondary group-hover:text-text-primary')} />
               {item.name}
-              {isActive && <ChevronRight className="w-3 h-3 ml-auto text-primary" />}
             </Link>
           )
         })}

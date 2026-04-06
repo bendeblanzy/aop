@@ -186,9 +186,9 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-7">
       {/* Titre */}
-      <div>
+      <div className="pb-2 border-b border-border">
         <h1 className="text-2xl font-bold text-text-primary">
           Bonjour{raisonSociale ? `, ${raisonSociale}` : ''} 👋
         </h1>
@@ -198,17 +198,15 @@ export default function DashboardPage() {
       {/* Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         {[
-          { label: 'Total AO', value: stats.total, icon: FileText, color: 'text-primary', bg: 'bg-primary-light' },
-          { label: 'En cours', value: stats.enCours, icon: Clock, color: 'text-warning', bg: 'bg-amber-50' },
-          { label: 'Générés', value: stats.generes, icon: TrendingUp, color: 'text-primary', bg: 'bg-primary-light' },
-          { label: 'Soumis', value: stats.soumis, icon: CheckCircle, color: 'text-secondary', bg: 'bg-green-50' },
+          { label: 'Total AO', value: stats.total, icon: FileText, accent: 'border-l-primary' },
+          { label: 'En cours', value: stats.enCours, icon: Clock, accent: 'border-l-warning' },
+          { label: 'Générés', value: stats.generes, icon: TrendingUp, accent: 'border-l-primary' },
+          { label: 'Soumis', value: stats.soumis, icon: CheckCircle, accent: 'border-l-secondary' },
         ].map((stat) => (
-          <div key={stat.label} className="bg-white rounded-xl border border-border p-5">
-            <div className={`w-10 h-10 ${stat.bg} rounded-lg flex items-center justify-center mb-3`}>
-              <stat.icon className={`w-5 h-5 ${stat.color}`} />
-            </div>
-            <div className="text-2xl font-bold text-text-primary">{stat.value}</div>
-            <div className="text-sm text-text-secondary mt-0.5">{stat.label}</div>
+          <div key={stat.label} className={`bg-white rounded-xl border border-border border-l-4 ${stat.accent} p-5 shadow-sm`}>
+            <stat.icon className="w-4 h-4 text-text-secondary mb-3" />
+            <div className="text-3xl font-bold text-text-primary">{stat.value}</div>
+            <div className="text-xs font-medium text-text-secondary mt-1 uppercase tracking-wide">{stat.label}</div>
           </div>
         ))}
       </div>
