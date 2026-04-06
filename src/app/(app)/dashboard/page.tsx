@@ -3,9 +3,9 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import {
-  FileText, TrendingUp, CheckCircle, Clock, Plus, AlertCircle,
+  FileText, TrendingUp, CheckCircle, Clock, AlertCircle,
   ChevronRight, Star, Zap, RefreshCw, Euro, Building2, Calendar,
-  ArrowRight,
+  ArrowRight, Plus,
 } from 'lucide-react'
 import Link from 'next/link'
 import { cn, formatDate, getStatutColor, getStatutLabel } from '@/lib/utils'
@@ -336,10 +336,17 @@ export default function DashboardPage() {
               const procedureLabel = tender.procedure_libelle ?? tender.type_procedure ?? null
               const depts = Array.isArray(tender.code_departement) ? tender.code_departement : []
               return (
-                <div key={tender.idweb} className={cn('px-5 py-4 hover:bg-surface/60 transition-colors', isFav ? 'bg-amber-50/30' : '')}>
+                <div
+                  key={tender.idweb}
+                  onClick={() => handleRepondre(tender)}
+                  className={cn(
+                    'px-5 py-4 cursor-pointer hover:bg-primary-light/30 transition-colors group',
+                    isFav ? 'bg-amber-50/20' : '',
+                  )}
+                >
                   {/* Titre + score + étoile */}
                   <div className="flex items-start gap-2 mb-1.5">
-                    <p className="font-medium text-sm text-text-primary flex-1 leading-snug line-clamp-2">
+                    <p className="font-medium text-sm text-text-primary flex-1 leading-snug line-clamp-2 group-hover:text-primary transition-colors">
                       {tender.objet ?? '(sans titre)'}
                     </p>
                     <div className="flex items-center gap-1.5 shrink-0">
@@ -349,7 +356,7 @@ export default function DashboardPage() {
                         dl.urgent ? 'bg-red-100 text-red-700' : 'bg-surface text-text-secondary',
                       )}>{dl.label}</span>
                       <button
-                        onClick={() => toggleFav(tender.idweb)}
+                        onClick={e => { e.stopPropagation(); toggleFav(tender.idweb) }}
                         disabled={favLoading.has(tender.idweb)}
                         className="p-1 rounded-full transition-colors"
                         title={isFav ? 'Retirer des favoris' : 'Ajouter aux favoris'}
@@ -375,29 +382,12 @@ export default function DashboardPage() {
                   )}
 
                   {/* Méta */}
-                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-text-secondary mb-2">
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-text-secondary">
                     {tender.nomacheteur && <span className="flex items-center gap-1"><Building2 className="w-3 h-3" />{tender.nomacheteur}</span>}
                     {euros && <span className="flex items-center gap-1 font-medium text-text-primary"><Euro className="w-3 h-3" />{euros}</span>}
                     {tender.nb_lots !== null && tender.nb_lots > 0 && <span className="flex items-center gap-1"><FileText className="w-3 h-3" />{tender.nb_lots} lot{tender.nb_lots > 1 ? 's' : ''}</span>}
                     {tender.datelimitereponse && <span className="flex items-center gap-1"><Calendar className="w-3 h-3" />Limite : {new Date(tender.datelimitereponse).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' })}</span>}
                   </div>
-                  {/* Badges procédure + départements */}
-                  {(procedureLabel || depts.length > 0) && (
-                    <div className="flex gap-1 flex-wrap mb-3">
-                      {procedureLabel && <span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full border border-slate-200">{procedureLabel}</span>}
-                      {depts.slice(0, 3).map((d, i) => (
-                        <span key={i} className="text-xs bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full border border-blue-100">Dép. {d}</span>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* CTA */}
-                  <button
-                    onClick={() => handleRepondre(tender)}
-                    className="flex items-center gap-1.5 text-xs bg-primary hover:bg-primary-hover text-white rounded-lg px-3 py-1.5 font-medium transition-colors"
-                  >
-                    Répondre à cet AO <ChevronRight className="w-3 h-3" />
-                  </button>
                 </div>
               )
             })}
@@ -405,44 +395,7 @@ export default function DashboardPage() {
         )}
       </div>
 
-      {/* Tous les AO récents */}
-      <div className="bg-white rounded-xl border border-border shadow-sm overflow-hidden">
-        <div className="flex items-center justify-between px-5 py-4 bg-surface border-b border-border">
-          <h2 className="font-semibold text-text-primary">Derniers appels d&apos;offres</h2>
-          <Link
-            href="/appels-offres/nouveau"
-            className="flex items-center gap-2 bg-primary hover:bg-primary-hover text-white rounded-lg px-4 py-2 text-sm font-medium transition-colors"
-          >
-            <Plus className="w-4 h-4" />
-            Nouvel AO
-          </Link>
-        </div>
-        {aos.length === 0 ? (
-          <div className="text-center py-16">
-            <FileText className="w-12 h-12 text-border mx-auto mb-3" />
-            <p className="text-text-secondary font-medium">Aucun appel d&apos;offres pour l&apos;instant</p>
-            <Link href="/appels-offres/nouveau" className="text-primary hover:underline text-sm mt-1 block">
-              Créer votre premier AO
-            </Link>
-          </div>
-        ) : (
-          <div className="divide-y divide-border">
-            {aos.slice(0, 8).map((ao) => (
-              <Link key={ao.id} href={`/appels-offres/${ao.id}`} className="flex items-center justify-between px-5 py-3.5 hover:bg-surface transition-colors">
-                <div className="min-w-0 flex-1">
-                  <p className="font-medium text-text-primary text-sm truncate">{ao.titre}</p>
-                  <p className="text-text-secondary text-xs mt-0.5">
-                    {ao.acheteur && `${ao.acheteur} — `}{formatDate(ao.created_at)}
-                  </p>
-                </div>
-                <span className={`ml-4 px-2.5 py-1 rounded-full text-xs font-medium shrink-0 ${getStatutColor(ao.statut)}`}>
-                  {getStatutLabel(ao.statut)}
-                </span>
-              </Link>
-            ))}
-          </div>
-        )}
-      </div>
+      {/* "Derniers AO" supprimé — redondant avec "Réponses en cours" + page /appels-offres */}
     </div>
   )
 }

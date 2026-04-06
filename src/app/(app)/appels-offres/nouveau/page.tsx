@@ -481,185 +481,27 @@ function NouvelAOPageInner() {
       )}
 
       {/* ════════════════════════════════════════════════════════════
-          ÉTAPE 2 — Détection de la plateforme
+          ÉTAPE 2 — Accès direct au DCE
           ════════════════════════════════════════════════════════════ */}
       {step === 2 && (
-        <div className="space-y-4">
-          <div className="bg-white rounded-xl border border-border p-6 space-y-5">
-            <div>
-              <h2 className="text-lg font-semibold text-text-primary">Accédez à la plateforme</h2>
-              <p className="text-text-secondary text-sm mt-0.5">Le dossier de consultation est hébergé sur la plateforme suivante.</p>
-            </div>
-
-            {/* Badge plateforme */}
-            <div className="flex items-center gap-3 bg-surface border border-border rounded-lg px-4 py-3">
-              <div className="w-9 h-9 rounded-lg bg-primary-light flex items-center justify-center text-sm font-bold text-primary shrink-0">
-                {platform.initial}
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="font-semibold text-sm text-text-primary">{platform.name}</div>
-                <div className="text-xs text-text-secondary truncate">{platform.fullName}</div>
-              </div>
-              {platform.allowsAnonymous ? (
-                <span className="text-xs bg-green-100 text-green-700 px-2.5 py-1 rounded-full font-semibold whitespace-nowrap">Accès anonyme OK</span>
-              ) : (
-                <span className="text-xs bg-amber-100 text-amber-700 px-2.5 py-1 rounded-full font-semibold whitespace-nowrap">Compte gratuit requis</span>
-              )}
-            </div>
-
-            {/* Choix */}
-            <div className="grid grid-cols-2 gap-3">
-              <button
-                onClick={() => setAccountStatus('has_account')}
-                className={cn(
-                  'border-2 rounded-xl p-4 text-center transition-all',
-                  accountStatus === 'has_account'
-                    ? 'border-primary bg-primary-light'
-                    : 'border-border hover:border-primary hover:bg-primary-light/50',
-                )}
-              >
-                <div className="text-2xl mb-1.5">🔑</div>
-                <div className="font-semibold text-sm text-text-primary">J&apos;ai déjà un compte</div>
-                <div className="text-xs text-text-secondary mt-0.5">Je peux me connecter directement</div>
-              </button>
-              <button
-                onClick={() => setAccountStatus('create')}
-                className={cn(
-                  'border-2 rounded-xl p-4 text-center transition-all',
-                  accountStatus === 'create'
-                    ? 'border-primary bg-primary-light'
-                    : 'border-border hover:border-primary hover:bg-primary-light/50',
-                )}
-              >
-                <div className="text-2xl mb-1.5">📝</div>
-                <div className="font-semibold text-sm text-text-primary">Créer un compte</div>
-                <div className="text-xs text-text-secondary mt-0.5">Inscription gratuite, ~3 min</div>
-              </button>
-            </div>
-
-            {/* Si accès anonyme possible */}
-            {platform.allowsAnonymous && (
-              <div className="flex gap-3 bg-primary-light border border-primary/20 rounded-lg p-4 text-sm text-primary">
-                <span className="text-base shrink-0">ℹ️</span>
-                <div>
-                  <strong>Accès anonyme disponible</strong><br />
-                  Cette plateforme permet de télécharger le DCE sans compte. Vous ne recevrez cependant pas les modifications éventuelles du dossier.
-                </div>
-              </div>
-            )}
-
-            <div className="flex justify-between">
-              <button onClick={() => goTo(1)} className="flex items-center gap-1.5 text-text-secondary hover:text-text-primary text-sm">
-                <ChevronLeft className="w-4 h-4" /> Retour
-              </button>
-              <button
-                onClick={() => goTo(3)}
-                disabled={!accountStatus}
-                className="flex items-center gap-2 bg-primary hover:bg-primary-hover text-white rounded-lg px-6 py-2.5 text-sm font-medium transition-colors disabled:opacity-50"
-              >
-                Continuer <ChevronRight className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-
-          {/* Aide à la création de compte */}
-          {accountStatus === 'create' && (
-            <div className="bg-white rounded-xl border border-border p-6 space-y-4">
-              <h2 className="text-base font-semibold text-text-primary">Créer un compte en 3 min</h2>
-              <p className="text-text-secondary text-sm">L&apos;inscription est gratuite. Voici les informations nécessaires.</p>
-              <ul className="space-y-2">
-                {[
-                  { icon: '✓', label: 'SIRET de l\'entreprise', status: 'Requis', color: 'text-secondary' },
-                  { icon: '✓', label: 'Email professionnel', status: 'Pré-rempli', color: 'text-secondary' },
-                  { icon: '○', label: 'Mot de passe à créer', status: 'À définir', color: 'text-text-secondary' },
-                ].map((item, i) => (
-                  <li key={i} className="flex items-center gap-3 text-sm py-2 border-b border-border last:border-0">
-                    <span className={cn('w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold shrink-0', i < 2 ? 'bg-green-100 text-green-700' : 'bg-border text-text-secondary')}>{item.icon}</span>
-                    <span className="flex-1 text-text-primary">{item.label}</span>
-                    <span className={cn('text-xs font-semibold', item.color)}>{item.status}</span>
-                  </li>
-                ))}
-              </ul>
-              <div className="flex items-center gap-2 bg-surface border border-border rounded-lg px-3 py-2.5">
-                <span className="text-xs text-text-secondary font-mono flex-1 truncate">{platform.registerUrl}</span>
-                <CopyButton url={platform.registerUrl} />
-                <a
-                  href={platform.registerUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="shrink-0 flex items-center gap-1.5 bg-secondary hover:bg-secondary/90 text-white rounded-md px-3 py-1.5 text-xs font-medium"
-                >
-                  S&apos;inscrire <ExternalLink className="w-3 h-3" />
-                </a>
-              </div>
-              <div className="flex gap-3 bg-primary-light border border-primary/20 rounded-lg p-3.5 text-sm text-primary">
-                <span className="text-base shrink-0">💡</span>
-                <div>Ouvrez ce lien dans un nouvel onglet, créez votre compte, puis revenez ici. Ce compte servira pour tous les futurs marchés.</div>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ════════════════════════════════════════════════════════════
-          ÉTAPE 3 — Télécharger le DCE
-          ════════════════════════════════════════════════════════════ */}
-      {step === 3 && (
         <div className="bg-white rounded-xl border border-border p-6 space-y-5">
           <div>
             <h2 className="text-lg font-semibold text-text-primary">Téléchargez le dossier de consultation</h2>
-            <p className="text-text-secondary text-sm mt-0.5">Suivez ces étapes puis revenez ici avec les fichiers téléchargés.</p>
+            <p className="text-text-secondary text-sm mt-0.5">Ouvrez le lien ci-dessous, téléchargez les fichiers du DCE, puis revenez ici pour les importer.</p>
           </div>
 
-          {/* Instructions numérotées */}
-          <ol className="space-y-0 divide-y divide-border">
-            {[
-              {
-                title: 'Connectez-vous sur la plateforme',
-                desc: 'Utilisez vos identifiants (email + mot de passe).',
-                link: platform.loginUrl,
-                linkLabel: 'Se connecter ↗',
-                linkVariant: 'primary' as const,
-              },
-              {
-                title: 'Accédez à la consultation via le lien ci-dessous',
-                desc: 'Vous arriverez directement sur la fiche du marché.',
-              },
-              {
-                title: 'Cliquez sur « Retirer le dossier » ou « Télécharger le DCE »',
-                desc: 'Le libellé varie selon les plateformes. Cherchez un bouton bien visible sur la page.',
-              },
-              {
-                title: 'Téléchargez l\'ensemble des fichiers',
-                desc: 'Préférez le téléchargement complet (ZIP) si l\'option est proposée.',
-              },
-            ].map((item, i) => (
-              <li key={i} className="flex gap-3.5 py-4 first:pt-0 last:pb-0">
-                <span className="shrink-0 w-7 h-7 rounded-full bg-primary-light text-primary flex items-center justify-center text-xs font-bold mt-0.5">{i + 1}</span>
-                <div className="flex-1 space-y-1.5">
-                  <strong className="text-sm text-text-primary">{item.title}</strong>
-                  <p className="text-xs text-text-secondary">{item.desc}</p>
-                  {item.link && (
-                    <div className="flex items-center gap-2 bg-surface border border-border rounded-lg px-3 py-2 mt-1.5">
-                      <span className="text-xs text-text-secondary font-mono flex-1 truncate">{item.link}</span>
-                      <a href={item.link} target="_blank" rel="noopener noreferrer"
-                        className="shrink-0 flex items-center gap-1.5 bg-primary hover:bg-primary-hover text-white rounded-md px-3 py-1.5 text-xs font-medium">
-                        {item.linkLabel} <ExternalLink className="w-3 h-3" />
-                      </a>
-                    </div>
-                  )}
-                </div>
-              </li>
-            ))}
-          </ol>
-
-          {/* Séparateur + lien direct vers la consultation */}
-          <div className="flex items-center gap-3">
-            <div className="h-px flex-1 bg-border" />
-            <span className="text-xs font-semibold text-text-secondary uppercase tracking-wide">Lien direct vers la consultation</span>
-            <div className="h-px flex-1 bg-border" />
+          {/* Badge plateforme */}
+          <div className="flex items-center gap-3 bg-surface border border-border rounded-lg px-4 py-3">
+            <div className="w-9 h-9 rounded-lg bg-primary-light flex items-center justify-center text-sm font-bold text-primary shrink-0">
+              {platform.initial}
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="font-semibold text-sm text-text-primary">{platform.name}</div>
+              <div className="text-xs text-text-secondary truncate">{platform.fullName}</div>
+            </div>
           </div>
 
+          {/* Lien direct DCE */}
           <div className="flex items-center gap-2 border-2 border-primary bg-primary-light rounded-lg px-4 py-3">
             <span className="text-xs text-primary font-mono flex-1 truncate break-all">{boampUrl || platform.baseUrl}</span>
             <CopyButton url={boampUrl || platform.baseUrl} />
@@ -667,16 +509,16 @@ function NouvelAOPageInner() {
               href={boampUrl || platform.baseUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="shrink-0 flex items-center gap-1.5 bg-secondary hover:bg-secondary/90 text-white rounded-md px-3 py-1.5 text-xs font-medium"
+              className="shrink-0 flex items-center gap-1.5 bg-primary hover:bg-primary-hover text-white rounded-md px-3 py-1.5 text-xs font-medium"
             >
-              Ouvrir <ExternalLink className="w-3 h-3" />
+              Ouvrir le DCE <ExternalLink className="w-3 h-3" />
             </a>
           </div>
 
-          <AlertModifications hasAccount={accountStatus === 'has_account'} />
+          <AlertModifications hasAccount={false} />
 
           <div className="flex justify-between">
-            <button onClick={() => goTo(2)} className="flex items-center gap-1.5 text-text-secondary hover:text-text-primary text-sm">
+            <button onClick={() => goTo(1)} className="flex items-center gap-1.5 text-text-secondary hover:text-text-primary text-sm">
               <ChevronLeft className="w-4 h-4" /> Retour
             </button>
             <button
@@ -688,6 +530,8 @@ function NouvelAOPageInner() {
           </div>
         </div>
       )}
+
+      {/* Étape 3 supprimée — fusionnée dans l'étape 2 */}
 
       {/* ════════════════════════════════════════════════════════════
           ÉTAPE 4 — Import + reconnaissance auto
