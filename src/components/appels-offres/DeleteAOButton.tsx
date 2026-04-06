@@ -2,6 +2,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Trash2, Loader2 } from 'lucide-react'
+import { toast } from 'sonner'
 
 export default function DeleteAOButton({ id, titre }: { id: string; titre: string }) {
   const router = useRouter()
@@ -19,7 +20,7 @@ export default function DeleteAOButton({ id, titre }: { id: string; titre: strin
       body: JSON.stringify({ id }),
     })
     if (res.ok) router.refresh()
-    else { alert('Erreur lors de la suppression'); setLoading(false); setConfirm(false) }
+    else { toast.error('Erreur lors de la suppression'); setLoading(false); setConfirm(false) }
   }
 
   return (

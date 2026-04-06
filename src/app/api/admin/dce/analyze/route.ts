@@ -5,13 +5,13 @@
  *  - Extrait l'analyse RC si présente
  *  - Met à jour l'AppelOffre et le tender_dce
  */
-import { createClient } from '@/lib/supabase/server'
-import { adminClient, getOrgIdForUser } from '@/lib/supabase/admin'
+import { adminClient } from '@/lib/supabase/admin'
 import { NextRequest, NextResponse } from 'next/server'
 import { callClaude } from '@/lib/ai/claude-client'
 import { PROMPTS } from '@/lib/ai/prompts'
 import { extractTextFromPDF } from '@/lib/documents/pdf-parser'
 import { extractTextFromDocx } from '@/lib/documents/docx-parser'
+import { getAuthContext, safeFetch } from '@/lib/api-utils'
 
 interface UploadedFile {
   filename: string
@@ -30,11 +30,8 @@ interface DceDocument {
 
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
+    const { user, orgId } = await getAuthContext()
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
-    const orgId = await getOrgIdForUser(user.id)
     if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 403 })
 
     const { tender_idweb, ao_id, files } = await request.json() as {
@@ -62,7 +59,7 @@ export async function POST(request: NextRequest) {
 
     for (const file of files) {
       try {
-        const res = await fetch(file.url)
+        const res = await safeFetch(file.url)
         if (!res.ok) {
           console.warn(`[dce/analyze] Impossible de télécharger ${file.filename}: ${res.status}`)
           continue

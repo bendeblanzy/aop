@@ -1,58 +1,76 @@
-import { createClient } from '@/lib/supabase/server'
-import { adminClient, getOrgIdForUser } from '@/lib/supabase/admin'
-import { NextRequest, NextResponse } from 'next/server'
+import { adminClient } from '@/lib/supabase/admin'
+import { NextRequest } from 'next/server'
+import { apiError, apiSuccess, getAuthContext, parseBody, getPaginationParams } from '@/lib/api-utils'
+import { createAppelOffreSchema, updateAppelOffreSchema, deleteByIdSchema } from '@/lib/validations'
 
-export async function GET() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+export async function GET(request: NextRequest) {
+  const { user, orgId } = await getAuthContext()
+  if (!user) return apiError('Unauthorized', 401)
+  if (!orgId) return apiError('No organization', 403)
 
-  const orgId = await getOrgIdForUser(user.id)
-  if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 403 })
+  const { from, to } = getPaginationParams(request)
+  const { data, error, count } = await adminClient
+    .from('appels_offres')
+    .select('*', { count: 'exact' })
+    .eq('organization_id', orgId)
+    .order('created_at', { ascending: false })
+    .range(from, to)
 
-  const { data } = await adminClient.from('appels_offres').select('*').eq('organization_id', orgId).order('created_at', { ascending: false })
-  return NextResponse.json(data || [])
+  if (error) return apiError(error.message)
+  return apiSuccess({ items: data || [], total: count ?? 0 })
 }
 
 export async function POST(request: NextRequest) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const { user, orgId } = await getAuthContext()
+  if (!user) return apiError('Unauthorized', 401)
+  if (!orgId) return apiError('No organization', 403)
 
-  const orgId = await getOrgIdForUser(user.id)
-  if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 403 })
+  const parsed = await parseBody(request, createAppelOffreSchema)
+  if (parsed.error) return parsed.error
 
-  const body = await request.json()
-  const { data, error } = await adminClient.from('appels_offres').insert({ ...body, organization_id: orgId }).select().single()
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json(data)
+  const { data, error } = await adminClient
+    .from('appels_offres')
+    .insert({ ...parsed.data, organization_id: orgId })
+    .select()
+    .single()
+
+  if (error) return apiError(error.message)
+  return apiSuccess(data, 201)
 }
 
 export async function PUT(request: NextRequest) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const { user, orgId } = await getAuthContext()
+  if (!user) return apiError('Unauthorized', 401)
+  if (!orgId) return apiError('No organization', 403)
 
-  const orgId = await getOrgIdForUser(user.id)
-  if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 403 })
+  const parsed = await parseBody(request, updateAppelOffreSchema)
+  if (parsed.error) return parsed.error
 
-  const body = await request.json()
-  const { id, ...rest } = body
-  const { error } = await adminClient.from('appels_offres').update(rest).eq('id', id).eq('organization_id', orgId)
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ success: true })
+  const { id, ...rest } = parsed.data
+  const { error } = await adminClient
+    .from('appels_offres')
+    .update(rest)
+    .eq('id', id)
+    .eq('organization_id', orgId)
+
+  if (error) return apiError(error.message)
+  return apiSuccess({ success: true })
 }
 
 export async function DELETE(request: NextRequest) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const { user, orgId } = await getAuthContext()
+  if (!user) return apiError('Unauthorized', 401)
+  if (!orgId) return apiError('No organization', 403)
 
-  const orgId = await getOrgIdForUser(user.id)
-  if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 403 })
+  const parsed = await parseBody(request, deleteByIdSchema)
+  if (parsed.error) return parsed.error
 
-  const { id } = await request.json()
-  const { error } = await adminClient.from('appels_offres').delete().eq('id', id).eq('organization_id', orgId)
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ success: true })
+  const { error } = await adminClient
+    .from('appels_offres')
+    .delete()
+    .eq('id', parsed.data.id)
+    .eq('organization_id', orgId)
+
+  if (error) return apiError(error.message)
+  return apiSuccess({ success: true })
 }

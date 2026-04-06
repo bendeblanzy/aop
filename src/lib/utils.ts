@@ -11,6 +11,35 @@ export function formatDate(dateStr: string): string {
   })
 }
 
+export function formatDateTime(dateStr: string): string {
+  return new Date(dateStr).toLocaleDateString('fr-FR', {
+    day: '2-digit', month: '2-digit', year: 'numeric',
+    hour: '2-digit', minute: '2-digit',
+  })
+}
+
+/** Retourne "dans X jours", "aujourd'hui", "dépassée de X jours", etc. */
+export function formatDeadline(dateStr: string): { label: string; urgent: boolean; passed: boolean } {
+  const now = new Date()
+  const deadline = new Date(dateStr)
+  const diffMs = deadline.getTime() - now.getTime()
+  const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24))
+
+  if (diffDays < 0) {
+    return { label: `Dépassée de ${Math.abs(diffDays)}j`, urgent: true, passed: true }
+  }
+  if (diffDays === 0) {
+    return { label: "Aujourd'hui", urgent: true, passed: false }
+  }
+  if (diffDays <= 3) {
+    return { label: `Dans ${diffDays}j`, urgent: true, passed: false }
+  }
+  if (diffDays <= 7) {
+    return { label: `Dans ${diffDays}j`, urgent: false, passed: false }
+  }
+  return { label: formatDate(dateStr), urgent: false, passed: false }
+}
+
 export function formatCurrency(amount: number): string {
   return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(amount)
 }

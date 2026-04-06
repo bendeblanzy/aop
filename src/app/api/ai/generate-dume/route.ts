@@ -73,7 +73,7 @@ AO : ${ao.titre}
   const buffer = await generateDocx(`DUME — Document Unique de Marché Européen\n${ao.titre}`, sections)
 
   try {
-    const publicUrl = await uploadGeneratedDoc(user.id, ao_id, 'DUME', buffer)
+    const publicUrl = await uploadGeneratedDoc(orgId, ao_id, 'DUME', buffer)
     return NextResponse.json({ url: publicUrl, nom: `DUME-${ao.titre}.docx` })
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 500 })

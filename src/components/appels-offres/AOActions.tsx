@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Pencil, Trash2, Loader2, X, PlayCircle } from 'lucide-react'
 import Link from 'next/link'
+import { toast } from 'sonner'
 import type { AppelOffre } from '@/lib/types'
 
 interface Props {
@@ -45,7 +46,7 @@ export default function AOActions({ ao }: Props) {
       setShowEdit(false)
       router.refresh()
     } else {
-      alert('Erreur lors de la sauvegarde')
+      toast.error('Erreur lors de la sauvegarde')
     }
   }
 
@@ -59,7 +60,7 @@ export default function AOActions({ ao }: Props) {
     if (res.ok) {
       router.push('/appels-offres')
     } else {
-      alert('Erreur lors de la suppression')
+      toast.error('Erreur lors de la suppression')
       setDeleting(false)
     }
   }

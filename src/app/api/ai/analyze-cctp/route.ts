@@ -1,29 +1,25 @@
-import { createClient } from '@/lib/supabase/server'
-import { adminClient, getOrgIdForUser } from '@/lib/supabase/admin'
+import { adminClient } from '@/lib/supabase/admin'
 import { NextRequest, NextResponse } from 'next/server'
 import { callClaude } from '@/lib/ai/claude-client'
 import { PROMPTS } from '@/lib/ai/prompts'
 import { extractTextFromPDF } from '@/lib/documents/pdf-parser'
 import { extractTextFromDocx } from '@/lib/documents/docx-parser'
+import { getAuthContext, parseBody, safeFetch } from '@/lib/api-utils'
+import { aiAnalyzeSchema } from '@/lib/validations'
 
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
+    const { user, orgId } = await getAuthContext()
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
-    const orgId = await getOrgIdForUser(user.id)
     if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 403 })
 
-    const { ao_id, file_url } = await request.json()
-    if (!ao_id || !file_url) {
-      return NextResponse.json({ error: 'ao_id et file_url sont requis' }, { status: 400 })
-    }
-    console.log('[analyze-cctp] Téléchargement:', file_url)
+    const parsed = await parseBody(request, aiAnalyzeSchema)
+    if (parsed.error) return parsed.error
+    const { ao_id, file_url } = parsed.data
 
     let res: Response
     try {
-      res = await fetch(file_url)
+      res = await safeFetch(file_url)
     } catch (fetchErr) {
       console.error('[analyze-cctp] Erreur réseau fetch:', fetchErr)
       return NextResponse.json({ error: 'Impossible de télécharger le fichier.' }, { status: 400 })

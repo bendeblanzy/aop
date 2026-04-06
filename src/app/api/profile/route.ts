@@ -1,30 +1,35 @@
-import { createClient } from '@/lib/supabase/server'
-import { adminClient, getOrgIdForUser } from '@/lib/supabase/admin'
-import { NextRequest, NextResponse } from 'next/server'
+import { adminClient } from '@/lib/supabase/admin'
+import { NextRequest } from 'next/server'
+import { apiError, apiSuccess, getAuthContext, parseBody } from '@/lib/api-utils'
+import { upsertProfileSchema } from '@/lib/validations'
 
 export async function GET() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const { user, orgId } = await getAuthContext()
+  if (!user) return apiError('Unauthorized', 401)
+  if (!orgId) return apiError('No organization', 403)
 
-  const orgId = await getOrgIdForUser(user.id)
-  if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 403 })
+  const { data, error } = await adminClient
+    .from('profiles')
+    .select('*')
+    .eq('organization_id', orgId)
+    .maybeSingle()
 
-  const { data, error } = await adminClient.from('profiles').select('*').eq('organization_id', orgId).maybeSingle()
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json(data)
+  if (error) return apiError(error.message)
+  return apiSuccess(data)
 }
 
 export async function PUT(request: NextRequest) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const { user, orgId } = await getAuthContext()
+  if (!user) return apiError('Unauthorized', 401)
+  if (!orgId) return apiError('No organization', 403)
 
-  const orgId = await getOrgIdForUser(user.id)
-  if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 403 })
+  const parsed = await parseBody(request, upsertProfileSchema)
+  if (parsed.error) return parsed.error
 
-  const body = await request.json()
-  const { error } = await adminClient.from('profiles').upsert({ ...body, organization_id: orgId })
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ success: true })
+  const { error } = await adminClient
+    .from('profiles')
+    .upsert({ ...parsed.data, organization_id: orgId })
+
+  if (error) return apiError(error.message)
+  return apiSuccess({ success: true })
 }

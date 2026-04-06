@@ -102,7 +102,7 @@ AO : ${ao.titre} — Acheteur : ${ao.acheteur || 'N/A'}
 
   const buffer = await generateMemoireDocx(ao.titre, sections)
   try {
-    const publicUrl = await uploadGeneratedDoc(user.id, ao_id, 'Memoire', buffer)
+    const publicUrl = await uploadGeneratedDoc(orgId, ao_id, 'Memoire', buffer)
     return NextResponse.json({ url: publicUrl, nom: `Memoire-${ao.titre}.docx` })
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 500 })

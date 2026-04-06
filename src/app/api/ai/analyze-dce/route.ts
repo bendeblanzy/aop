@@ -1,8 +1,8 @@
-import { createClient } from '@/lib/supabase/server'
-import { adminClient, getOrgIdForUser } from '@/lib/supabase/admin'
+import { adminClient } from '@/lib/supabase/admin'
 import { NextRequest, NextResponse } from 'next/server'
 import { anthropic } from '@/lib/ai/claude-client'
 import { extractTextFromDocx } from '@/lib/documents/docx-parser'
+import { getAuthContext, safeFetch } from '@/lib/api-utils'
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -41,7 +41,7 @@ function isWord(filename: string): boolean {
 async function fileToContentBlock(file: FileEntry): Promise<ContentBlock | null> {
   let res: Response
   try {
-    res = await fetch(file.url)
+    res = await safeFetch(file.url)
     if (!res.ok) return null
   } catch {
     return null
@@ -142,11 +142,8 @@ Règles :
 
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
+    const { user, orgId } = await getAuthContext()
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
-    const orgId = await getOrgIdForUser(user.id)
     if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 403 })
 
     const { ao_id, files } = await request.json() as { ao_id: string; files: FileEntry[] }

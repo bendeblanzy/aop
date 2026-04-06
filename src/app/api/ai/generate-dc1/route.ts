@@ -94,7 +94,7 @@ Référence : ${ao.reference_marche || ''}
 
   const buffer = await generateDC1Docx(merged)
   try {
-    const publicUrl = await uploadGeneratedDoc(user.id, ao_id, 'DC1', buffer)
+    const publicUrl = await uploadGeneratedDoc(orgId, ao_id, 'DC1', buffer)
     return NextResponse.json({ url: publicUrl, nom: `DC1-${ao.titre}.docx` })
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 500 })

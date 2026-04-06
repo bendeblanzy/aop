@@ -61,7 +61,7 @@ export async function POST(request: NextRequest) {
 
   const buffer = await generateDC2Docx(data)
   try {
-    const publicUrl = await uploadGeneratedDoc(user.id, ao_id, 'DC2', buffer)
+    const publicUrl = await uploadGeneratedDoc(orgId, ao_id, 'DC2', buffer)
     return NextResponse.json({ url: publicUrl, nom: `DC2-${ao.titre}.docx` })
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 500 })
