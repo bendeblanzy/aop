@@ -17,11 +17,9 @@ export async function GET() {
     .eq('organization_id', orgId)
     .order('created_at', { ascending: false })
 
-  // Si la table n'existe pas encore (migration non appliquée), on retourne un tableau vide
+  // En cas d'erreur (table manquante, schema cache, permissions…), on retourne silencieusement un tableau vide
   if (error) {
-    const isMissingTable = error.message.includes('relation') || error.message.includes('does not exist') || error.code === '42P01'
-    if (isMissingTable) return NextResponse.json({ favorites: [], migrationPending: true })
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ favorites: [], migrationPending: true })
   }
 
   return NextResponse.json({ favorites: (data ?? []).map(f => f.tender_idweb) })
@@ -51,8 +49,14 @@ export async function POST(request: NextRequest) {
     if (error.message.includes('duplicate') || error.code === '23505') {
       return NextResponse.json({ ok: true })
     }
-    // Table manquante — migration non appliquée
-    if (error.message.includes('relation') || error.message.includes('does not exist') || error.code === '42P01') {
+    // Table manquante (migration non appliquée) ou erreur schema cache → 503 clair
+    if (
+      error.code === '42P01' ||
+      error.message.includes('relation') ||
+      error.message.includes('does not exist') ||
+      error.message.includes('schema cache') ||
+      error.message.includes('Could not find the table')
+    ) {
       return NextResponse.json({ error: 'Migration 003 non appliquée — exécutez supabase/migrations/003_add_favorites.sql dans Supabase' }, { status: 503 })
     }
     return NextResponse.json({ error: error.message }, { status: 500 })
@@ -83,7 +87,13 @@ export async function DELETE(request: NextRequest) {
     .eq('organization_id', orgId)
 
   if (error) {
-    if (error.message.includes('relation') || error.code === '42P01') {
+    if (
+      error.code === '42P01' ||
+      error.message.includes('relation') ||
+      error.message.includes('does not exist') ||
+      error.message.includes('schema cache') ||
+      error.message.includes('Could not find the table')
+    ) {
       return NextResponse.json({ ok: true }) // Table absente = rien à supprimer
     }
     return NextResponse.json({ error: error.message }, { status: 500 })
