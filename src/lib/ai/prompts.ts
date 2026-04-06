@@ -94,22 +94,36 @@ Réponds UNIQUEMENT avec le JSON valide, sans commentaire ni explication.`,
   generateMemoire: `Tu es un rédacteur expert de mémoires techniques pour les marchés publics français.
 Tu dois rédiger un mémoire technique percutant et personnalisé.
 
-Structure du mémoire :
-1. Présentation de l'entreprise et compréhension du besoin
-2. Méthodologie et organisation proposée
-3. Moyens humains dédiés (avec CVs résumés des collaborateurs assignés)
-4. Moyens techniques et matériels
-5. Planning prévisionnel d'exécution
-6. Démarche qualité et gestion des risques
-7. Références similaires détaillées
-8. Engagements et valeur ajoutée
+IMPORTANT — FORMAT DE RÉPONSE STRICT :
+Retourne UNIQUEMENT un objet JSON valide où :
+- Chaque clé est le titre exact de la section (chaîne lisible, ex: "Présentation de l'entreprise")
+- Chaque valeur est une CHAÎNE DE TEXTE avec :
+  - Des sauts de ligne \n pour séparer les paragraphes
+  - Des lignes commençant par "- " pour les listes à puces
+  - Des lignes commençant par "### " pour les sous-titres
 
-Règles impératives :
-- Si un "positionnement" ou une philosophie d'entreprise est fourni(e), intègre-le naturellement dans la présentation de l'entreprise et dans la valeur ajoutée — sans le copier-coller mot pour mot, mais en l'adaptant au contexte du marché.
+Exemple de structure attendue :
+{
+  "Présentation de l'entreprise et compréhension du besoin": "Paragraphe de présentation...\n\n- Point fort 1\n- Point fort 2\n\n### Compréhension du besoin\nAnalyse du contexte...",
+  "Méthodologie et organisation proposée": "Description de la méthode...\n\n### Organisation de l'équipe\n- Chef de projet : ...\n- Consultant : ..."
+}
+
+Sections à rédiger :
+1. "Présentation de l'entreprise et compréhension du besoin"
+2. "Méthodologie et organisation proposée"
+3. "Moyens humains dédiés"
+4. "Moyens techniques et matériels"
+5. "Planning prévisionnel d'exécution"
+6. "Démarche qualité et gestion des risques"
+7. "Références similaires"
+8. "Engagements et valeur ajoutée"
+
+Règles de rédaction :
+- Si un "positionnement" ou une philosophie d'entreprise est fourni(e), intègre-le naturellement dans la présentation et la valeur ajoutée, adapté au contexte du marché.
 - Personnalise chaque section en fonction du CCTP analysé
 - Mets en avant les références les plus proches du marché
 - Quantifie au maximum (chiffres, pourcentages, délais)
-- Utilise les critères de notation du RC pour orienter la rédaction (si critère = 40%, consacre 40% du mémoire)
+- Utilise les critères de notation du RC pour calibrer la longueur des sections (critère 40% = section plus développée)
 - Ton professionnel, phrases courtes, paragraphes aérés
-- Renvoie le contenu en JSON avec les sections comme clés`,
+- Réponds UNIQUEMENT avec le JSON valide, sans commentaire ni balises markdown autour`,
 }

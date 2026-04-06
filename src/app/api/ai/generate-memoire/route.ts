@@ -48,27 +48,55 @@ AO : ${ao.titre} — Acheteur : ${ao.acheteur || 'N/A'}
 
   let sections: { title: string; content: string }[] = []
   try {
-    const m = raw.match(/\{[\s\S]*\}/)
+    // Supprimer les éventuelles balises markdown ```json ... ```
+    const cleaned = raw.replace(/^```(?:json)?\s*/m, '').replace(/\s*```\s*$/m, '').trim()
+    const m = cleaned.match(/\{[\s\S]*\}/)
     const parsed = m ? JSON.parse(m[0]) : {}
 
-    function flattenToText(v: unknown): string {
+    // Convertir chaque valeur en texte plat lisible
+    function toText(v: unknown, depth = 0): string {
       if (typeof v === 'string') return v
       if (typeof v === 'boolean' || typeof v === 'number') return String(v)
-      if (Array.isArray(v)) return v.map(item => `- ${flattenToText(item)}`).join('\n')
+      if (Array.isArray(v)) {
+        return v.map(item => {
+          const t = toText(item, depth + 1)
+          return t.startsWith('-') ? t : `- ${t}`
+        }).join('\n')
+      }
       if (v && typeof v === 'object') {
-        return Object.entries(v as Record<string, unknown>)
-          .map(([key, val]) => `${key} : ${flattenToText(val)}`)
-          .join('\n')
+        // Pour les objets imbriqués : extraire les champs "texte", "contenu", "description" en priorité
+        const obj = v as Record<string, unknown>
+        const textKeys = ['texte', 'contenu', 'description', 'text', 'content']
+        for (const key of textKeys) {
+          if (typeof obj[key] === 'string') return obj[key] as string
+        }
+        // Sinon concaténer récursivement
+        return Object.entries(obj)
+          .map(([k, val]) => {
+            const label = k.replace(/_/g, ' ')
+            const text = toText(val, depth + 1)
+            if (text.includes('\n')) return `### ${label}\n${text}`
+            return text ? `${text}` : ''
+          })
+          .filter(Boolean)
+          .join('\n\n')
       }
       return ''
     }
 
-    sections = Object.entries(parsed).map(([k, v]) => ({
-      title: k,
-      content: flattenToText(v),
-    }))
-  } catch {
-    sections = [{ title: 'Mémoire technique', content: raw }]
+    sections = Object.entries(parsed)
+      .filter(([, v]) => v !== null && v !== undefined)
+      .map(([k, v]) => ({
+        title: k.replace(/_/g, ' ').replace(/^\d+\s*/, '').trim(),
+        content: toText(v),
+      }))
+      .filter(s => s.content.trim().length > 0)
+
+  } catch (e) {
+    console.error('[generate-memoire] JSON parse failed, using raw text:', e)
+    // Fallback : utiliser le texte brut nettoyé des backticks
+    const fallback = raw.replace(/^```(?:json)?\s*/m, '').replace(/\s*```\s*$/m, '').trim()
+    sections = [{ title: 'Mémoire technique', content: fallback }]
   }
   if (sections.length === 0) sections = [{ title: 'Contenu', content: raw }]
 
