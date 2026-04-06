@@ -312,7 +312,7 @@ export default function DashboardPage() {
                       {tender.objet ?? '(sans titre)'}
                     </p>
                     <div className="flex items-center gap-1.5 shrink-0">
-                      <ScorePill score={tender.score} />
+                      {tender.score !== null && <ScorePill score={tender.score} />}
                       <span className={cn(
                         'text-xs px-2 py-0.5 rounded-full font-medium',
                         dl.urgent ? 'bg-red-100 text-red-700' : 'bg-surface text-text-secondary',

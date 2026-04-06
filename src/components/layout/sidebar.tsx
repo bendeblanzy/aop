@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname, useSearchParams } from 'next/navigation'
 import {
@@ -11,10 +11,18 @@ import { cn } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 
-const navigation = [
+interface NavItem {
+  name: string
+  href: string
+  icon: React.ComponentType<{ className?: string }>
+  exact?: boolean
+  activeWhen?: (pathname: string, search: string) => boolean
+}
+
+const navigation: NavItem[] = [
   { name: 'Tableau de bord', href: '/dashboard', icon: LayoutDashboard },
   { name: 'Veille marchés', href: '/veille', icon: Radar, exact: true },
-  { name: 'Mes favoris', href: '/veille?tab=favorites', icon: Star, activeWhen: (p: string, s: string) => p === '/veille' && s.includes('tab=favorites') },
+  { name: 'Mes favoris', href: '/veille?tab=favorites', icon: Star, activeWhen: (p, s) => p === '/veille' && s.includes('tab=favorites') },
   { name: "Appels d'offres", href: '/appels-offres', icon: FileText },
   { name: 'Mon profil', href: '/profil', icon: Building2 },
   { name: 'Références', href: '/references', icon: BookMarked },
