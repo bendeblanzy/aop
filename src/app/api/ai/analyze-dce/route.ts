@@ -3,15 +3,13 @@ import { adminClient, getOrgIdForUser } from '@/lib/supabase/admin'
 import { NextRequest, NextResponse } from 'next/server'
 import { anthropic } from '@/lib/ai/claude-client'
 import { extractTextFromDocx } from '@/lib/documents/docx-parser'
+import type Anthropic from '@anthropic-ai/sdk'
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
 type FileEntry = { nom: string; url: string; type: string; taille: number }
-
-type ContentBlock =
-  | { type: 'text'; text: string }
-  | { type: 'image'; source: { type: 'base64'; media_type: string; data: string } }
-  | { type: 'document'; source: { type: 'base64'; media_type: 'application/pdf'; data: string }; title?: string }
+type MessageContent = Anthropic.Messages.MessageParam['content']
+type ContentBlockParam = Exclude<MessageContent, string>[number]
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -25,10 +23,6 @@ function getMediaType(filename: string): string | null {
     webp: 'image/webp',
   }
   return map[ext ?? ''] ?? null
-}
-
-function isImage(filename: string): boolean {
-  return getMediaType(filename) !== null
 }
 
 function isPDF(filename: string): boolean {
@@ -45,23 +39,27 @@ function isWord(filename: string): boolean {
   return ext === 'docx' || ext === 'doc'
 }
 
-async function excelToText(buffer: Buffer): Promise<string> {
-  // Dynamically import xlsx to avoid SSR issues
-  const XLSX = await import('xlsx')
-  const workbook = XLSX.read(buffer, { type: 'buffer' })
-  const lines: string[] = []
-  for (const sheetName of workbook.SheetNames) {
-    const sheet = workbook.Sheets[sheetName]
-    const csv = XLSX.utils.sheet_to_csv(sheet, { skipHidden: true })
-    if (csv.trim()) {
-      lines.push(`=== Feuille : ${sheetName} ===`)
-      lines.push(csv)
+async function excelToText(buffer: Buffer, filename: string): Promise<string> {
+  try {
+    // Dynamic import to avoid build issues if xlsx is not installed
+    const XLSX = await import('xlsx')
+    const workbook = XLSX.read(buffer, { type: 'buffer' })
+    const lines: string[] = []
+    for (const sheetName of workbook.SheetNames) {
+      const sheet = workbook.Sheets[sheetName]
+      const csv = XLSX.utils.sheet_to_csv(sheet, { skipHidden: true })
+      if (csv.trim()) {
+        lines.push(`=== Feuille : ${sheetName} ===`)
+        lines.push(csv)
+      }
     }
+    return lines.join('\n\n')
+  } catch {
+    return `[Fichier Excel : ${filename} — contenu non extractible]`
   }
-  return lines.join('\n\n')
 }
 
-async function fileToContentBlock(file: FileEntry): Promise<ContentBlock | null> {
+async function fileToContentBlock(file: FileEntry): Promise<ContentBlockParam | null> {
   let res: Response
   try {
     res = await fetch(file.url)
@@ -74,34 +72,38 @@ async function fileToContentBlock(file: FileEntry): Promise<ContentBlock | null>
   if (buffer.length === 0) return null
 
   const name = file.nom
+  const mediaType = getMediaType(name)
 
   // PDF → document natif Claude
   if (isPDF(name)) {
     return {
       type: 'document',
-      source: { type: 'base64', media_type: 'application/pdf', data: buffer.toString('base64') },
+      source: {
+        type: 'base64',
+        media_type: 'application/pdf',
+        data: buffer.toString('base64'),
+      },
       title: name,
-    }
+    } as ContentBlockParam
   }
 
   // Image → bloc image natif Claude
-  if (isImage(name)) {
-    const mediaType = getMediaType(name)!
+  if (mediaType) {
     return {
       type: 'image',
-      source: { type: 'base64', media_type: mediaType, data: buffer.toString('base64') },
-    }
+      source: {
+        type: 'base64',
+        media_type: mediaType as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp',
+        data: buffer.toString('base64'),
+      },
+    } as ContentBlockParam
   }
 
-  // Excel → conversion CSV puis texte
+  // Excel → conversion CSV
   if (isExcel(name)) {
-    try {
-      const csv = await excelToText(buffer)
-      if (!csv.trim()) return null
-      return { type: 'text', text: `[Fichier Excel : ${name}]\n\n${csv}` }
-    } catch {
-      return null
-    }
+    const csv = await excelToText(buffer, name)
+    if (!csv.trim()) return null
+    return { type: 'text', text: `[Fichier Excel : ${name}]\n\n${csv}` }
   }
 
   // DOCX / DOC → extraction texte
@@ -178,7 +180,7 @@ export async function POST(request: NextRequest) {
     console.log(`[analyze-dce] ${files.length} fichier(s) pour AO ${ao_id}`)
 
     // Convertir chaque fichier en bloc Claude
-    const blocks: ContentBlock[] = []
+    const blocks: ContentBlockParam[] = []
     const skipped: string[] = []
 
     for (const file of files) {
@@ -196,22 +198,22 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Aucun document exploitable. Vérifiez les fichiers uploadés.' }, { status: 400 })
     }
 
+    // Ajouter le message texte de demande
+    const contentBlocks: ContentBlockParam[] = [
+      ...blocks,
+      {
+        type: 'text',
+        text: `Analyse l'ensemble de ces ${blocks.length} document(s) de DCE et retourne le JSON structuré demandé.${skipped.length ? ` (${skipped.length} fichier(s) non lisibles ignorés : ${skipped.join(', ')})` : ''}`,
+      },
+    ]
+
     // Appel Claude avec tous les blocs
     console.log(`[analyze-dce] Envoi de ${blocks.length} bloc(s) à Claude`)
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
       max_tokens: 8192,
       system: SYSTEM_PROMPT,
-      messages: [{
-        role: 'user',
-        content: [
-          ...blocks as Parameters<typeof anthropic.messages.create>[0]['messages'][0]['content'] extends (infer T)[] ? T[] : never,
-          {
-            type: 'text' as const,
-            text: `Analyse l'ensemble de ces ${blocks.length} document(s) de DCE et retourne le JSON structuré demandé.${skipped.length ? ` (${skipped.length} fichier(s) non lisibles ignorés : ${skipped.join(', ')})` : ''}`,
-          },
-        ],
-      }],
+      messages: [{ role: 'user', content: contentBlocks }],
     })
 
     const rawText = response.content[0]?.type === 'text' ? response.content[0].text : ''
@@ -228,14 +230,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Impossible de parser la réponse IA.' }, { status: 500 })
     }
 
-    // Sauvegarder en base — on alimente analyse_rc et analyse_cctp pour la compatibilité
     await adminClient.from('appels_offres').update({
       analyse_rc: analyse,
       analyse_cctp: analyse,
     }).eq('id', ao_id).eq('organization_id', orgId)
 
     console.log(`[analyze-dce] Analyse sauvegardée, ${skipped.length} fichier(s) ignoré(s)`)
-
     return NextResponse.json({ analyse, skipped })
 
   } catch (err) {
