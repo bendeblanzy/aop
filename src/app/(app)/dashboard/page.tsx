@@ -118,8 +118,15 @@ export default function DashboardPage() {
         }
 
         // Filtrer sur les scorés ≥ 60% et trier
+        // Note : l'API exclut déjà les tenders avec un AO (via tender_idweb),
+        // mais on filtre aussi côté client par reference_marche pour les AO anciens
+        const aoRefs = new Set(
+          (aoData as AppelOffre[] ?? [])
+            .map(a => a.tender_idweb ?? a.reference_marche)
+            .filter(Boolean)
+        )
         const scored: TopTender[] = allTenders
-          .filter(t => t.score !== null && t.score >= 60)
+          .filter(t => t.score !== null && t.score >= 60 && !aoRefs.has(t.idweb))
           .sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
           .slice(0, 5)
         setTopTenders(scored)

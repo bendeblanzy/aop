@@ -210,6 +210,9 @@ function NouvelAOPageInner() {
         reference_marche: referencemarche || null,
         date_limite_reponse: dateLimite || null,
         statut: 'en_cours',
+        // Lien vers le tender BOAMP source (pour éviter les doublons veille/dashboard)
+        ...(boampIdweb ? { tender_idweb: boampIdweb } : {}),
+        ...(boampUrl ? { url_profil_acheteur: boampUrl } : {}),
         ...(boampNote ? { notes_utilisateur: boampNote } : {}),
       }).select().single()
 

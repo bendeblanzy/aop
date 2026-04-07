@@ -68,8 +68,18 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
+  // Exclure les tenders qui ont déjà un AO associé (évite les doublons dashboard/veille)
+  const { data: existingAOs } = await adminClient
+    .from('appels_offres')
+    .select('tender_idweb')
+    .eq('organization_id', orgId)
+    .not('tender_idweb', 'is', null)
+
+  const aoTenderIds = new Set((existingAOs ?? []).map(ao => ao.tender_idweb).filter(Boolean))
+  const filteredTenders = (tenders ?? []).filter(t => !aoTenderIds.has(t.idweb))
+
   // Récupérer les scores existants pour cette organisation
-  const idwebs = (tenders ?? []).map(t => t.idweb)
+  const idwebs = filteredTenders.map(t => t.idweb)
   let scoreMap: Record<string, { score: number; reason: string }> = {}
 
   if (idwebs.length > 0) {
@@ -87,7 +97,7 @@ export async function GET(request: NextRequest) {
   }
 
   // Fusionner tenders + scores
-  const tendersWithScores = (tenders ?? []).map(t => ({
+  const tendersWithScores = filteredTenders.map(t => ({
     ...t,
     score: scoreMap[t.idweb]?.score ?? null,
     reason: scoreMap[t.idweb]?.reason ?? null,
