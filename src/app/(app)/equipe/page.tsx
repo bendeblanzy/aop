@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useOrganization } from '@/context/OrganizationContext'
 import { Collaborateur } from '@/lib/types'
-import { Loader2, Plus, Trash2, Edit, Users, UserPlus, Mail, Shield, User } from 'lucide-react'
+import { Loader2, Plus, Trash2, Edit, Users, UserPlus, Mail, Shield, User, Copy, Check, Building2, FlaskConical } from 'lucide-react'
 import { toast } from 'sonner'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -23,6 +23,28 @@ const emptyCollab = (): Partial<Collaborateur> => ({
   email: '', role_metier: '', competences_cles: []
 })
 
+// ─── Credential copy helper ──────────────────────────────────────────────────
+
+function CredentialField({ label, value, compact }: { label: string; value: string; compact?: boolean }) {
+  const [copied, setCopied] = useState(false)
+  const copy = async () => {
+    await navigator.clipboard.writeText(value)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+  return (
+    <div>
+      {label && <p className="text-xs text-text-secondary mb-1">{label}</p>}
+      <div className={`flex items-center gap-2 ${compact ? '' : 'bg-gray-50 border border-border rounded-lg px-3 py-2'}`}>
+        <code className={`flex-1 ${compact ? 'text-xs text-primary' : 'text-sm text-text-primary'} font-mono select-all`}>{value}</code>
+        <button onClick={copy} className="p-1 text-text-secondary hover:text-primary transition-colors" title="Copier">
+          {copied ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
+        </button>
+      </div>
+    </div>
+  )
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function EquipePage() {
@@ -36,7 +58,9 @@ export default function EquipePage() {
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [showInviteModal, setShowInviteModal] = useState(false)
   const [inviteEmail, setInviteEmail] = useState('')
+  const [inviteType, setInviteType] = useState<'team' | 'beta'>('team')
   const [inviting, setInviting] = useState(false)
+  const [createdCredentials, setCreatedCredentials] = useState<{ email: string; password: string; type: string; message: string } | null>(null)
 
   // ── Collaborateurs state ───────────────────────────────────────────────────
   const [collabs, setCollabs] = useState<Collaborateur[]>([])
@@ -81,21 +105,26 @@ export default function EquipePage() {
       const res = await fetch('/api/organizations/members', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: inviteEmail.trim() }),
+        body: JSON.stringify({ email: inviteEmail.trim(), type: inviteType }),
       })
+      const data = await res.json()
       if (!res.ok) {
-        const body = await res.json().catch(() => ({}))
-        throw new Error(body.error || 'Erreur lors de l\'invitation')
+        throw new Error(data.error || 'Erreur lors de la création du compte')
       }
-      toast.success(`Invitation envoyée à ${inviteEmail.trim()}`)
-      setInviteEmail('')
-      setShowInviteModal(false)
-      loadMembers()
+      setCreatedCredentials({ email: data.email, password: data.password, type: data.type, message: data.message })
+      if (inviteType === 'team') loadMembers()
     } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : 'Erreur lors de l\'invitation')
+      toast.error(err instanceof Error ? err.message : 'Erreur lors de la création du compte')
     } finally {
       setInviting(false)
     }
+  }
+
+  function closeInviteModal() {
+    setShowInviteModal(false)
+    setInviteEmail('')
+    setInviteType('team')
+    setCreatedCredentials(null)
   }
 
   async function removeMember(memberId: string) {
@@ -309,35 +338,92 @@ export default function EquipePage() {
             )
       )}
 
-      {/* ── Modal: Inviter un membre ── */}
+      {/* ── Modal: Créer un compte ── */}
       {showInviteModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl w-full max-w-md shadow-xl">
             <div className="flex items-center justify-between p-6 border-b border-border">
               <h2 className="font-bold text-lg text-text-primary flex items-center gap-2">
-                <UserPlus className="w-5 h-5 text-primary" /> Inviter un membre
+                <UserPlus className="w-5 h-5 text-primary" /> {createdCredentials ? 'Compte créé !' : 'Créer un accès'}
               </h2>
-              <button onClick={() => setShowInviteModal(false)} className="text-text-secondary hover:text-text-primary text-xl">✕</button>
+              <button onClick={closeInviteModal} className="text-text-secondary hover:text-text-primary text-xl">✕</button>
             </div>
-            <div className="p-6">
-              <label className="block text-sm font-medium text-text-primary mb-1.5">Adresse e-mail</label>
-              <input
-                type="email"
-                value={inviteEmail}
-                onChange={e => setInviteEmail(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter') invite() }}
-                placeholder="collaborateur@exemple.fr"
-                className="w-full border border-border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-                autoFocus
-              />
-              <p className="text-xs text-text-secondary mt-2">Un e-mail d&apos;invitation sera envoyé à cette adresse.</p>
-            </div>
-            <div className="flex justify-end gap-3 px-6 pb-6">
-              <button onClick={() => setShowInviteModal(false)} className="px-5 py-2.5 border border-border rounded-lg text-sm font-medium text-text-secondary hover:bg-surface transition-colors">Annuler</button>
-              <button onClick={invite} disabled={inviting || !inviteEmail.trim()} className="flex items-center gap-2 bg-primary hover:bg-primary-hover text-white rounded-lg px-5 py-2.5 text-sm font-medium transition-colors disabled:opacity-60">
-                {inviting && <Loader2 className="w-4 h-4 animate-spin" />} Envoyer l&apos;invitation
-              </button>
-            </div>
+
+            {createdCredentials ? (
+              /* ── Résultat : identifiants à copier ── */
+              <div className="p-6">
+                <div className="bg-green-50 border border-green-200 rounded-xl p-4 mb-4">
+                  <p className="text-sm text-green-800 font-medium mb-1">{createdCredentials.message}</p>
+                  <p className="text-xs text-green-600">
+                    {createdCredentials.type === 'team' ? 'Le membre peut se connecter immédiatement.' : 'Le testeur créera sa propre organisation à la première connexion.'}
+                  </p>
+                </div>
+                <div className="space-y-3">
+                  <CredentialField label="Identifiant (email)" value={createdCredentials.email} />
+                  <CredentialField label="Mot de passe" value={createdCredentials.password} />
+                  <div className="bg-gray-50 border border-border rounded-lg p-3">
+                    <p className="text-xs text-text-secondary">URL de connexion :</p>
+                    <CredentialField label="" value="https://aop-woad.vercel.app/auth/login" compact />
+                  </div>
+                </div>
+                <div className="flex justify-end mt-5">
+                  <button onClick={closeInviteModal} className="px-5 py-2.5 bg-primary hover:bg-primary-hover text-white rounded-lg text-sm font-medium transition-colors">
+                    Fermer
+                  </button>
+                </div>
+              </div>
+            ) : (
+              /* ── Formulaire : email + type ── */
+              <div className="p-6">
+                <label className="block text-sm font-medium text-text-primary mb-1.5">Adresse e-mail</label>
+                <input
+                  type="email"
+                  value={inviteEmail}
+                  onChange={e => setInviteEmail(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter' && inviteEmail.trim()) invite() }}
+                  placeholder="collaborateur@exemple.fr"
+                  className="w-full border border-border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                  autoFocus
+                />
+
+                <p className="block text-sm font-medium text-text-primary mt-4 mb-2">Type d&apos;accès</p>
+                <div className="space-y-2">
+                  <label
+                    className={`flex items-start gap-3 p-3 border rounded-xl cursor-pointer transition-colors ${
+                      inviteType === 'team' ? 'border-primary bg-primary-light' : 'border-border hover:bg-surface'
+                    }`}
+                  >
+                    <input type="radio" name="inviteType" checked={inviteType === 'team'} onChange={() => setInviteType('team')} className="mt-0.5" />
+                    <div>
+                      <div className="flex items-center gap-2 text-sm font-medium text-text-primary">
+                        <Building2 className="w-4 h-4 text-primary" /> Membre de mon équipe
+                      </div>
+                      <p className="text-xs text-text-secondary mt-0.5">Rejoint votre organisation et accède à vos appels d&apos;offres</p>
+                    </div>
+                  </label>
+                  <label
+                    className={`flex items-start gap-3 p-3 border rounded-xl cursor-pointer transition-colors ${
+                      inviteType === 'beta' ? 'border-primary bg-primary-light' : 'border-border hover:bg-surface'
+                    }`}
+                  >
+                    <input type="radio" name="inviteType" checked={inviteType === 'beta'} onChange={() => setInviteType('beta')} className="mt-0.5" />
+                    <div>
+                      <div className="flex items-center gap-2 text-sm font-medium text-text-primary">
+                        <FlaskConical className="w-4 h-4 text-orange-500" /> Prospect / Bêta-testeur
+                      </div>
+                      <p className="text-xs text-text-secondary mt-0.5">Créera sa propre organisation à la première connexion</p>
+                    </div>
+                  </label>
+                </div>
+
+                <div className="flex justify-end gap-3 mt-5">
+                  <button onClick={closeInviteModal} className="px-5 py-2.5 border border-border rounded-lg text-sm font-medium text-text-secondary hover:bg-surface transition-colors">Annuler</button>
+                  <button onClick={invite} disabled={inviting || !inviteEmail.trim()} className="flex items-center gap-2 bg-primary hover:bg-primary-hover text-white rounded-lg px-5 py-2.5 text-sm font-medium transition-colors disabled:opacity-60">
+                    {inviting && <Loader2 className="w-4 h-4 animate-spin" />} Créer le compte
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

@@ -47,6 +47,15 @@ export async function GET() {
   }
 }
 
+/**
+ * POST — Créer un compte directement (sans envoi d'email)
+ *
+ * Body: { email: string, type: 'team' | 'beta' }
+ *   - 'team'  → crée le compte ET l'ajoute à l'organisation de l'admin
+ *   - 'beta'  → crée le compte seulement (l'utilisateur créera sa propre org à l'onboarding)
+ *
+ * Retourne les identifiants (email + mot de passe généré) à partager manuellement.
+ */
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient()
@@ -72,43 +81,59 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { email } = body as { email: string }
+    const { email, type = 'team' } = body as { email: string; type?: 'team' | 'beta' }
 
     if (!email || typeof email !== 'string' || !email.includes('@')) {
       return NextResponse.json({ error: 'Adresse email invalide' }, { status: 400 })
     }
 
-    const { data: inviteData, error: inviteError } = await adminClient.auth.admin.inviteUserByEmail(
-      email,
-      {
-        data: { org_id: requesterMember.organization_id },
-        redirectTo: `${process.env.NEXT_PUBLIC_APP_URL ?? 'https://aop-woad.vercel.app'}/auth/accept-invite`,
-      }
-    )
+    // Generate a random password (12 chars, mix of letters/numbers)
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789'
+    const password = Array.from({ length: 12 }, () => chars[Math.floor(Math.random() * chars.length)]).join('')
 
-    if (inviteError) {
-      return NextResponse.json({ error: inviteError.message }, { status: 500 })
+    // Create the user account directly (no email sent)
+    const { data: newUser, error: createError } = await adminClient.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true, // Skip email confirmation
+      user_metadata: { invited_by: user.id, invite_type: type },
+    })
+
+    if (createError) {
+      // If user already exists, return a clear message
+      if (createError.message?.includes('already been registered') || createError.message?.includes('already exists')) {
+        return NextResponse.json({ error: 'Un compte existe déjà avec cette adresse email' }, { status: 409 })
+      }
+      return NextResponse.json({ error: createError.message }, { status: 500 })
     }
 
-    // If the user was just created by the invite, pre-add them to the org
-    if (inviteData?.user) {
+    // If type is 'team', add to the admin's organization
+    if (type === 'team' && newUser?.user) {
       const { data: existingMember } = await adminClient
         .from('organization_members')
         .select('id')
-        .eq('user_id', inviteData.user.id)
+        .eq('user_id', newUser.user.id)
         .eq('organization_id', requesterMember.organization_id)
         .maybeSingle()
 
       if (!existingMember) {
         await adminClient.from('organization_members').insert({
           organization_id: requesterMember.organization_id,
-          user_id: inviteData.user.id,
+          user_id: newUser.user.id,
           role: 'member',
         })
       }
     }
 
-    return NextResponse.json({ success: true, email }, { status: 201 })
+    return NextResponse.json({
+      success: true,
+      email,
+      password,
+      type,
+      message: type === 'team'
+        ? 'Compte créé et ajouté à votre organisation'
+        : 'Compte créé — le testeur créera sa propre organisation à la connexion',
+    }, { status: 201 })
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Erreur interne'
     return NextResponse.json({ error: message }, { status: 500 })
