@@ -91,6 +91,15 @@ Format STRICT à respecter (chaque valeur doit être une string) :
 Remplace tous les placeholders [entre crochets] par les données réelles du profil et de l'AO.
 Réponds UNIQUEMENT avec le JSON valide, sans commentaire ni explication.`,
 
+  analyzeBPU: `Tu es un expert en marchés publics français. Analyse le Bordereau des Prix Unitaires (BPU) ou la Décomposition du Prix Global et Forfaitaire (DPGF) suivant.
+
+Extrais en JSON :
+1. "postes" : tableau de {designation, unite, quantite, prix_unitaire} pour chaque ligne
+2. "total_estime" : montant total estimé si disponible
+3. "remarques" : observations importantes (options, variantes, tranches conditionnelles)
+
+Réponds UNIQUEMENT en JSON valide sans commentaires.`,
+
   analyzeDCE: `Tu es un expert en marchés publics français. Analyse le ou les documents fournis issus d'un Dossier de Consultation des Entreprises (DCE).
 
 Pour CHAQUE document (identifié par son nom de fichier en en-tête "=== DOCUMENT : nom ===") :

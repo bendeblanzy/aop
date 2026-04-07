@@ -9,8 +9,8 @@ import { adminClient } from '@/lib/supabase/admin'
 import { NextRequest, NextResponse } from 'next/server'
 import { callClaude } from '@/lib/ai/claude-client'
 import { PROMPTS } from '@/lib/ai/prompts'
-import { extractTextFromPDF } from '@/lib/documents/pdf-parser'
-import { extractTextFromDocx } from '@/lib/documents/docx-parser'
+import { extractText, isSupportedDocument, isImage } from '@/lib/documents/text-extractor'
+import { extractFilesFromZip } from '@/lib/documents/zip-extractor'
 import { getAuthContext, safeFetch } from '@/lib/api-utils'
 
 interface UploadedFile {
@@ -65,10 +65,9 @@ export async function POST(request: NextRequest) {
           continue
         }
         const buffer = Buffer.from(await res.arrayBuffer())
-        const isDocx = file.filename.toLowerCase().endsWith('.docx') || file.filename.toLowerCase().endsWith('.doc')
-        const text = isDocx
-          ? await extractTextFromDocx(buffer)
-          : await extractTextFromPDF(buffer)
+
+        // Use unified text extractor that supports all formats
+        const text = await extractText(buffer, file.filename)
 
         if (text && text.trim().length > 20) {
           // Limiter à 40k chars par doc pour ne pas exploser les tokens

@@ -112,11 +112,14 @@ export interface AppelOffre {
   fichiers_source?: FichierSource[]
   analyse_rc?: AnalyseRC
   analyse_cctp?: AnalyseCCTP
+  analyse_bpu?: AnalyseBPU
   documents_generes?: DocumentGenere[]
   notes_utilisateur?: string
   references_selectionnees?: string[]
   collaborateurs_selectionnes?: string[]
   team_members?: string[]
+  phase?: 'comprendre' | 'preparer' | 'deposer'
+  checklist_conformite?: { item: string; fait: boolean }[]
   // Lien vers le tender BOAMP source (migration 005)
   tender_idweb?: string
   url_avis?: string
@@ -126,8 +129,13 @@ export interface AppelOffre {
 export interface FichierSource {
   nom: string
   url: string
-  type: 'rc' | 'cctp' | 'avis' | 'autre'
+  type: 'rc' | 'cctp' | 'ccap' | 'bpu' | 'ae' | 'dpgf' | 'avis' | 'autre'
   taille: number
+}
+
+export interface AnalyseBPU {
+  postes: { designation: string; unite: string; quantite?: number; prix_unitaire?: number }[]
+  total_estime?: number
 }
 
 export interface AnalyseRC {

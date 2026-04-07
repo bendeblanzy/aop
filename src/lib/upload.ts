@@ -16,6 +16,13 @@ export async function uploadFileToStorage(
     ext === 'pdf'  ? 'application/pdf' :
     ext === 'docx' ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' :
     ext === 'doc'  ? 'application/msword' :
+    ext === 'xlsx' ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' :
+    ext === 'xls'  ? 'application/vnd.ms-excel' :
+    ext === 'zip'  ? 'application/zip' :
+    ext === 'png'  ? 'image/png' :
+    ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' :
+    ext === 'tiff' || ext === 'tif' ? 'image/tiff' :
+    ext === 'bmp'  ? 'image/bmp' :
     file.type || 'application/octet-stream'
 
   // Étape 1 : obtenir la signed URL

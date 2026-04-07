@@ -41,7 +41,18 @@ export async function POST(request: NextRequest) {
   // Créer le bucket s'il n'existe pas encore
   const { error: bucketError } = await adminClient.storage.createBucket(BUCKET, {
     public: true,
-    allowedMimeTypes: ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/msword'],
+    allowedMimeTypes: [
+      'application/pdf',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'application/vnd.ms-excel',
+      'application/zip',
+      'image/png',
+      'image/jpeg',
+      'image/tiff',
+      'image/bmp',
+    ],
     fileSizeLimit: 52428800, // 50 MB
   })
   if (bucketError && !bucketError.message.includes('already exists') && !bucketError.message.includes('duplicate')) {
@@ -93,6 +104,13 @@ export async function POST(request: NextRequest) {
     ext === 'pdf'  ? 'application/pdf' :
     ext === 'docx' ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' :
     ext === 'doc'  ? 'application/msword' :
+    ext === 'xlsx' ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' :
+    ext === 'xls'  ? 'application/vnd.ms-excel' :
+    ext === 'zip'  ? 'application/zip' :
+    ext === 'png'  ? 'image/png' :
+    ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' :
+    ext === 'tiff' || ext === 'tif' ? 'image/tiff' :
+    ext === 'bmp'  ? 'image/bmp' :
     file.type || 'application/octet-stream'
 
   const { data, error } = await adminClient.storage
