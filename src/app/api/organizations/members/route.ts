@@ -125,9 +125,10 @@ export async function DELETE(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { memberId, userId: targetUserId } = body as { memberId?: string; userId?: string }
+    const { memberId, member_id, userId: targetUserId } = body as { memberId?: string; member_id?: string; userId?: string }
+    const resolvedMemberId = memberId || member_id
 
-    if (!memberId && !targetUserId) {
+    if (!resolvedMemberId && !targetUserId) {
       return NextResponse.json({ error: 'memberId ou userId requis' }, { status: 400 })
     }
 
@@ -152,8 +153,8 @@ export async function DELETE(request: NextRequest) {
       .select('id, user_id, role')
       .eq('organization_id', requesterMember.organization_id)
 
-    if (memberId) {
-      targetMemberQuery = targetMemberQuery.eq('id', memberId)
+    if (resolvedMemberId) {
+      targetMemberQuery = targetMemberQuery.eq('id', resolvedMemberId)
     } else if (targetUserId) {
       targetMemberQuery = targetMemberQuery.eq('user_id', targetUserId)
     }
