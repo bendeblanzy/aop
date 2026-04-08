@@ -372,10 +372,12 @@ export default function TenderDetailPage() {
           Résumé rapide
         </h2>
 
-        {/* Short summary (AI-generated or from BOAMP) */}
-        {tender.short_summary && (
+        {/* Short summary or full description from BOAMP live */}
+        {(extra.description_complete || tender.short_summary) && (
           <div className="bg-[#E6E6FF] rounded-lg px-4 py-3">
-            <p className="text-sm text-[#0000FF] leading-relaxed">{tender.short_summary}</p>
+            <p className="text-sm text-[#0000FF] leading-relaxed whitespace-pre-line">
+              {(extra.description_complete as string) ?? tender.short_summary}
+            </p>
           </div>
         )}
 
@@ -399,29 +401,33 @@ export default function TenderDetailPage() {
           </div>
         </div>
 
-        {/* Mission / Description */}
-        {tender.description_detail && (
-          <div>
-            <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider flex items-center gap-1.5 mb-2">
-              <Target className="w-3.5 h-3.5" />
-              Description de la mission
-            </h3>
-            <div className="text-sm text-gray-700 leading-relaxed">
-              {showFullDescription || tender.description_detail.length <= 600
-                ? tender.description_detail
-                : `${tender.description_detail.slice(0, 600)}...`
-              }
-              {tender.description_detail.length > 600 && (
-                <button
-                  onClick={() => setShowFullDescription(!showFullDescription)}
-                  className="ml-1 text-[#0000FF] font-medium hover:underline text-xs"
-                >
-                  {showFullDescription ? 'Voir moins' : 'Voir plus'}
-                </button>
-              )}
+        {/* Mission / Description — use DB field or BOAMP live description */}
+        {(() => {
+          const descText = tender.description_detail || (extra.description_complete as string) || null
+          if (!descText) return null
+          return (
+            <div>
+              <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider flex items-center gap-1.5 mb-2">
+                <Target className="w-3.5 h-3.5" />
+                Description de la mission
+              </h3>
+              <div className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">
+                {showFullDescription || descText.length <= 800
+                  ? descText
+                  : `${descText.slice(0, 800)}...`
+                }
+                {descText.length > 800 && (
+                  <button
+                    onClick={() => setShowFullDescription(!showFullDescription)}
+                    className="ml-1 text-[#0000FF] font-medium hover:underline text-xs"
+                  >
+                    {showFullDescription ? 'Voir moins' : 'Voir plus'}
+                  </button>
+                )}
+              </div>
             </div>
-          </div>
-        )}
+          )
+        })()}
 
         {/* CPV codes */}
         {tender.cpv_codes && tender.cpv_codes.length > 0 && (
@@ -597,23 +603,29 @@ export default function TenderDetailPage() {
         </div>
       </div>
 
-      {/* Critères d'attribution (from BOAMP live) */}
-      {Array.isArray(extra.criteres_attribution) && extra.criteres_attribution.length > 0 && (
+      {/* Critères d'attribution (structured or text) */}
+      {(Array.isArray(extra.criteres_attribution) || extra.criteres_attribution_texte) && (
         <div className="bg-white rounded-xl border border-[#E0E0F0] p-6 space-y-4">
           <h2 className="font-bold text-gray-900 flex items-center gap-2">
             <Award className="w-5 h-5 text-[#0000FF]" />
             Critères d&apos;attribution
           </h2>
-          <div className="space-y-2">
-            {(extra.criteres_attribution as { nom: string; poids?: string }[]).map((c, i) => (
-              <div key={i} className="flex items-center justify-between bg-gray-50 rounded-lg px-4 py-2.5">
-                <span className="text-sm text-gray-700 font-medium">{c.nom}</span>
-                {c.poids && (
-                  <span className="text-sm font-bold text-[#0000FF] bg-[#E6E6FF] px-2.5 py-0.5 rounded-full">{c.poids}%</span>
-                )}
-              </div>
-            ))}
-          </div>
+          {Array.isArray(extra.criteres_attribution) ? (
+            <div className="space-y-2">
+              {(extra.criteres_attribution as { nom: string; poids?: string }[]).map((c, i) => (
+                <div key={i} className="flex items-center justify-between bg-gray-50 rounded-lg px-4 py-2.5">
+                  <span className="text-sm text-gray-700 font-medium">{c.nom}</span>
+                  {c.poids && (
+                    <span className="text-sm font-bold text-[#0000FF] bg-[#E6E6FF] px-2.5 py-0.5 rounded-full">{c.poids}%</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-gray-700 bg-gray-50 rounded-lg px-4 py-3 leading-relaxed">
+              {extra.criteres_attribution_texte as string}
+            </p>
+          )}
         </div>
       )}
 
@@ -668,6 +680,20 @@ export default function TenderDetailPage() {
                 <span className="text-gray-700">{(extra.contact_acheteur as Record<string, string>).adresse}</span>
               </div>
             )}
+            {(extra.contact_acheteur as Record<string, string>).correspondant && (
+              <div className="flex items-center gap-2 text-sm">
+                <Building2 className="w-4 h-4 text-gray-400 shrink-0" />
+                <span className="text-gray-500">{(extra.contact_acheteur as Record<string, string>).correspondant}</span>
+              </div>
+            )}
+            {(extra.contact_acheteur as Record<string, string>).site_web && (
+              <div className="flex items-center gap-2 text-sm">
+                <ExternalLink className="w-4 h-4 text-gray-400 shrink-0" />
+                <a href={(extra.contact_acheteur as Record<string, string>).site_web} target="_blank" rel="noopener noreferrer" className="text-[#0000FF] hover:underline">
+                  Site web
+                </a>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -680,6 +706,47 @@ export default function TenderDetailPage() {
             Modalités de remise des offres
           </h2>
           <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">{extra.modalites_remise as string}</p>
+        </div>
+      )}
+
+      {/* Justifications / pièces à fournir */}
+      {extra.justifications && (
+        <div className="bg-white rounded-xl border border-[#E0E0F0] p-6 space-y-4">
+          <h2 className="font-bold text-gray-900 flex items-center gap-2">
+            <CheckCircle2 className="w-5 h-5 text-[#0000FF]" />
+            Pièces à fournir
+          </h2>
+          <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">{extra.justifications as string}</p>
+        </div>
+      )}
+
+      {/* Informations complémentaires */}
+      {extra.informations_complementaires && (
+        <div className="bg-white rounded-xl border border-[#E0E0F0] p-6 space-y-4">
+          <h2 className="font-bold text-gray-900 flex items-center gap-2">
+            <FileText className="w-5 h-5 text-[#0000FF]" />
+            Informations complémentaires
+          </h2>
+          <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">{extra.informations_complementaires as string}</p>
+        </div>
+      )}
+
+      {/* Lien vers les documents de consultation */}
+      {extra.url_documents && (
+        <div className="bg-[#F5F5FF] rounded-xl border border-[#0000FF]/20 p-5 flex items-center justify-between">
+          <div>
+            <h3 className="font-semibold text-gray-900 text-sm">Documents de consultation (DCE)</h3>
+            <p className="text-xs text-gray-500 mt-0.5">Accédez aux pièces du dossier de consultation</p>
+          </div>
+          <a
+            href={extra.url_documents as string}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 bg-[#0000FF] hover:bg-[#0000CC] text-white rounded-lg px-4 py-2.5 text-sm font-semibold transition-colors shrink-0"
+          >
+            <ExternalLink className="w-4 h-4" />
+            Voir les documents
+          </a>
         </div>
       )}
 
