@@ -144,9 +144,9 @@ function TenderCard({
       <div className="p-5 pb-3 flex-1">
         {/* Title + Star */}
         <div className="flex items-start gap-2 mb-3">
-          <h3 className="font-bold text-[#0000FF] text-sm leading-snug flex-1 line-clamp-3 uppercase">
+          <Link href={`/veille/${encodeURIComponent(tender.idweb)}`} className="font-bold text-[#0000FF] text-sm leading-snug flex-1 line-clamp-3 uppercase hover:underline">
             {tender.objet ?? '(sans titre)'}
-          </h3>
+          </Link>
           <button
             onClick={e => { e.stopPropagation(); onToggleFav() }}
             disabled={favLoading}
