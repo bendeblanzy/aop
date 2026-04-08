@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useOrganization } from '@/context/OrganizationContext'
 import { Collaborateur } from '@/lib/types'
-import { Loader2, Plus, Trash2, Edit, Users, UserPlus, Mail, Shield, User, Copy, Check, Building2, FlaskConical } from 'lucide-react'
+import { Loader2, Plus, Trash2, Edit, Users, UserPlus, Mail, Shield, User, Copy, Check, Building2, FlaskConical, ExternalLink, Sparkles } from 'lucide-react'
 import { toast } from 'sonner'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -20,7 +20,7 @@ type Member = {
 
 const emptyCollab = (): Partial<Collaborateur> => ({
   nom: '', prenom: '', poste: '', experience_annees: undefined,
-  email: '', role_metier: '', competences_cles: []
+  email: '', role_metier: '', competences_cles: [], linkedin_url: ''
 })
 
 // ─── Credential copy helper ──────────────────────────────────────────────────
@@ -69,6 +69,7 @@ export default function EquipePage() {
   const [editing, setEditing] = useState<Partial<Collaborateur>>(emptyCollab())
   const [saving, setSaving] = useState(false)
   const [newTag, setNewTag] = useState('')
+  const [linkedinLoading, setLinkedinLoading] = useState(false)
 
   // ── Load on mount ──────────────────────────────────────────────────────────
   useEffect(() => {
@@ -182,6 +183,44 @@ export default function EquipePage() {
 
   function removeTag(i: number) {
     setEditing(p => ({ ...p, competences_cles: ((p.competences_cles as string[]) || []).filter((_, j) => j !== i) }))
+  }
+
+  async function autoCompleteLinkedin() {
+    const url = editing.linkedin_url?.trim()
+    if (!url || !url.includes('linkedin.com/in/')) {
+      toast.error('Veuillez entrer une URL LinkedIn valide (ex: https://www.linkedin.com/in/nom-prenom)')
+      return
+    }
+    setLinkedinLoading(true)
+    try {
+      const res = await fetch('/api/collaborateurs/linkedin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ linkedin_url: url }),
+      })
+      if (!res.ok) {
+        const err = await res.json()
+        throw new Error(err.error || 'Erreur LinkedIn')
+      }
+      const data = await res.json()
+      // Pré-remplir les champs — l'utilisateur peut modifier ensuite
+      setEditing(p => ({
+        ...p,
+        prenom: data.prenom || p.prenom,
+        nom: data.nom || p.nom,
+        poste: data.poste || p.poste,
+        role_metier: data.role_metier || p.role_metier,
+        email: data.email || p.email,
+        experience_annees: data.experience_annees || p.experience_annees,
+        competences_cles: data.competences_cles?.length > 0 ? data.competences_cles : p.competences_cles,
+        linkedin_url: url,
+      }))
+      toast.success('Profil LinkedIn importé ! Vérifiez et ajustez les informations.')
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Erreur lors de l\'import LinkedIn')
+    } finally {
+      setLinkedinLoading(false)
+    }
   }
 
   const isAdmin = role === 'admin'
@@ -355,15 +394,22 @@ export default function EquipePage() {
                         </div>
                       </div>
                       <div className="flex gap-1 shrink-0">
-                        <button onClick={() => { setEditing(c); setShowCollabModal(true) }} className="p-1.5 text-gray-400 hover:text-[#0000FF] hover:bg-[#E6E6FF] rounded-lg transition-colors"><Edit className="w-3.5 h-3.5" /></button>
-                        <button onClick={() => removeCollab(c.id)} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>
+                        <button onClick={(e) => { e.stopPropagation(); setEditing(c); setShowCollabModal(true) }} className="p-1.5 text-gray-400 hover:text-[#0000FF] hover:bg-[#E6E6FF] rounded-lg transition-colors"><Edit className="w-3.5 h-3.5" /></button>
+                        <button onClick={(e) => { e.stopPropagation(); removeCollab(c.id) }} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>
                       </div>
                     </div>
-                    {c.email && (
-                      <p className="text-xs text-gray-400 flex items-center gap-1 mb-2">
-                        <Mail className="w-3 h-3" /> {c.email}
-                      </p>
-                    )}
+                    <div className="flex items-center gap-3 mb-2">
+                      {c.email && (
+                        <p className="text-xs text-gray-400 flex items-center gap-1">
+                          <Mail className="w-3 h-3" /> {c.email}
+                        </p>
+                      )}
+                      {c.linkedin_url && (
+                        <a href={c.linkedin_url} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="text-xs text-[#0077B5] flex items-center gap-1 hover:underline">
+                          <ExternalLink className="w-3 h-3" /> LinkedIn
+                        </a>
+                      )}
+                    </div>
                     {(c.competences_cles?.length ?? 0) > 0 && (
                       <div className="flex flex-wrap gap-1.5">
                         {c.competences_cles!.slice(0, 5).map((k, i) => (
@@ -479,6 +525,30 @@ export default function EquipePage() {
               <button onClick={() => setShowCollabModal(false)} className="text-text-secondary hover:text-text-primary text-xl">✕</button>
             </div>
             <div className="p-6 space-y-5">
+              {/* LinkedIn auto-complétion */}
+              <div className="bg-[#F5F5FF] rounded-xl border border-[#0000FF]/10 p-4">
+                <label className="block text-sm font-medium text-[#0000FF] mb-2 flex items-center gap-1.5">
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg> Profil LinkedIn <span className="text-xs font-normal text-gray-400">(optionnel)</span>
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    value={editing.linkedin_url || ''}
+                    onChange={e => setEditing(p => ({ ...p, linkedin_url: e.target.value }))}
+                    placeholder="https://www.linkedin.com/in/prenom-nom"
+                    className="flex-1 border border-[#0000FF]/20 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#0000FF]/20 focus:border-[#0000FF] bg-white"
+                  />
+                  <button
+                    onClick={autoCompleteLinkedin}
+                    disabled={linkedinLoading || !editing.linkedin_url?.includes('linkedin.com/in/')}
+                    className="flex items-center gap-2 bg-[#0000FF] hover:bg-[#0000CC] text-white rounded-lg px-4 py-2.5 text-sm font-medium transition-colors disabled:opacity-40 shrink-0"
+                  >
+                    {linkedinLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                    Auto-compléter
+                  </button>
+                </div>
+                <p className="text-xs text-gray-500 mt-1.5">Remplissez l&apos;URL LinkedIn puis cliquez pour pré-remplir automatiquement les champs ci-dessous. Tout reste modifiable.</p>
+              </div>
+
               <div className="grid grid-cols-2 gap-4">
                 {([['prenom', 'Prénom *'], ['nom', 'Nom *'], ['poste', 'Poste / Fonction'], ['role_metier', 'Rôle métier']] as [string, string][]).map(([f, l]) => (
                   <div key={f}>

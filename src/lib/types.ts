@@ -102,6 +102,7 @@ export interface Collaborateur {
   email?: string
   role_metier?: string
   cv_url?: string
+  linkedin_url?: string
 }
 
 export interface AppelOffre {

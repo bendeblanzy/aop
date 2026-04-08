@@ -4,7 +4,7 @@ import { createClient } from '@/lib/supabase/client'
 import { useOrganization } from '@/context/OrganizationContext'
 import { Profile, Reference } from '@/lib/types'
 import { calculateProfileCompletion, cn } from '@/lib/utils'
-import { Loader2, Save, Plus, Trash2, Building2, Radar, Award, Upload, FileText, X, ExternalLink } from 'lucide-react'
+import { Loader2, Save, Plus, Trash2, Building2, Radar, Award, Upload, FileText, X, ExternalLink, Search, Sparkles } from 'lucide-react'
 import { toast } from 'sonner'
 import { BOAMP_CODES, BOAMP_CATEGORIES } from '@/lib/boamp/codes'
 
@@ -24,7 +24,7 @@ export default function ProfilPage() {
     boamp_codes: [],
     activite_metier: '',
   })
-  const [activeTab, setActiveTab] = useState('identite')
+  const [activeTab, setActiveTab] = useState('positionnement')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [newCert, setNewCert] = useState('')
@@ -36,6 +36,8 @@ export default function ProfilPage() {
   const [savingRef, setSavingRef] = useState(false)
   // PDF uploads
   const [uploading, setUploading] = useState<string | null>(null)
+  // Deep Research
+  const [deepResearchLoading, setDeepResearchLoading] = useState(false)
   const supabase = createClient()
 
   async function load() {
@@ -174,6 +176,11 @@ export default function ProfilPage() {
   const completion = calculateProfileCompletion(profile)
 
   const tabs = [
+    // ── Contenu stratégique (en premier) ──
+    { id: 'positionnement', label: '✨ Positionnement' },
+    { id: 'references', label: 'Références & Docs' },
+    { id: 'veille-boamp', label: '📡 Veille BOAMP' },
+    // ── Infos techniques (ensuite) ──
     { id: 'identite', label: 'Identité' },
     { id: 'representant', label: 'Représentant' },
     { id: 'financier', label: 'Financier' },
@@ -181,10 +188,6 @@ export default function ProfilPage() {
     { id: 'assurances', label: 'Assurances' },
     { id: 'declarations', label: 'Déclarations' },
     { id: 'sous-traitants', label: 'Sous-traitants' },
-    { id: 'references', label: 'Références' },
-    { id: 'documents', label: 'Documents' },
-    { id: 'positionnement', label: 'Positionnement' },
-    { id: 'veille-boamp', label: '📡 Veille BOAMP' },
   ]
 
   if (loading) return <div className="flex items-center justify-center h-64"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>
@@ -373,6 +376,31 @@ export default function ProfilPage() {
           {/* Onglet Sous-traitants */}
           {activeTab === 'sous-traitants' && (
             <div className="space-y-4">
+              <label className="flex items-center gap-3 p-4 rounded-xl border border-border cursor-pointer hover:bg-surface transition-colors mb-2">
+                <input
+                  type="checkbox"
+                  checked={!(profile.sous_traitants || []).length && (profile as any).pas_de_sous_traitants !== false}
+                  onChange={e => {
+                    if (e.target.checked) {
+                      update('sous_traitants', [])
+                      update('pas_de_sous_traitants' as keyof Profile, true)
+                    } else {
+                      update('pas_de_sous_traitants' as keyof Profile, false)
+                    }
+                  }}
+                  className="accent-primary"
+                />
+                <div>
+                  <p className="text-sm font-medium text-text-primary">Pas de sous-traitants</p>
+                  <p className="text-xs text-text-secondary">Nous réalisons toutes les prestations en interne</p>
+                </div>
+              </label>
+              {(profile as any).pas_de_sous_traitants ? (
+                <div className="text-center py-8 text-text-secondary opacity-50">
+                  <p className="text-sm">Section désactivée — aucun sous-traitant déclaré</p>
+                </div>
+              ) : (
+              <>
               <p className="text-sm text-text-secondary">Ces sous-traitants seront proposés automatiquement lors de la génération des DC4.</p>
               {(profile.sous_traitants || []).map((st, i) => (
                 <div key={i} className="border border-border rounded-xl p-4">
@@ -401,6 +429,8 @@ export default function ProfilPage() {
                   <Plus className="w-4 h-4" /> Ajouter
                 </button>
               </div>
+              </>
+              )}
             </div>
           )}
 
@@ -501,81 +531,45 @@ export default function ProfilPage() {
                   )}
                 </>
               )}
-            </div>
-          )}
 
-          {/* Onglet Documents */}
-          {activeTab === 'documents' && (
-            <div className="space-y-6">
-              <div className="bg-[#F5F5FF] border border-[#0000FF]/10 rounded-xl p-4">
-                <div className="flex items-start gap-3">
-                  <FileText className="w-5 h-5 text-[#0000FF] mt-0.5 shrink-0" />
-                  <div>
-                    <p className="text-sm font-medium text-[#0000FF]">Documents entreprise</p>
-                    <p className="text-xs text-gray-600 mt-1">
-                      Uploadez vos documents clés (plaquette commerciale, CV, dossier de capacités).
-                      Ils seront proposés automatiquement dans vos réponses aux AO. Format PDF uniquement, 10 Mo max.
-                    </p>
-                  </div>
+              {/* Documents entreprise (fusionné ici) */}
+              <hr className="border-border" />
+              <h3 className="text-sm font-semibold text-text-primary flex items-center gap-2"><FileText className="w-4 h-4 text-[#0000FF]" /> Documents entreprise</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="border border-border rounded-xl p-4">
+                  <h4 className="font-medium text-text-primary text-xs mb-1">Plaquette / CV entreprise</h4>
+                  <p className="text-[10px] text-text-secondary mb-3">Brochure de présentation</p>
+                  {(profile as any).cv_plaquette_url ? (
+                    <div className="flex items-center gap-2 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
+                      <FileText className="w-4 h-4 text-green-600 shrink-0" />
+                      <a href={(profile as any).cv_plaquette_url} target="_blank" rel="noopener noreferrer" className="text-xs text-green-600 hover:underline flex-1 truncate">Voir</a>
+                      <button onClick={() => update('cv_plaquette_url' as keyof Profile, null)} className="text-red-400 hover:text-red-600"><Trash2 className="w-3.5 h-3.5" /></button>
+                    </div>
+                  ) : (
+                    <label className="flex flex-col items-center gap-1 border-2 border-dashed border-gray-300 rounded-lg px-3 py-4 cursor-pointer hover:border-[#0000FF]/40 hover:bg-[#F5F5FF]/30 transition-colors">
+                      {uploading === 'cv_plaquette_url' ? <Loader2 className="w-6 h-6 animate-spin text-[#0000FF]" /> : <Upload className="w-6 h-6 text-gray-400" />}
+                      <span className="text-xs text-gray-500">PDF — 10 Mo max</span>
+                      <input type="file" accept=".pdf" className="hidden" onChange={e => handlePdfUpload(e, 'cv_plaquette_url')} disabled={uploading !== null} />
+                    </label>
+                  )}
                 </div>
-              </div>
-
-              {/* Plaquette / CV entreprise */}
-              <div className="border border-border rounded-xl p-5">
-                <h4 className="font-semibold text-text-primary text-sm mb-1">Plaquette commerciale / CV entreprise</h4>
-                <p className="text-xs text-text-secondary mb-4">Document de présentation de votre société (plaquette, brochure, CV d'entreprise)</p>
-                {(profile as any).cv_plaquette_url ? (
-                  <div className="flex items-center gap-3 bg-green-50 border border-green-200 rounded-lg px-4 py-3">
-                    <FileText className="w-5 h-5 text-green-600 shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-green-800">Document uploadé</p>
-                      <a href={(profile as any).cv_plaquette_url} target="_blank" rel="noopener noreferrer" className="text-xs text-green-600 hover:underline flex items-center gap-1 truncate">
-                        <ExternalLink className="w-3 h-3 shrink-0" /> Voir le document
-                      </a>
+                <div className="border border-border rounded-xl p-4">
+                  <h4 className="font-medium text-text-primary text-xs mb-1">Dossier de capacités</h4>
+                  <p className="text-[10px] text-text-secondary mb-3">Moyens techniques et humains (DC2)</p>
+                  {(profile as any).dossier_capacites_url ? (
+                    <div className="flex items-center gap-2 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
+                      <FileText className="w-4 h-4 text-green-600 shrink-0" />
+                      <a href={(profile as any).dossier_capacites_url} target="_blank" rel="noopener noreferrer" className="text-xs text-green-600 hover:underline flex-1 truncate">Voir</a>
+                      <button onClick={() => update('dossier_capacites_url' as keyof Profile, null)} className="text-red-400 hover:text-red-600"><Trash2 className="w-3.5 h-3.5" /></button>
                     </div>
-                    <button onClick={() => update('cv_plaquette_url' as keyof Profile, null)} className="text-red-400 hover:text-red-600"><Trash2 className="w-4 h-4" /></button>
-                  </div>
-                ) : (
-                  <label className="flex flex-col items-center gap-2 border-2 border-dashed border-gray-300 rounded-xl px-4 py-6 cursor-pointer hover:border-[#0000FF]/40 hover:bg-[#F5F5FF]/30 transition-colors">
-                    {uploading === 'cv_plaquette_url' ? (
-                      <Loader2 className="w-8 h-8 animate-spin text-[#0000FF]" />
-                    ) : (
-                      <Upload className="w-8 h-8 text-gray-400" />
-                    )}
-                    <span className="text-sm text-gray-600">Cliquez pour uploader un PDF</span>
-                    <span className="text-xs text-gray-400">PDF uniquement — 10 Mo max</span>
-                    <input type="file" accept=".pdf" className="hidden" onChange={e => handlePdfUpload(e, 'cv_plaquette_url')} disabled={uploading !== null} />
-                  </label>
-                )}
-              </div>
-
-              {/* Dossier de capacités */}
-              <div className="border border-border rounded-xl p-5">
-                <h4 className="font-semibold text-text-primary text-sm mb-1">Dossier de capacités techniques</h4>
-                <p className="text-xs text-text-secondary mb-4">Dossier détaillant vos moyens techniques, humains et vos références (souvent demandé dans les DC2)</p>
-                {(profile as any).dossier_capacites_url ? (
-                  <div className="flex items-center gap-3 bg-green-50 border border-green-200 rounded-lg px-4 py-3">
-                    <FileText className="w-5 h-5 text-green-600 shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-green-800">Document uploadé</p>
-                      <a href={(profile as any).dossier_capacites_url} target="_blank" rel="noopener noreferrer" className="text-xs text-green-600 hover:underline flex items-center gap-1 truncate">
-                        <ExternalLink className="w-3 h-3 shrink-0" /> Voir le document
-                      </a>
-                    </div>
-                    <button onClick={() => update('dossier_capacites_url' as keyof Profile, null)} className="text-red-400 hover:text-red-600"><Trash2 className="w-4 h-4" /></button>
-                  </div>
-                ) : (
-                  <label className="flex flex-col items-center gap-2 border-2 border-dashed border-gray-300 rounded-xl px-4 py-6 cursor-pointer hover:border-[#0000FF]/40 hover:bg-[#F5F5FF]/30 transition-colors">
-                    {uploading === 'dossier_capacites_url' ? (
-                      <Loader2 className="w-8 h-8 animate-spin text-[#0000FF]" />
-                    ) : (
-                      <Upload className="w-8 h-8 text-gray-400" />
-                    )}
-                    <span className="text-sm text-gray-600">Cliquez pour uploader un PDF</span>
-                    <span className="text-xs text-gray-400">PDF uniquement — 10 Mo max</span>
-                    <input type="file" accept=".pdf" className="hidden" onChange={e => handlePdfUpload(e, 'dossier_capacites_url')} disabled={uploading !== null} />
-                  </label>
-                )}
+                  ) : (
+                    <label className="flex flex-col items-center gap-1 border-2 border-dashed border-gray-300 rounded-lg px-3 py-4 cursor-pointer hover:border-[#0000FF]/40 hover:bg-[#F5F5FF]/30 transition-colors">
+                      {uploading === 'dossier_capacites_url' ? <Loader2 className="w-6 h-6 animate-spin text-[#0000FF]" /> : <Upload className="w-6 h-6 text-gray-400" />}
+                      <span className="text-xs text-gray-500">PDF — 10 Mo max</span>
+                      <input type="file" accept=".pdf" className="hidden" onChange={e => handlePdfUpload(e, 'dossier_capacites_url')} disabled={uploading !== null} />
+                    </label>
+                  )}
+                </div>
               </div>
             </div>
           )}
@@ -584,29 +578,76 @@ export default function ProfilPage() {
           {activeTab === 'positionnement' && (
             <div className="space-y-6">
               <div className="bg-[#F5F5FF] border border-[#0000FF]/10 rounded-xl p-4 mb-2">
-                <p className="text-sm text-[#0000FF] font-medium">Votre ADN, en quelques mots</p>
-                <p className="text-xs text-gray-600 mt-1">
-                  Ces textes seront automatiquement intégrés dans vos réponses aux AO pour personnaliser
-                  votre mémoire technique et votre note méthodologique.
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="text-sm text-[#0000FF] font-medium flex items-center gap-2"><Sparkles className="w-4 h-4" /> Votre ADN, en quelques mots</p>
+                    <p className="text-xs text-gray-600 mt-1">
+                      Ces textes alimentent le matching IA avec les appels d'offres et sont intégrés dans vos mémoires techniques.
+                      Plus ils sont précis, meilleurs sont les résultats.
+                    </p>
+                  </div>
+                  <button
+                    onClick={async () => {
+                      setDeepResearchLoading(true)
+                      try {
+                        const res = await fetch('/api/profil/deep-research', { method: 'POST' })
+                        if (!res.ok) throw new Error()
+                        const data = await res.json()
+                        // Proposer les résultats — l'utilisateur peut accepter ou ignorer chaque champ
+                        if (data.activite_metier && !profile.activite_metier?.trim()) update('activite_metier', data.activite_metier)
+                        if (data.positionnement) update('positionnement', data.positionnement)
+                        if (data.atouts_differenciants) update('atouts_differenciants' as keyof Profile, data.atouts_differenciants)
+                        if (data.methodologie_type) update('methodologie_type' as keyof Profile, data.methodologie_type)
+                        toast.success('Positionnement généré ! Vérifiez et ajustez les textes.')
+                      } catch {
+                        toast.error('Erreur lors de l\'analyse. Réessayez.')
+                      }
+                      setDeepResearchLoading(false)
+                    }}
+                    disabled={deepResearchLoading}
+                    className="flex items-center gap-2 bg-[#0000FF] hover:bg-[#0000CC] text-white rounded-lg px-4 py-2 text-xs font-medium transition-colors disabled:opacity-60 shrink-0"
+                  >
+                    {deepResearchLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />}
+                    {deepResearchLoading ? 'Analyse en cours...' : 'Deep Research IA'}
+                  </button>
+                </div>
+              </div>
+
+              {/* Activité métier (déplacé ici depuis Veille BOAMP) */}
+              <div>
+                <label className="block text-sm font-medium text-text-primary mb-1.5">
+                  Cœur de métier
+                </label>
+                <p className="text-xs text-text-secondary mb-2">
+                  Description précise de votre activité. Ne mentionnez QUE ce que vous faites réellement — c'est le texte principal pour le matching IA.
+                </p>
+                <textarea
+                  value={profile.activite_metier || ''}
+                  onChange={e => update('activite_metier', e.target.value)}
+                  rows={5}
+                  className="w-full border border-border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary resize-none"
+                  placeholder="Ex: Agence de communication éditoriale spécialisée dans la production de contenus (articles, livres blancs, vidéos) pour le secteur public. Expertise en stratégie de communication, création multimédia et production audiovisuelle."
+                />
+                <p className="text-xs text-text-secondary mt-1">
+                  {(profile.activite_metier || '').length} caractères — recommandé : 200 à 400 caractères
                 </p>
               </div>
 
               {/* Philosophie & valeurs */}
               <div>
                 <label className="block text-sm font-medium text-text-primary mb-1.5">
-                  Philosophie & valeurs de l'entreprise
+                  Philosophie & valeurs
                 </label>
                 <p className="text-xs text-text-secondary mb-2">
-                  Quelles sont les valeurs qui guident votre travail ? Votre vision, votre engagement qualité, votre approche du client ?
+                  Quelles sont les valeurs qui guident votre travail ? Votre vision, votre engagement qualité ?
                 </p>
                 <textarea
                   value={profile.positionnement || ''}
                   onChange={e => update('positionnement', e.target.value)}
-                  rows={6}
+                  rows={5}
                   className="w-full border border-border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary resize-none"
                   placeholder="Ex: Nous défendons une approche centrée sur la qualité et la proximité. Notre engagement : comprendre les besoins réels du terrain pour apporter des solutions durables et mesurables..."
                 />
-                <p className="text-xs text-text-secondary mt-1">{(profile.positionnement || '').length} caractères</p>
               </div>
 
               {/* Atouts différenciants */}
@@ -615,14 +656,14 @@ export default function ProfilPage() {
                   Atouts différenciants
                 </label>
                 <p className="text-xs text-text-secondary mb-2">
-                  Qu'est-ce qui vous distingue de vos concurrents ? Expertise rare, méthodologie propre, implantation géographique, ancienneté ?
+                  Qu'est-ce qui vous distingue de vos concurrents ? Expertise rare, méthodologie propre, implantation géographique ?
                 </p>
                 <textarea
                   value={(profile as any).atouts_differenciants || ''}
                   onChange={e => update('atouts_differenciants' as keyof Profile, e.target.value)}
-                  rows={5}
+                  rows={4}
                   className="w-full border border-border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary resize-none"
-                  placeholder="Ex: 15 ans d'expérience exclusive dans le secteur public, une équipe 100% senior, un réseau de partenaires locaux dans toute la France..."
+                  placeholder="Ex: 15 ans d'expérience exclusive dans le secteur public, une équipe 100% senior..."
                 />
               </div>
 
@@ -632,14 +673,14 @@ export default function ProfilPage() {
                   Méthodologie type
                 </label>
                 <p className="text-xs text-text-secondary mb-2">
-                  Décrivez les grandes étapes de votre approche projet. Cette trame sera proposée comme base pour les mémoires techniques.
+                  Les grandes étapes de votre approche projet. Cette trame sera proposée pour vos mémoires techniques.
                 </p>
                 <textarea
                   value={(profile as any).methodologie_type || ''}
                   onChange={e => update('methodologie_type' as keyof Profile, e.target.value)}
-                  rows={6}
+                  rows={5}
                   className="w-full border border-border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary resize-none"
-                  placeholder="Ex: 1) Phase de cadrage et audit des besoins — 2) Proposition stratégique et créative — 3) Production et itérations — 4) Livraison et suivi des résultats..."
+                  placeholder="Ex: 1) Phase de cadrage et audit — 2) Proposition stratégique — 3) Production et itérations — 4) Livraison et suivi..."
                 />
               </div>
             </div>
@@ -648,30 +689,6 @@ export default function ProfilPage() {
           {/* Onglet Veille BOAMP */}
           {activeTab === 'veille-boamp' && (
             <div className="space-y-8">
-              {/* Activité métier */}
-              <div>
-                <div className="flex items-center gap-2 mb-1">
-                  <Radar className="w-4 h-4 text-primary" />
-                  <label className="block text-sm font-medium text-text-primary">
-                    Description de votre activité métier
-                  </label>
-                </div>
-                <p className="text-xs text-text-secondary mb-2">
-                  Ce texte est utilisé par l'IA pour scorer la pertinence des annonces BOAMP. Plus il est précis, meilleurs sont les scores.
-                  Décrivez votre cœur de métier, vos spécialités, les types de marchés sur lesquels vous répondez habituellement.
-                </p>
-                <textarea
-                  value={profile.activite_metier || ''}
-                  onChange={e => update('activite_metier', e.target.value)}
-                  rows={6}
-                  className="w-full border border-border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary resize-none"
-                  placeholder="Ex: Agence de communication spécialisée en audiovisuel institutionnel et production vidéo pour le secteur public. Nous réalisons des films institutionnels, campagnes de sensibilisation, contenus digitaux et événementiels pour des collectivités, ministères et établissements publics. Notre expertise couvre également la stratégie éditoriale, la création graphique et la communication digitale."
-                />
-                <p className="text-xs text-text-secondary mt-1">
-                  {(profile.activite_metier || '').length} caractères — recommandé : 200 à 600 caractères
-                </p>
-              </div>
-
               {/* Type de marché */}
               <div>
                 <div className="flex items-center gap-2 mb-1">
