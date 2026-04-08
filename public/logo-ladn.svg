@@ -1,6 +1,19 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 80" fill="none">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 80" fill="none">
   <!-- L'ADN -->
-  <text x="4" y="44" font-family="Georgia, 'Times New Roman', serif" font-weight="700" font-size="40" fill="#0D1D4E" letter-spacing="-1">L&apos;ADN</text>
-  <!-- Intelligence -->
-  <text x="5" y="68" font-family="Georgia, 'Times New Roman', serif" font-style="italic" font-weight="400" font-size="20" fill="#0D1D4E" letter-spacing="0.5">Intelligence</text>
+  <text x="4" y="42" font-family="Georgia, 'Times New Roman', serif" font-weight="700" font-size="38" fill="#0000FF" letter-spacing="-1">L&apos;ADN</text>
+  <!-- DATA circles -->
+  <g transform="translate(4, 52)">
+    <!-- D -->
+    <circle cx="12" cy="12" r="11" stroke="#0000FF" stroke-width="1.5" fill="none"/>
+    <text x="12" y="16.5" font-family="'Inter', Arial, sans-serif" font-weight="600" font-size="13" fill="#0000FF" text-anchor="middle">D</text>
+    <!-- A -->
+    <circle cx="40" cy="12" r="11" stroke="#0000FF" stroke-width="1.5" fill="none"/>
+    <text x="40" y="16.5" font-family="'Inter', Arial, sans-serif" font-weight="600" font-size="13" fill="#0000FF" text-anchor="middle">A</text>
+    <!-- T -->
+    <circle cx="68" cy="12" r="11" stroke="#0000FF" stroke-width="1.5" fill="none"/>
+    <text x="68" y="16.5" font-family="'Inter', Arial, sans-serif" font-weight="600" font-size="13" fill="#0000FF" text-anchor="middle">T</text>
+    <!-- A -->
+    <circle cx="96" cy="12" r="11" stroke="#0000FF" stroke-width="1.5" fill="none"/>
+    <text x="96" y="16.5" font-family="'Inter', Arial, sans-serif" font-weight="600" font-size="13" fill="#0000FF" text-anchor="middle">A</text>
+  </g>
 </svg>

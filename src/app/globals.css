@@ -6,43 +6,43 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  /* L'ADN Intelligence — Navy palette */
-  --primary: #0D1D4E;
-  --primary-hover: #0a1640;
-  --primary-light: #E8EDF8;
-  --secondary: #1A6B4A;
+  /* L'ADN DATA — Blue palette */
+  --primary: #0000FF;
+  --primary-hover: #0000CC;
+  --primary-light: #E6E6FF;
+  --secondary: #3333FF;
   --background: #FFFFFF;
-  --surface: #F5F6FA;
-  --border: #E2E6F0;
-  --text-primary: #0D1D4E;
+  --surface: #F5F5FF;
+  --border: #E0E0F0;
+  --text-primary: #111827;
   --text-secondary: #6B7280;
   --danger: #DC2626;
   --warning: #F59E0B;
-  --radius: 0.625rem;
+  --radius: 0.75rem;
 
   /* shadcn compatibility */
-  --foreground: #0D1D4E;
+  --foreground: #111827;
   --card: #FFFFFF;
-  --card-foreground: #0D1D4E;
+  --card-foreground: #111827;
   --popover: #FFFFFF;
-  --popover-foreground: #0D1D4E;
+  --popover-foreground: #111827;
   --primary-foreground: #FFFFFF;
   --secondary-foreground: #FFFFFF;
-  --muted: #F5F6FA;
+  --muted: #F5F5FF;
   --muted-foreground: #6B7280;
-  --accent: #E8EDF8;
-  --accent-foreground: #0D1D4E;
+  --accent: #E6E6FF;
+  --accent-foreground: #0000FF;
   --destructive: #DC2626;
-  --input: #E2E6F0;
-  --ring: #0D1D4E;
+  --input: #E0E0F0;
+  --ring: #0000FF;
   --sidebar: #FFFFFF;
-  --sidebar-foreground: #0D1D4E;
-  --sidebar-primary: #0D1D4E;
+  --sidebar-foreground: #111827;
+  --sidebar-primary: #0000FF;
   --sidebar-primary-foreground: #FFFFFF;
-  --sidebar-accent: #E8EDF8;
-  --sidebar-accent-foreground: #0D1D4E;
-  --sidebar-border: #E2E6F0;
-  --sidebar-ring: #0D1D4E;
+  --sidebar-accent: #E6E6FF;
+  --sidebar-accent-foreground: #0000FF;
+  --sidebar-border: #E0E0F0;
+  --sidebar-ring: #0000FF;
 }
 
 @theme inline {

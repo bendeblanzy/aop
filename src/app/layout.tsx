@@ -6,8 +6,8 @@ import { Toaster } from "@/components/ui/sonner"
 const inter = Inter({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
-  title: "AOP — Réponse aux Appels d'Offres Publics",
-  description: "Automatisez vos réponses aux appels d'offres publics avec l'IA",
+  title: "L'ADN DATA — Veille & Réponse aux Appels d'Offres Publics",
+  description: "Trouvez et répondez aux appels d'offres publics avec l'IA — L'ADN DATA",
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

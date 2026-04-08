@@ -75,7 +75,7 @@ export default function RegisterPage() {
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <div className="flex justify-center mb-6">
-            <Image src="/logo-ladn.svg" alt="L'ADN Intelligence" width={180} height={64} priority />
+            <Image src="/logo-ladn.svg" alt="L'ADN DATA" width={180} height={64} priority />
           </div>
           <h1 className="text-2xl font-bold text-text-primary">Créer un compte</h1>
           <p className="text-text-secondary mt-1">Commencez à répondre aux appels d&apos;offres avec l&apos;IA</p>

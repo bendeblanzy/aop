@@ -208,22 +208,22 @@ export default function DashboardPage() {
           {
             label: 'Total AO',  value: stats.total,   icon: FileText,
             href: '/appels-offres',
-            bg: 'bg-[#E8EDF8]', iconColor: 'text-[#0D1D4E]', textColor: 'text-[#0D1D4E]',
+            bg: 'bg-[#E6E6FF]', iconColor: 'text-[#0000FF]', textColor: 'text-[#0000FF]',
           },
           {
             label: 'Mes favoris', value: favorites.size, icon: Star,
             href: '/veille?tab=favorites',
-            bg: 'bg-amber-50', iconColor: 'text-amber-500', textColor: 'text-amber-900',
+            bg: 'bg-[#F0F0FF]', iconColor: 'text-[#0000FF]', textColor: 'text-[#111827]',
           },
           {
             label: 'En cours',  value: stats.enCours, icon: Clock,
             href: '/appels-offres?statut=en_cours',
-            bg: 'bg-sky-50', iconColor: 'text-sky-500', textColor: 'text-sky-900',
+            bg: 'bg-[#F0F0FF]', iconColor: 'text-[#3333FF]', textColor: 'text-[#111827]',
           },
           {
             label: 'Générés & Soumis', value: stats.generes + stats.soumis, icon: CheckCircle,
             href: '/appels-offres?statut=genere',
-            bg: 'bg-emerald-50', iconColor: 'text-emerald-500', textColor: 'text-emerald-900',
+            bg: 'bg-[#E6E6FF]', iconColor: 'text-[#0000FF]', textColor: 'text-[#0000FF]',
           },
         ].map((stat) => (
           <Link

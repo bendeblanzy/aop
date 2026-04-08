@@ -56,7 +56,7 @@ export function Sidebar() {
         <Link href="/dashboard">
           <Image
             src="/logo-ladn.svg"
-            alt="L'ADN Intelligence"
+            alt="L'ADN DATA"
             width={160}
             height={56}
             priority
