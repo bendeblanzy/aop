@@ -54,6 +54,10 @@ export interface Profile {
   declaration_a_jour_social: boolean
   sous_traitants?: SousTraitant[]
   positionnement?: string
+  atouts_differenciants?: string
+  methodologie_type?: string
+  cv_plaquette_url?: string
+  dossier_capacites_url?: string
   // Veille BOAMP
   boamp_codes?: string[]
   activite_metier?: string

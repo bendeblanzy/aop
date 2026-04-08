@@ -1,10 +1,10 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useOrganization } from '@/context/OrganizationContext'
-import { Profile } from '@/lib/types'
+import { Profile, Reference } from '@/lib/types'
 import { calculateProfileCompletion, cn } from '@/lib/utils'
-import { Loader2, Save, Plus, Trash2, Building2, Radar } from 'lucide-react'
+import { Loader2, Save, Plus, Trash2, Building2, Radar, Award, Upload, FileText, X, ExternalLink } from 'lucide-react'
 import { toast } from 'sonner'
 import { BOAMP_CODES, BOAMP_CATEGORIES } from '@/lib/boamp/codes'
 
@@ -29,6 +29,13 @@ export default function ProfilPage() {
   const [saving, setSaving] = useState(false)
   const [newCert, setNewCert] = useState('')
   const [newST, setNewST] = useState({ nom: '', siret: '', adresse: '', specialite: '' })
+  // Références
+  const [references, setReferences] = useState<Reference[]>([])
+  const [refsLoading, setRefsLoading] = useState(false)
+  const [editingRef, setEditingRef] = useState<Partial<Reference> | null>(null)
+  const [savingRef, setSavingRef] = useState(false)
+  // PDF uploads
+  const [uploading, setUploading] = useState<string | null>(null)
   const supabase = createClient()
 
   async function load() {
@@ -42,13 +49,93 @@ export default function ProfilPage() {
     setLoading(false)
   }
 
+  const loadReferences = useCallback(async () => {
+    setRefsLoading(true)
+    try {
+      const res = await fetch('/api/references')
+      if (res.ok) {
+        const json = await res.json()
+        setReferences(json.data?.items || [])
+      }
+    } catch (e) {
+      console.error('[profil] refs load error:', e)
+    }
+    setRefsLoading(false)
+  }, [])
+
+  async function saveReference() {
+    if (!editingRef?.titre || !editingRef?.client) {
+      toast.error('Le titre et le client sont requis')
+      return
+    }
+    setSavingRef(true)
+    const method = editingRef.id ? 'PUT' : 'POST'
+    const body = editingRef.id
+      ? editingRef
+      : { titre: editingRef.titre, client: editingRef.client, annee: editingRef.annee, montant: editingRef.montant, description: editingRef.description, domaine: editingRef.domaine, lot: editingRef.lot, attestation_bonne_execution: editingRef.attestation_bonne_execution || false, contact_reference: editingRef.contact_reference, telephone_reference: editingRef.telephone_reference }
+    try {
+      const res = await fetch('/api/references', { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+      if (res.ok) {
+        toast.success(editingRef.id ? 'Référence mise à jour' : 'Référence ajoutée')
+        setEditingRef(null)
+        loadReferences()
+      } else {
+        const err = await res.json()
+        toast.error(err.error || 'Erreur lors de la sauvegarde')
+      }
+    } catch (e) {
+      toast.error('Erreur réseau')
+    }
+    setSavingRef(false)
+  }
+
+  async function deleteReference(id: string) {
+    if (!confirm('Supprimer cette référence ?')) return
+    try {
+      const res = await fetch('/api/references', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) })
+      if (res.ok) {
+        toast.success('Référence supprimée')
+        loadReferences()
+      }
+    } catch (e) {
+      toast.error('Erreur réseau')
+    }
+  }
+
+  async function handlePdfUpload(e: React.ChangeEvent<HTMLInputElement>, field: 'cv_plaquette_url' | 'dossier_capacites_url') {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (file.type !== 'application/pdf') {
+      toast.error('Seuls les fichiers PDF sont acceptés')
+      return
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error('Le fichier ne doit pas dépasser 10 Mo')
+      return
+    }
+    setUploading(field)
+    const ext = file.name.split('.').pop()
+    const path = `${orgId}/${field}_${Date.now()}.${ext}`
+    const { error } = await supabase.storage.from('documents').upload(path, file, { upsert: true })
+    if (error) {
+      toast.error(`Erreur upload : ${error.message}`)
+      setUploading(null)
+      return
+    }
+    const { data: urlData } = supabase.storage.from('documents').getPublicUrl(path)
+    update(field as keyof Profile, urlData.publicUrl)
+    toast.success('Fichier uploadé !')
+    setUploading(null)
+  }
+
   useEffect(() => {
     if (orgId) {
       load()
+      loadReferences()
     } else if (!orgLoading) {
       setLoading(false)
     }
-  }, [orgId, orgLoading])
+  }, [orgId, orgLoading, loadReferences])
 
   async function save() {
     if (!orgId) {
@@ -92,6 +179,8 @@ export default function ProfilPage() {
     { id: 'assurances', label: 'Assurances' },
     { id: 'declarations', label: 'Déclarations' },
     { id: 'sous-traitants', label: 'Sous-traitants' },
+    { id: 'references', label: 'Références' },
+    { id: 'documents', label: 'Documents' },
     { id: 'positionnement', label: 'Positionnement' },
     { id: 'veille-boamp', label: '📡 Veille BOAMP' },
   ]
@@ -313,20 +402,244 @@ export default function ProfilPage() {
             </div>
           )}
 
+          {/* Onglet Références */}
+          {activeTab === 'references' && (
+            <div className="space-y-6">
+              <div className="bg-[#F5F5FF] border border-[#0000FF]/10 rounded-xl p-4">
+                <div className="flex items-start gap-3">
+                  <Award className="w-5 h-5 text-[#0000FF] mt-0.5 shrink-0" />
+                  <div>
+                    <p className="text-sm font-medium text-[#0000FF]">Références & expériences similaires</p>
+                    <p className="text-xs text-gray-600 mt-1">
+                      Listez vos marchés publics ou privés déjà réalisés. Ces références seront automatiquement proposées
+                      dans vos réponses aux AO pour démontrer votre expérience.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {refsLoading ? (
+                <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-[#0000FF]" /></div>
+              ) : (
+                <>
+                  {/* Liste des références existantes */}
+                  {references.map(ref => (
+                    <div key={ref.id} className="border border-border rounded-xl p-4 hover:border-[#0000FF]/20 transition-colors">
+                      <div className="flex justify-between items-start mb-3">
+                        <div className="min-w-0">
+                          <h4 className="font-semibold text-text-primary text-sm truncate">{ref.titre}</h4>
+                          <p className="text-xs text-text-secondary mt-0.5">{ref.client}{ref.annee ? ` — ${ref.annee}` : ''}{ref.montant ? ` — ${ref.montant.toLocaleString('fr-FR')} €` : ''}</p>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0 ml-3">
+                          <button onClick={() => setEditingRef({ ...ref })} className="text-[#0000FF] hover:text-[#0000CC] text-xs font-medium">Modifier</button>
+                          <button onClick={() => deleteReference(ref.id)} className="text-danger hover:text-red-700"><Trash2 className="w-4 h-4" /></button>
+                        </div>
+                      </div>
+                      {ref.description && <p className="text-xs text-text-secondary line-clamp-2">{ref.description}</p>}
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        {ref.domaine && <span className="text-[10px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">{ref.domaine}</span>}
+                        {ref.attestation_bonne_execution && <span className="text-[10px] bg-green-50 text-green-700 px-2 py-0.5 rounded-full">✓ Attestation</span>}
+                        {ref.contact_reference && <span className="text-[10px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">Contact : {ref.contact_reference}</span>}
+                      </div>
+                    </div>
+                  ))}
+
+                  {references.length === 0 && !editingRef && (
+                    <div className="text-center py-8 text-text-secondary">
+                      <Award className="w-10 h-10 mx-auto mb-3 text-gray-300" />
+                      <p className="text-sm">Aucune référence ajoutée</p>
+                      <p className="text-xs mt-1">Ajoutez vos réalisations pour enrichir vos réponses aux AO</p>
+                    </div>
+                  )}
+
+                  {/* Formulaire d'ajout/modification */}
+                  {editingRef ? (
+                    <div className="border-2 border-[#0000FF]/20 rounded-xl p-5 bg-[#F5F5FF]/30">
+                      <div className="flex justify-between items-center mb-4">
+                        <h4 className="font-semibold text-text-primary text-sm">{editingRef.id ? 'Modifier la référence' : 'Nouvelle référence'}</h4>
+                        <button onClick={() => setEditingRef(null)} className="text-gray-400 hover:text-gray-600"><X className="w-4 h-4" /></button>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="col-span-2">
+                          <FormField label="Titre du marché / mission *" value={editingRef.titre || ''} onChange={v => setEditingRef(r => r ? { ...r, titre: v } : r)} placeholder="Ex: Campagne de communication santé publique" />
+                        </div>
+                        <FormField label="Client / Donneur d'ordre *" value={editingRef.client || ''} onChange={v => setEditingRef(r => r ? { ...r, client: v } : r)} placeholder="Ex: ARS Île-de-France" />
+                        <FormField label="Domaine" value={editingRef.domaine || ''} onChange={v => setEditingRef(r => r ? { ...r, domaine: v } : r)} placeholder="Ex: Communication, IT, BTP..." />
+                        <FormField label="Année" type="number" value={editingRef.annee?.toString() || ''} onChange={v => setEditingRef(r => r ? { ...r, annee: parseInt(v) || undefined } : r)} placeholder="2024" />
+                        <FormField label="Montant (€ HT)" type="number" value={editingRef.montant?.toString() || ''} onChange={v => setEditingRef(r => r ? { ...r, montant: parseFloat(v) || undefined } : r)} placeholder="50000" />
+                        <FormField label="Lot (si applicable)" value={editingRef.lot || ''} onChange={v => setEditingRef(r => r ? { ...r, lot: v } : r)} placeholder="Lot 2 - Vidéo" />
+                        <FormField label="Contact de référence" value={editingRef.contact_reference || ''} onChange={v => setEditingRef(r => r ? { ...r, contact_reference: v } : r)} placeholder="Nom du contact" />
+                        <FormField label="Téléphone du contact" value={editingRef.telephone_reference || ''} onChange={v => setEditingRef(r => r ? { ...r, telephone_reference: v } : r)} placeholder="01 23 45 67 89" />
+                        <div className="col-span-2">
+                          <label className="block text-sm font-medium text-text-primary mb-1.5">Description de la mission</label>
+                          <textarea value={editingRef.description || ''} onChange={e => setEditingRef(r => r ? { ...r, description: e.target.value } : r)} rows={3}
+                            className="w-full border border-border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary resize-none"
+                            placeholder="Décrivez les prestations réalisées, le contexte, les résultats..." />
+                        </div>
+                        <div className="col-span-2">
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input type="checkbox" checked={editingRef.attestation_bonne_execution || false} onChange={e => setEditingRef(r => r ? { ...r, attestation_bonne_execution: e.target.checked } : r)} className="accent-primary" />
+                            <span className="text-sm text-text-primary">Attestation de bonne exécution disponible</span>
+                          </label>
+                        </div>
+                      </div>
+                      <div className="flex justify-end gap-3 mt-4">
+                        <button onClick={() => setEditingRef(null)} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">Annuler</button>
+                        <button onClick={saveReference} disabled={savingRef} className="flex items-center gap-2 bg-[#0000FF] text-white rounded-lg px-4 py-2 text-sm font-medium hover:bg-[#0000CC] disabled:opacity-60">
+                          {savingRef ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                          {editingRef.id ? 'Mettre à jour' : 'Ajouter'}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button onClick={() => setEditingRef({ attestation_bonne_execution: false })}
+                      className="flex items-center gap-2 text-[#0000FF] text-sm font-medium hover:text-[#0000CC] border-2 border-dashed border-[#0000FF]/20 rounded-xl px-4 py-3 w-full justify-center hover:border-[#0000FF]/40 transition-colors">
+                      <Plus className="w-4 h-4" /> Ajouter une référence
+                    </button>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+
+          {/* Onglet Documents */}
+          {activeTab === 'documents' && (
+            <div className="space-y-6">
+              <div className="bg-[#F5F5FF] border border-[#0000FF]/10 rounded-xl p-4">
+                <div className="flex items-start gap-3">
+                  <FileText className="w-5 h-5 text-[#0000FF] mt-0.5 shrink-0" />
+                  <div>
+                    <p className="text-sm font-medium text-[#0000FF]">Documents entreprise</p>
+                    <p className="text-xs text-gray-600 mt-1">
+                      Uploadez vos documents clés (plaquette commerciale, CV, dossier de capacités).
+                      Ils seront proposés automatiquement dans vos réponses aux AO. Format PDF uniquement, 10 Mo max.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Plaquette / CV entreprise */}
+              <div className="border border-border rounded-xl p-5">
+                <h4 className="font-semibold text-text-primary text-sm mb-1">Plaquette commerciale / CV entreprise</h4>
+                <p className="text-xs text-text-secondary mb-4">Document de présentation de votre société (plaquette, brochure, CV d'entreprise)</p>
+                {(profile as any).cv_plaquette_url ? (
+                  <div className="flex items-center gap-3 bg-green-50 border border-green-200 rounded-lg px-4 py-3">
+                    <FileText className="w-5 h-5 text-green-600 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-green-800">Document uploadé</p>
+                      <a href={(profile as any).cv_plaquette_url} target="_blank" rel="noopener noreferrer" className="text-xs text-green-600 hover:underline flex items-center gap-1 truncate">
+                        <ExternalLink className="w-3 h-3 shrink-0" /> Voir le document
+                      </a>
+                    </div>
+                    <button onClick={() => update('cv_plaquette_url' as keyof Profile, null)} className="text-red-400 hover:text-red-600"><Trash2 className="w-4 h-4" /></button>
+                  </div>
+                ) : (
+                  <label className="flex flex-col items-center gap-2 border-2 border-dashed border-gray-300 rounded-xl px-4 py-6 cursor-pointer hover:border-[#0000FF]/40 hover:bg-[#F5F5FF]/30 transition-colors">
+                    {uploading === 'cv_plaquette_url' ? (
+                      <Loader2 className="w-8 h-8 animate-spin text-[#0000FF]" />
+                    ) : (
+                      <Upload className="w-8 h-8 text-gray-400" />
+                    )}
+                    <span className="text-sm text-gray-600">Cliquez pour uploader un PDF</span>
+                    <span className="text-xs text-gray-400">PDF uniquement — 10 Mo max</span>
+                    <input type="file" accept=".pdf" className="hidden" onChange={e => handlePdfUpload(e, 'cv_plaquette_url')} disabled={uploading !== null} />
+                  </label>
+                )}
+              </div>
+
+              {/* Dossier de capacités */}
+              <div className="border border-border rounded-xl p-5">
+                <h4 className="font-semibold text-text-primary text-sm mb-1">Dossier de capacités techniques</h4>
+                <p className="text-xs text-text-secondary mb-4">Dossier détaillant vos moyens techniques, humains et vos références (souvent demandé dans les DC2)</p>
+                {(profile as any).dossier_capacites_url ? (
+                  <div className="flex items-center gap-3 bg-green-50 border border-green-200 rounded-lg px-4 py-3">
+                    <FileText className="w-5 h-5 text-green-600 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-green-800">Document uploadé</p>
+                      <a href={(profile as any).dossier_capacites_url} target="_blank" rel="noopener noreferrer" className="text-xs text-green-600 hover:underline flex items-center gap-1 truncate">
+                        <ExternalLink className="w-3 h-3 shrink-0" /> Voir le document
+                      </a>
+                    </div>
+                    <button onClick={() => update('dossier_capacites_url' as keyof Profile, null)} className="text-red-400 hover:text-red-600"><Trash2 className="w-4 h-4" /></button>
+                  </div>
+                ) : (
+                  <label className="flex flex-col items-center gap-2 border-2 border-dashed border-gray-300 rounded-xl px-4 py-6 cursor-pointer hover:border-[#0000FF]/40 hover:bg-[#F5F5FF]/30 transition-colors">
+                    {uploading === 'dossier_capacites_url' ? (
+                      <Loader2 className="w-8 h-8 animate-spin text-[#0000FF]" />
+                    ) : (
+                      <Upload className="w-8 h-8 text-gray-400" />
+                    )}
+                    <span className="text-sm text-gray-600">Cliquez pour uploader un PDF</span>
+                    <span className="text-xs text-gray-400">PDF uniquement — 10 Mo max</span>
+                    <input type="file" accept=".pdf" className="hidden" onChange={e => handlePdfUpload(e, 'dossier_capacites_url')} disabled={uploading !== null} />
+                  </label>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Onglet Positionnement */}
           {activeTab === 'positionnement' && (
-            <div>
-              <p className="text-sm text-text-secondary mb-3">
-                Décrivez la philosophie, les valeurs et le positionnement stratégique de votre organisation.
-                Ces informations seront automatiquement intégrées dans vos réponses aux AOP pour personnaliser votre approche.
-              </p>
-              <textarea
-                value={profile.positionnement || ''}
-                onChange={e => update('positionnement', e.target.value)}
-                rows={12}
-                className="w-full border border-border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary resize-none"
-                placeholder="Ex: Notre cabinet est spécialisé dans la communication santé depuis 15 ans. Nous défendons une approche centrée sur le patient, avec une expertise particulière dans les campagnes de prévention..."
-              />
+            <div className="space-y-6">
+              <div className="bg-[#F5F5FF] border border-[#0000FF]/10 rounded-xl p-4 mb-2">
+                <p className="text-sm text-[#0000FF] font-medium">Votre ADN, en quelques mots</p>
+                <p className="text-xs text-gray-600 mt-1">
+                  Ces textes seront automatiquement intégrés dans vos réponses aux AO pour personnaliser
+                  votre mémoire technique et votre note méthodologique.
+                </p>
+              </div>
+
+              {/* Philosophie & valeurs */}
+              <div>
+                <label className="block text-sm font-medium text-text-primary mb-1.5">
+                  Philosophie & valeurs de l'entreprise
+                </label>
+                <p className="text-xs text-text-secondary mb-2">
+                  Quelles sont les valeurs qui guident votre travail ? Votre vision, votre engagement qualité, votre approche du client ?
+                </p>
+                <textarea
+                  value={profile.positionnement || ''}
+                  onChange={e => update('positionnement', e.target.value)}
+                  rows={6}
+                  className="w-full border border-border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary resize-none"
+                  placeholder="Ex: Nous défendons une approche centrée sur la qualité et la proximité. Notre engagement : comprendre les besoins réels du terrain pour apporter des solutions durables et mesurables..."
+                />
+                <p className="text-xs text-text-secondary mt-1">{(profile.positionnement || '').length} caractères</p>
+              </div>
+
+              {/* Atouts différenciants */}
+              <div>
+                <label className="block text-sm font-medium text-text-primary mb-1.5">
+                  Atouts différenciants
+                </label>
+                <p className="text-xs text-text-secondary mb-2">
+                  Qu'est-ce qui vous distingue de vos concurrents ? Expertise rare, méthodologie propre, implantation géographique, ancienneté ?
+                </p>
+                <textarea
+                  value={(profile as any).atouts_differenciants || ''}
+                  onChange={e => update('atouts_differenciants' as keyof Profile, e.target.value)}
+                  rows={5}
+                  className="w-full border border-border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary resize-none"
+                  placeholder="Ex: 15 ans d'expérience exclusive dans le secteur public, une équipe 100% senior, un réseau de partenaires locaux dans toute la France..."
+                />
+              </div>
+
+              {/* Méthodologie type */}
+              <div>
+                <label className="block text-sm font-medium text-text-primary mb-1.5">
+                  Méthodologie type
+                </label>
+                <p className="text-xs text-text-secondary mb-2">
+                  Décrivez les grandes étapes de votre approche projet. Cette trame sera proposée comme base pour les mémoires techniques.
+                </p>
+                <textarea
+                  value={(profile as any).methodologie_type || ''}
+                  onChange={e => update('methodologie_type' as keyof Profile, e.target.value)}
+                  rows={6}
+                  className="w-full border border-border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary resize-none"
+                  placeholder="Ex: 1) Phase de cadrage et audit des besoins — 2) Proposition stratégique et créative — 3) Production et itérations — 4) Livraison et suivi des résultats..."
+                />
+              </div>
             </div>
           )}
 
