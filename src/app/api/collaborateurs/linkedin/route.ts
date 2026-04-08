@@ -33,22 +33,22 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    // Appel synchrone Apify — run + attente résultat
-    const actorId = 'curious_coder~linkedin-profile-scraper'
-    const runUrl = `https://api.apify.com/v2/acts/${actorId}/run-sync-get-dataset-items?token=${APIFY_TOKEN}`
+    // Appel synchrone Apify — dev_fusion (No Cookies required)
+    const actorId = 'dev_fusion~Linkedin-Profile-Scraper'
+    const runUrl = `https://api.apify.com/v2/acts/${actorId}/run-sync-get-dataset-items?token=${APIFY_TOKEN}&timeout=60`
 
     const res = await fetch(runUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        urls: [linkedinUrl],
+        profileUrls: [linkedinUrl],
       }),
     })
 
     if (!res.ok) {
       const errText = await res.text()
       console.error('[linkedin] Apify error:', res.status, errText)
-      return NextResponse.json({ error: 'Erreur Apify' }, { status: 502 })
+      return NextResponse.json({ error: 'Erreur Apify : ' + (res.status === 402 ? 'crédit Apify insuffisant' : 'profil inaccessible') }, { status: 502 })
     }
 
     const data = await res.json()
@@ -58,29 +58,33 @@ export async function POST(request: NextRequest) {
 
     const p = data[0]
 
-    // Extraire les champs utiles
-    const firstName = p.firstName || p.first_name || ''
-    const lastName = p.lastName || p.last_name || ''
-    const headline = p.headline || p.title || ''
-    const summary = p.summary || p.about || ''
+    // Extraire les champs (format dev_fusion)
+    const firstName = p.firstName || ''
+    const lastName = p.lastName || ''
+    const headline = p.headline || ''
+    const summary = p.about || ''
 
     // Expériences → poste actuel + années d'expérience
-    const experiences = p.experiences || p.experience || p.positions || []
-    const currentPosition = experiences.find((e: any) => e.current || !e.end || !e.endDate) || experiences[0]
-    const poste = currentPosition?.title || headline || ''
-    const company = currentPosition?.company || currentPosition?.companyName || ''
+    const experiences = p.experiences || []
+    const currentPosition = experiences.find((e: any) => e.jobStillWorking) || experiences[0]
+    const poste = currentPosition?.title || p.jobTitle || ''
+    const company = currentPosition?.companyName || p.companyName || ''
 
     // Calculer années d'expérience totales
+    const currentYear = new Date().getFullYear()
     let totalYears = 0
     for (const exp of experiences) {
-      const start = exp.startYear || exp.start?.year
-      const end = exp.endYear || exp.end?.year || new Date().getFullYear()
-      if (start) totalYears += (end - start)
+      const startYear = parseInt(exp.jobStartedOn)
+      const endYear = exp.jobEndedOn ? parseInt(exp.jobEndedOn) : currentYear
+      if (startYear) totalYears += (endYear - startYear)
     }
 
-    // Compétences
-    const skills = p.skills || []
-    const competences = skills.map((s: any) => typeof s === 'string' ? s : s.name || s.skill || '').filter(Boolean).slice(0, 15)
+    // Compétences (topSkillsByEndorsements ou skills)
+    const skills = p.topSkillsByEndorsements || p.skills || []
+    const competences = (Array.isArray(skills) ? skills : [])
+      .map((s: any) => typeof s === 'string' ? s : s.name || '')
+      .filter(Boolean)
+      .slice(0, 15)
 
     // Formation / diplômes
     const education = p.education || p.educations || []
