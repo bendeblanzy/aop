@@ -4,9 +4,9 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname, useSearchParams } from 'next/navigation'
 import {
-  LayoutDashboard, Building2, BookMarked, Users,
-  FileText, Settings, LogOut, Radar,
-  Menu, X, Star, FolderOpen,
+  LayoutDashboard, Building2, Users,
+  Settings, LogOut, Search,
+  Menu, X, Star, FolderOpen, FileEdit, Lock,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
@@ -18,18 +18,27 @@ interface NavItem {
   icon: React.ComponentType<{ className?: string }>
   exact?: boolean
   activeWhen?: (pathname: string, search: string) => boolean
+  disabled?: boolean
+  badge?: string
+  section?: 'main' | 'account' | 'admin'
 }
 
 const navigation: NavItem[] = [
-  { name: 'Tableau de bord', href: '/dashboard', icon: LayoutDashboard },
-  { name: 'Veille marchés', href: '/veille', icon: Radar, exact: true },
-  { name: 'Mes favoris', href: '/veille?tab=favorites', icon: Star, activeWhen: (p, s) => p === '/veille' && s.includes('tab=favorites') },
-  { name: "Appels d'offres", href: '/appels-offres', icon: FileText },
-  { name: 'Mon profil', href: '/profil', icon: Building2 },
-  { name: 'Références', href: '/references', icon: BookMarked },
-  { name: 'Équipe', href: '/equipe', icon: Users },
-  { name: 'Paramètres', href: '/parametres', icon: Settings },
-  { name: 'Gestion DCE', href: '/admin/dce', icon: FolderOpen },
+  // ── Veille & Recherche ──
+  { name: 'Tableau de bord', href: '/dashboard', icon: LayoutDashboard, section: 'main' },
+  { name: 'Recherche', href: '/veille', icon: Search, exact: true, section: 'main' },
+  { name: 'Favoris', href: '/veille?tab=favorites', icon: Star, activeWhen: (p, s) => p === '/veille' && s.includes('tab=favorites'), section: 'main' },
+  // ── Réponse AO (grisé) ──
+  { name: 'Mes réponses', href: '#', icon: FileEdit, disabled: true, badge: 'Bientôt', section: 'main' },
+  // ── Compte ──
+  { name: 'Mon profil', href: '/profil', icon: Building2, section: 'account' },
+  { name: 'Mon équipe', href: '/equipe', icon: Users, section: 'account' },
+  { name: 'Paramètres', href: '/parametres', icon: Settings, section: 'account' },
+]
+
+// Admin items (shown separately)
+const adminNavigation: NavItem[] = [
+  { name: 'Gestion DCE', href: '/admin/dce', icon: FolderOpen, section: 'admin' },
 ]
 
 export function Sidebar() {
@@ -38,7 +47,6 @@ export function Sidebar() {
   const router = useRouter()
   const [mobileOpen, setMobileOpen] = useState(false)
 
-  // Fermer le menu mobile lors d'un changement de route
   useEffect(() => {
     setMobileOpen(false)
   }, [pathname])
@@ -49,60 +57,110 @@ export function Sidebar() {
     router.push('/auth/login')
   }
 
+  function renderNavItem(item: NavItem) {
+    const searchString = searchParams.toString()
+    const isActive = item.activeWhen
+      ? item.activeWhen(pathname, searchString)
+      : item.exact
+        ? pathname === item.href
+        : pathname === item.href || pathname.startsWith(item.href + '/')
+
+    if (item.disabled) {
+      return (
+        <div
+          key={item.name}
+          className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-gray-400 cursor-not-allowed"
+        >
+          <item.icon className="w-4 h-4 shrink-0 text-gray-300" />
+          <span className="flex-1">{item.name}</span>
+          {item.badge && (
+            <span className="text-[10px] font-semibold bg-gray-100 text-gray-400 px-2 py-0.5 rounded-full border border-gray-200 flex items-center gap-1">
+              <Lock className="w-2.5 h-2.5" />
+              {item.badge}
+            </span>
+          )}
+        </div>
+      )
+    }
+
+    return (
+      <Link
+        key={item.name}
+        href={item.href}
+        className={cn(
+          'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors group',
+          isActive
+            ? 'bg-[#0000FF] text-white font-semibold'
+            : 'text-gray-600 font-medium hover:bg-[#E6E6FF] hover:text-[#0000FF]'
+        )}
+      >
+        <item.icon className={cn('w-4 h-4 shrink-0', isActive ? 'text-white' : 'text-gray-400 group-hover:text-[#0000FF]')} />
+        {item.name}
+      </Link>
+    )
+  }
+
+  const mainItems = navigation.filter(i => i.section === 'main')
+  const accountItems = navigation.filter(i => i.section === 'account')
+
   const sidebarContent = (
     <>
       {/* Logo */}
-      <div className="flex items-center justify-between px-5 py-5 border-b border-border">
+      <div className="flex items-center justify-between px-5 py-5 border-b border-[#E0E0F0]">
         <Link href="/dashboard">
           <Image
             src="/logo-ladn.svg"
             alt="L'ADN DATA"
-            width={160}
-            height={56}
+            width={140}
+            height={50}
             priority
           />
         </Link>
-        {/* Bouton fermer (mobile uniquement) */}
         <button
           onClick={() => setMobileOpen(false)}
-          className="lg:hidden p-1 text-text-secondary hover:text-text-primary"
+          className="lg:hidden p-1 text-gray-400 hover:text-gray-600"
         >
           <X className="w-5 h-5" />
         </button>
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 px-3 py-4 space-y-0.5">
-        {navigation.map((item) => {
-          const searchString = searchParams.toString()
-          const isActive = item.activeWhen
-            ? item.activeWhen(pathname, searchString)
-            : item.exact
-              ? pathname === item.href
-              : pathname === item.href || pathname.startsWith(item.href + '/')
-          return (
-            <Link
-              key={item.name}
-              href={item.href}
-              className={cn(
-                'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors group',
-                isActive
-                  ? 'bg-[#0000FF] text-white font-semibold'
-                  : 'text-gray-600 font-medium hover:bg-[#E6E6FF] hover:text-[#0000FF]'
-              )}
-            >
-              <item.icon className={cn('w-4 h-4 shrink-0', isActive ? 'text-white' : 'text-gray-400 group-hover:text-[#0000FF]')} />
-              {item.name}
-            </Link>
-          )
-        })}
+      <nav className="flex-1 px-3 py-4 flex flex-col">
+        {/* Section principale : Veille & Recherche */}
+        <div className="space-y-0.5">
+          {mainItems.map(item => renderNavItem(item))}
+        </div>
+
+        {/* Séparateur */}
+        <div className="my-4 border-t border-[#E0E0F0]" />
+
+        {/* Section compte */}
+        <div className="space-y-0.5">
+          {accountItems.map(item => renderNavItem(item))}
+        </div>
+
+        {/* Spacer */}
+        <div className="flex-1" />
+
+        {/* Admin section */}
+        {adminNavigation.length > 0 && (
+          <>
+            <div className="my-3 border-t border-[#E0E0F0]" />
+            <div className="mb-1">
+              <span className="px-3 text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Administration</span>
+            </div>
+            <div className="space-y-0.5">
+              {adminNavigation.map(item => renderNavItem(item))}
+            </div>
+          </>
+        )}
       </nav>
 
-      {/* Footer */}
-      <div className="px-3 py-4 border-t border-border">
+      {/* Footer: Logout */}
+      <div className="px-3 py-4 border-t border-[#E0E0F0]">
         <button
           onClick={handleLogout}
-          className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-text-secondary hover:bg-red-50 hover:text-danger w-full transition-colors"
+          className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-gray-500 hover:bg-red-50 hover:text-red-600 w-full transition-colors"
         >
           <LogOut className="w-4 h-4" />
           Déconnexion
@@ -113,16 +171,16 @@ export function Sidebar() {
 
   return (
     <>
-      {/* Bouton hamburger (mobile) */}
+      {/* Hamburger button (mobile) */}
       <button
         onClick={() => setMobileOpen(true)}
-        className="lg:hidden fixed top-4 left-4 z-50 p-2 bg-white border border-border rounded-lg shadow-sm"
+        className="lg:hidden fixed top-4 left-4 z-50 p-2 bg-white border border-[#E0E0F0] rounded-lg shadow-sm"
         aria-label="Ouvrir le menu"
       >
-        <Menu className="w-5 h-5 text-text-primary" />
+        <Menu className="w-5 h-5 text-gray-700" />
       </button>
 
-      {/* Overlay mobile */}
+      {/* Mobile overlay */}
       {mobileOpen && (
         <div
           className="lg:hidden fixed inset-0 bg-black/30 z-40"
@@ -132,14 +190,14 @@ export function Sidebar() {
 
       {/* Sidebar mobile (drawer) */}
       <div className={cn(
-        'lg:hidden fixed left-0 top-0 h-full w-72 bg-surface border-r border-border flex flex-col z-50 transition-transform duration-200',
+        'lg:hidden fixed left-0 top-0 h-full w-72 bg-white border-r border-[#E0E0F0] flex flex-col z-50 transition-transform duration-200',
         mobileOpen ? 'translate-x-0' : '-translate-x-full'
       )}>
         {sidebarContent}
       </div>
 
-      {/* Sidebar desktop (fixe) */}
-      <div className="hidden lg:flex fixed left-0 top-0 h-full w-60 bg-surface border-r border-border flex-col z-40">
+      {/* Sidebar desktop (fixed) */}
+      <div className="hidden lg:flex fixed left-0 top-0 h-full w-60 bg-white border-r border-[#E0E0F0] flex-col z-40">
         {sidebarContent}
       </div>
     </>
