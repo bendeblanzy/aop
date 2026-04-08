@@ -61,6 +61,7 @@ export interface Profile {
   // Veille BOAMP
   boamp_codes?: string[]
   activite_metier?: string
+  types_marche_filtres?: string[]
 }
 
 export interface SousTraitant {

@@ -672,6 +672,57 @@ export default function ProfilPage() {
                 </p>
               </div>
 
+              {/* Type de marché */}
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <label className="block text-sm font-medium text-text-primary">
+                    Types de marchés recherchés
+                  </label>
+                </div>
+                <p className="text-xs text-text-secondary mb-3">
+                  Sélectionnez les types de marchés qui correspondent à votre activité.
+                  Les annonces des autres types seront masquées de votre veille.
+                </p>
+                <div className="flex gap-3">
+                  {['SERVICES', 'FOURNITURES', 'TRAVAUX'].map(type => {
+                    const checked = (profile.types_marche_filtres || []).includes(type)
+                    const labels: Record<string, string> = { SERVICES: '🎯 Services', FOURNITURES: '📦 Fournitures', TRAVAUX: '🏗️ Travaux' }
+                    const descriptions: Record<string, string> = {
+                      SERVICES: 'Prestations intellectuelles, conseil, communication, IT...',
+                      FOURNITURES: 'Achat de matériels, équipements, consommables...',
+                      TRAVAUX: 'Construction, rénovation, aménagement...',
+                    }
+                    return (
+                      <label
+                        key={type}
+                        className={cn(
+                          'flex-1 flex flex-col items-center gap-1.5 px-4 py-3 rounded-xl border cursor-pointer transition-colors text-center',
+                          checked ? 'border-primary bg-primary-light text-primary' : 'border-border hover:bg-surface text-text-primary'
+                        )}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={e => {
+                            const current = profile.types_marche_filtres || []
+                            update('types_marche_filtres', e.target.checked
+                              ? [...current, type]
+                              : current.filter(t => t !== type)
+                            )
+                          }}
+                          className="accent-primary"
+                        />
+                        <span className="text-sm font-medium">{labels[type]}</span>
+                        <span className="text-[10px] text-text-secondary leading-tight">{descriptions[type]}</span>
+                      </label>
+                    )
+                  })}
+                </div>
+                {(profile.types_marche_filtres || []).length === 0 && (
+                  <p className="text-xs text-amber-600 mt-2">⚠️ Aucun type sélectionné — tous les types seront affichés (y compris travaux et fournitures)</p>
+                )}
+              </div>
+
               {/* Codes BOAMP */}
               <div>
                 <div className="flex items-center gap-2 mb-1">
