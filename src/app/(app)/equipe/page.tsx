@@ -191,49 +191,75 @@ export default function EquipePage() {
   return (
     <div>
       {/* Header */}
-      <div className="flex items-center justify-between mb-6 pb-2 border-b border-border">
+      <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-text-primary flex items-center gap-2">
-            <Users className="w-6 h-6 text-primary" /> Équipe
+          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+            <Users className="w-6 h-6 text-[#0000FF]" /> Mon équipe
           </h1>
-          <p className="text-text-secondary mt-1">Gérez les membres de votre organisation et vos collaborateurs</p>
+          <p className="text-gray-500 mt-1 text-sm">Gérez les accès à la plateforme et les profils pour vos réponses</p>
         </div>
-        {tab === 'membres' && isAdmin && (
-          <button
-            onClick={() => setShowInviteModal(true)}
-            className="flex items-center gap-2 bg-primary hover:bg-primary-hover text-white rounded-lg px-5 py-2.5 text-sm font-medium transition-colors"
-          >
-            <UserPlus className="w-4 h-4" /> Inviter un membre
-          </button>
-        )}
-        {tab === 'collaborateurs' && (
-          <button
-            onClick={() => { setEditing(emptyCollab()); setShowCollabModal(true) }}
-            className="flex items-center gap-2 bg-primary hover:bg-primary-hover text-white rounded-lg px-5 py-2.5 text-sm font-medium transition-colors"
-          >
-            <Plus className="w-4 h-4" /> Ajouter un collaborateur
-          </button>
-        )}
       </div>
 
-      {/* Tabs */}
-      <div className="flex gap-6 border-b border-border mb-6">
+      {/* Tabs with descriptions */}
+      <div className="flex gap-3 mb-4">
         <button
           onClick={() => setTab('membres')}
-          className={`px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
-            tab === 'membres' ? 'bg-primary text-white' : 'text-text-secondary hover:bg-surface'
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+            tab === 'membres' ? 'bg-[#0000FF] text-white' : 'bg-white border border-[#E0E0F0] text-gray-500 hover:border-[#0000FF]/50'
           }`}
         >
-          Membres
+          <Shield className="w-3.5 h-3.5" />
+          Membres ({members.length})
         </button>
         <button
           onClick={() => setTab('collaborateurs')}
-          className={`px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
-            tab === 'collaborateurs' ? 'bg-primary text-white' : 'text-text-secondary hover:bg-surface'
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+            tab === 'collaborateurs' ? 'bg-[#0000FF] text-white' : 'bg-white border border-[#E0E0F0] text-gray-500 hover:border-[#0000FF]/50'
           }`}
         >
-          Collaborateurs
+          <User className="w-3.5 h-3.5" />
+          Collaborateurs ({collabs.length})
         </button>
+      </div>
+
+      {/* Tab explanation + action */}
+      <div className="bg-[#F5F5FF] rounded-xl border border-[#0000FF]/10 p-4 mb-6 flex items-start justify-between gap-4">
+        {tab === 'membres' ? (
+          <>
+            <div>
+              <h3 className="text-sm font-semibold text-[#0000FF] mb-1">Membres de l&apos;organisation</h3>
+              <p className="text-xs text-gray-600 leading-relaxed">
+                Les membres ont un compte sur la plateforme et peuvent se connecter pour rechercher des AO,
+                gérer les favoris et contribuer aux réponses. Chaque membre a un rôle (Admin ou Membre).
+              </p>
+            </div>
+            {isAdmin && (
+              <button
+                onClick={() => setShowInviteModal(true)}
+                className="flex items-center gap-2 bg-[#0000FF] hover:bg-[#0000CC] text-white rounded-lg px-4 py-2 text-sm font-medium transition-colors shrink-0"
+              >
+                <UserPlus className="w-4 h-4" /> Inviter
+              </button>
+            )}
+          </>
+        ) : (
+          <>
+            <div>
+              <h3 className="text-sm font-semibold text-[#0000FF] mb-1">Collaborateurs (profils AO)</h3>
+              <p className="text-xs text-gray-600 leading-relaxed">
+                Les collaborateurs sont les profils de votre équipe qui peuvent être référencés dans vos réponses aux appels d&apos;offres.
+                Renseignez leurs compétences, diplômes et expériences pour enrichir automatiquement vos candidatures.
+                Ils n&apos;ont pas besoin d&apos;un compte sur la plateforme.
+              </p>
+            </div>
+            <button
+              onClick={() => { setEditing(emptyCollab()); setShowCollabModal(true) }}
+              className="flex items-center gap-2 bg-[#0000FF] hover:bg-[#0000CC] text-white rounded-lg px-4 py-2 text-sm font-medium transition-colors shrink-0"
+            >
+              <Plus className="w-4 h-4" /> Ajouter
+            </button>
+          </>
+        )}
       </div>
 
       {/* ── Tab: Membres ── */}
@@ -253,33 +279,35 @@ export default function EquipePage() {
               </div>
             )
             : (
-              <div className="bg-white rounded-xl border border-border divide-y divide-border shadow-sm overflow-hidden">
+              <div className="space-y-3">
                 {members.map(m => (
-                  <div key={m.id} className="flex items-center justify-between px-5 py-4">
+                  <div key={m.id} className="bg-white rounded-xl border border-[#E0E0F0] shadow-sm p-5 flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-full bg-primary-light flex items-center justify-center">
-                        <User className="w-4 h-4 text-primary" />
+                      <div className="w-10 h-10 rounded-full bg-[#E6E6FF] flex items-center justify-center">
+                        {m.role === 'admin' ? <Shield className="w-4 h-4 text-[#0000FF]" /> : <User className="w-4 h-4 text-[#0000FF]" />}
                       </div>
                       <div>
                         <div className="flex items-center gap-2">
-                          <p className="text-sm font-medium text-text-primary">{m.email}</p>
-                          <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium ${
-                            m.role === 'admin' ? 'bg-primary-light text-primary' : 'bg-gray-100 text-text-secondary'
+                          <p className="text-sm font-semibold text-gray-900">{m.email}</p>
+                          <span className={`inline-flex items-center gap-1 text-xs px-2.5 py-0.5 rounded-full font-medium ${
+                            m.role === 'admin' ? 'bg-[#E6E6FF] text-[#0000FF]' : 'bg-gray-100 text-gray-500'
                           }`}>
-                            {m.role === 'admin' ? <Shield className="w-3 h-3" /> : <User className="w-3 h-3" />}
                             {m.role === 'admin' ? 'Admin' : 'Membre'}
                           </span>
+                          {m.user_id === currentUserId && (
+                            <span className="text-xs text-gray-400 italic">c&apos;est vous</span>
+                          )}
                         </div>
-                        <p className="text-xs text-text-secondary mt-0.5 flex items-center gap-1">
+                        <p className="text-xs text-gray-400 mt-0.5 flex items-center gap-1">
                           <Mail className="w-3 h-3" />
-                          Membre depuis le {new Date(m.created_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}
+                          Depuis le {new Date(m.created_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}
                         </p>
                       </div>
                     </div>
                     {isAdmin && m.user_id !== currentUserId && (
                       <button
                         onClick={() => removeMember(m.id)}
-                        className="p-2 text-text-secondary hover:text-danger hover:bg-red-50 rounded-lg transition-colors"
+                        className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
                         title="Retirer ce membre"
                       >
                         <Trash2 className="w-4 h-4" />
@@ -306,29 +334,43 @@ export default function EquipePage() {
               </div>
             )
             : (
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {collabs.map(c => (
-                  <div key={c.id} className="bg-white rounded-xl border border-border p-5 shadow-sm overflow-hidden">
+                  <div key={c.id} className="bg-white rounded-xl border border-[#E0E0F0] p-5 shadow-sm hover:shadow-md transition-all">
                     <div className="flex justify-between items-start mb-3">
-                      <div>
-                        <h3 className="font-semibold text-text-primary">{c.prenom} {c.nom}</h3>
-                        <p className="text-text-secondary text-sm">
-                          {c.poste}{c.experience_annees ? ` — ${c.experience_annees} ans` : ''}
-                        </p>
-                        {c.role_metier && <p className="text-xs text-text-secondary mt-0.5">{c.role_metier}</p>}
+                      <div className="flex items-start gap-3">
+                        <div className="w-10 h-10 rounded-full bg-[#E6E6FF] flex items-center justify-center shrink-0">
+                          <span className="text-sm font-bold text-[#0000FF]">
+                            {(c.prenom?.[0] ?? '').toUpperCase()}{(c.nom?.[0] ?? '').toUpperCase()}
+                          </span>
+                        </div>
+                        <div>
+                          <h3 className="font-semibold text-gray-900">{c.prenom} {c.nom}</h3>
+                          <p className="text-gray-500 text-sm">
+                            {c.poste}{c.experience_annees ? ` — ${c.experience_annees} ans d'exp.` : ''}
+                          </p>
+                          {c.role_metier && (
+                            <span className="inline-block mt-1 text-xs bg-[#E6E6FF] text-[#0000FF] px-2 py-0.5 rounded-full font-medium">{c.role_metier}</span>
+                          )}
+                        </div>
                       </div>
-                      <div className="flex gap-1">
-                        <button onClick={() => { setEditing(c); setShowCollabModal(true) }} className="p-1.5 text-text-secondary hover:text-primary hover:bg-primary-light rounded-lg"><Edit className="w-3.5 h-3.5" /></button>
-                        <button onClick={() => removeCollab(c.id)} className="p-1.5 text-text-secondary hover:text-danger hover:bg-red-50 rounded-lg"><Trash2 className="w-3.5 h-3.5" /></button>
+                      <div className="flex gap-1 shrink-0">
+                        <button onClick={() => { setEditing(c); setShowCollabModal(true) }} className="p-1.5 text-gray-400 hover:text-[#0000FF] hover:bg-[#E6E6FF] rounded-lg transition-colors"><Edit className="w-3.5 h-3.5" /></button>
+                        <button onClick={() => removeCollab(c.id)} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>
                       </div>
                     </div>
+                    {c.email && (
+                      <p className="text-xs text-gray-400 flex items-center gap-1 mb-2">
+                        <Mail className="w-3 h-3" /> {c.email}
+                      </p>
+                    )}
                     {(c.competences_cles?.length ?? 0) > 0 && (
-                      <div className="flex flex-wrap gap-1.5 mt-3">
-                        {c.competences_cles!.slice(0, 4).map((k, i) => (
-                          <span key={i} className="bg-primary-light text-primary text-xs px-2 py-0.5 rounded-full font-medium">{k}</span>
+                      <div className="flex flex-wrap gap-1.5">
+                        {c.competences_cles!.slice(0, 5).map((k, i) => (
+                          <span key={i} className="bg-gray-100 text-gray-600 text-xs px-2 py-0.5 rounded-full">{k}</span>
                         ))}
-                        {(c.competences_cles?.length ?? 0) > 4 && (
-                          <span className="text-xs text-text-secondary">+{c.competences_cles!.length - 4}</span>
+                        {(c.competences_cles?.length ?? 0) > 5 && (
+                          <span className="text-xs text-gray-400">+{c.competences_cles!.length - 5}</span>
                         )}
                       </div>
                     )}
