@@ -3,14 +3,14 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import {
   Search, Zap, AlertCircle, Settings, FileText, Building2, Calendar,
-  Euro, Clock, ChevronRight, RefreshCw, Filter, X, Star, SortAsc,
-  Bookmark, BookmarkCheck,
+  Clock, RefreshCw, Filter, X, Star, MapPin,
+  ChevronDown, ChevronUp, ExternalLink,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import Link from 'next/link'
 import { toast } from 'sonner'
 
-// ── Types ─────────────────────────────────────────────────────────────────────
+// ── Types ────────────────────────────────────────────────────────────────────
 
 interface TenderItem {
   id: string
@@ -27,7 +27,6 @@ interface TenderItem {
   description_detail: string | null
   score: number | null
   reason: string | null
-  // Champs migration 004
   nature_libelle: string | null
   type_procedure: string | null
   procedure_libelle: string | null
@@ -51,39 +50,52 @@ interface ApiResponse {
 type SortKey = 'score' | 'date' | 'deadline'
 type TabKey = 'all' | 'favorites'
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// ── Helpers ──────────────────────────────────────────────────────────────────
 
-function formatDate(iso: string | null) {
-  if (!iso) return '—'
-  try {
-    return new Date(iso).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' })
-  } catch { return iso }
-}
-
-function formatDeadline(iso: string | null): { label: string; urgent: boolean; days: number | null } {
-  if (!iso) return { label: '—', urgent: false, days: null }
+function formatDeadline(iso: string | null): { label: string; urgent: boolean; expired: boolean } {
+  if (!iso) return { label: 'Pas de date limite', urgent: false, expired: false }
   try {
     const d = new Date(iso)
-    const diff = d.getTime() - Date.now()
-    const days = Math.ceil(diff / (1000 * 60 * 60 * 24))
-    if (days < 0) return { label: 'Expiré', urgent: true, days }
-    if (days <= 7) return { label: `J-${days}`, urgent: true, days }
-    if (days <= 30) return { label: `J-${days}`, urgent: false, days }
-    return { label: formatDate(iso), urgent: false, days }
-  } catch { return { label: iso ?? '—', urgent: false, days: null } }
+    const days = Math.ceil((d.getTime() - Date.now()) / 86400000)
+    const formatted = d.toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' })
+    const time = d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
+    if (days < 0) return { label: formatted, urgent: true, expired: true }
+    if (days === 0) return { label: `${formatted} à ${time} (0j restants)`, urgent: true, expired: false }
+    return { label: `${formatted} à ${time} (${days}j restants)`, urgent: days <= 7, expired: false }
+  } catch { return { label: '—', urgent: false, expired: false } }
 }
 
-function formatEuros(value: number | null) {
-  if (!value) return null
-  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)} M€`
-  if (value >= 1_000) return `${Math.round(value / 1_000)} k€`
-  return `${value} €`
+function formatEuros(v: number | null) {
+  if (!v) return null
+  if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M€`
+  if (v >= 1_000) return `${Math.round(v / 1_000)}k€`
+  return `${v}€`
+}
+
+function getScoreLabel(score: number) {
+  if (score >= 80) return 'Excellent match'
+  if (score >= 60) return 'Bon match'
+  if (score >= 40) return 'Match partiel'
+  return 'Faible'
+}
+
+function getScoreColor(score: number) {
+  if (score >= 80) return 'bg-green-500'
+  if (score >= 60) return 'bg-[#0000FF]'
+  if (score >= 40) return 'bg-amber-500'
+  return 'bg-gray-400'
+}
+
+function getScoreBadgeStyle(score: number) {
+  if (score >= 80) return 'bg-green-100 text-green-700 border-green-200'
+  if (score >= 60) return 'bg-[#E6E6FF] text-[#0000FF] border-[#ccccff]'
+  if (score >= 40) return 'bg-amber-100 text-amber-700 border-amber-200'
+  return 'bg-gray-100 text-gray-600 border-gray-200'
 }
 
 function sortTenders(tenders: TenderItem[], sortBy: SortKey): TenderItem[] {
   return [...tenders].sort((a, b) => {
     if (sortBy === 'score') {
-      // Scorés en premier, puis par score décroissant, puis par date
       if (a.score !== null && b.score !== null) return b.score - a.score
       if (a.score !== null) return -1
       if (b.score !== null) return 1
@@ -94,48 +106,11 @@ function sortTenders(tenders: TenderItem[], sortBy: SortKey): TenderItem[] {
       const db = b.datelimitereponse ? new Date(b.datelimitereponse).getTime() : Infinity
       return da - db
     }
-    // date (parution)
     return new Date(b.dateparution ?? 0).getTime() - new Date(a.dateparution ?? 0).getTime()
   })
 }
 
-// ── Sub-components ────────────────────────────────────────────────────────────
-
-function ScoreBadge({ score }: { score: number | null }) {
-  if (score === null) return (
-    <span className="text-xs text-text-secondary bg-surface px-2 py-0.5 rounded-full border border-border">Non scoré</span>
-  )
-  const color =
-    score >= 80 ? 'bg-green-100 text-green-700 border-green-200' :
-    score >= 60 ? 'bg-blue-100 text-blue-700 border-blue-200' :
-    score >= 40 ? 'bg-amber-100 text-amber-700 border-amber-200' :
-    'bg-red-100 text-red-700 border-red-200'
-  const label = score >= 80 ? '⭐ Excellent' : score >= 60 ? 'Bon match' : score >= 40 ? 'Partiel' : 'Faible'
-  return (
-    <span className={cn('text-xs font-semibold px-2.5 py-0.5 rounded-full border', color)}>
-      {score}% — {label}
-    </span>
-  )
-}
-
-function StarButton({ isFav, onToggle, loading }: { isFav: boolean; onToggle: () => void; loading: boolean }) {
-  return (
-    <button
-      onClick={e => { e.stopPropagation(); onToggle() }}
-      disabled={loading}
-      title={isFav ? 'Retirer des favoris' : 'Ajouter aux favoris'}
-      className={cn(
-        'p-1.5 rounded-full transition-all shrink-0',
-        isFav
-          ? 'text-amber-500 hover:text-amber-600'
-          : 'text-text-secondary hover:text-amber-400',
-        loading ? 'opacity-50 cursor-not-allowed' : '',
-      )}
-    >
-      <Star className={cn('w-4 h-4', isFav ? 'fill-amber-400' : '')} />
-    </button>
-  )
-}
+// ── Card Component ───────────────────────────────────────────────────────────
 
 function TenderCard({
   tender,
@@ -150,112 +125,160 @@ function TenderCard({
   favLoading: boolean
   onRepondre: () => void
 }) {
-  const [expanded, setExpanded] = useState(false)
+  const [showReason, setShowReason] = useState(false)
   const deadline = formatDeadline(tender.datelimitereponse)
   const euros = formatEuros(tender.valeur_estimee ?? tender.budget_estime)
-  const hasDescription = !!tender.description_detail?.trim()
-  const descShort = tender.description_detail?.slice(0, 220)
-  const needsTruncate = (tender.description_detail?.length ?? 0) > 220
-  const procedureLabel = tender.procedure_libelle ?? tender.type_procedure ?? null
   const depts = Array.isArray(tender.code_departement) ? tender.code_departement : []
+  const descripteurs = Array.isArray(tender.descripteur_libelles) ? tender.descripteur_libelles : []
+  const nature = tender.nature_libelle ?? 'SERVICES'
+  const duree = tender.duree_mois ? `${tender.duree_mois} mois` : null
+
+  const summaryParts: string[] = []
+  if (tender.score !== null) summaryParts.push(`Forte similarité sémantique (${tender.score}%)`)
+  if (euros) summaryParts.push(`budget estimé ${euros}`)
+  if (duree) summaryParts.push(`durée ${duree}`)
+  const summaryLine = summaryParts.join(' — ')
 
   return (
-    <div className={cn(
-      'p-4 hover:bg-surface/60 transition-colors',
-      isFav ? 'bg-amber-50/30' : '',
-    )}>
-      {/* Ligne 1 : titre + score + étoile + deadline */}
-      <div className="flex items-start gap-2 mb-1.5">
-        <h3 className="font-medium text-text-primary text-sm leading-snug flex-1 line-clamp-2">
-          {tender.objet ?? '(sans titre)'}
-        </h3>
-        <div className="flex items-center gap-1.5 shrink-0 mt-0.5">
-          <ScoreBadge score={tender.score} />
+    <div className="bg-white rounded-xl border border-[#E0E0F0] shadow-sm hover:shadow-md transition-all flex flex-col">
+      <div className="p-5 pb-3 flex-1">
+        {/* Title + Star */}
+        <div className="flex items-start gap-2 mb-3">
+          <h3 className="font-bold text-[#0000FF] text-sm leading-snug flex-1 line-clamp-3 uppercase">
+            {tender.objet ?? '(sans titre)'}
+          </h3>
+          <button
+            onClick={e => { e.stopPropagation(); onToggleFav() }}
+            disabled={favLoading}
+            className="p-1 shrink-0 mt-0.5"
+          >
+            <Star className={cn('w-5 h-5', isFav ? 'fill-amber-400 text-amber-500' : 'text-gray-300 hover:text-amber-400')} />
+          </button>
+        </div>
+
+        {deadline.expired && (
+          <span className="inline-block text-xs font-semibold px-2.5 py-0.5 rounded-full bg-orange-100 text-orange-600 border border-orange-200 mb-3">
+            Expiré
+          </span>
+        )}
+
+        {/* Meta */}
+        <div className="space-y-1.5 mb-3 text-xs text-gray-500">
+          {tender.nomacheteur && (
+            <div className="flex items-center gap-1.5">
+              <Building2 className="w-3.5 h-3.5 shrink-0" />
+              <span className="font-medium text-gray-700">{tender.nomacheteur}</span>
+            </div>
+          )}
+          <div className="flex items-center gap-3 flex-wrap">
+            {tender.dateparution && (
+              <span className="flex items-center gap-1">
+                <Calendar className="w-3 h-3" />
+                {new Date(tender.dateparution).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' })}
+              </span>
+            )}
+            {depts.length > 0 && (
+              <span className="flex items-center gap-1">
+                <MapPin className="w-3 h-3" />
+                {depts.slice(0, 2).join(', ')}
+              </span>
+            )}
+            <span className="text-gray-400">{nature}</span>
+          </div>
+        </div>
+
+        {/* Score */}
+        {tender.score !== null && (
+          <div className="mb-3">
+            <div className="flex items-center justify-between mb-1.5">
+              <span className={cn('text-xs font-bold px-2.5 py-0.5 rounded-full border', getScoreBadgeStyle(tender.score))}>
+                {getScoreLabel(tender.score)}
+              </span>
+              <span className="text-xs font-bold text-gray-600">{tender.score}%</span>
+            </div>
+            <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
+              <div className={cn('h-full rounded-full', getScoreColor(tender.score))} style={{ width: `${tender.score}%` }} />
+            </div>
+          </div>
+        )}
+
+        {/* AI Summary */}
+        {summaryLine && (
+          <div className="bg-[#E6E6FF] rounded-lg px-3 py-2 mb-3">
+            <p className="text-xs text-[#0000FF] flex items-start gap-1.5">
+              <Zap className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+              {summaryLine}
+            </p>
+          </div>
+        )}
+
+        {/* Expandable reason */}
+        {tender.reason && (
+          <button
+            onClick={() => setShowReason(!showReason)}
+            className="flex items-center gap-1 text-xs text-[#0000FF] font-medium mb-3 hover:underline"
+          >
+            <Zap className="w-3 h-3" />
+            Résumé IA
+            {showReason ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+          </button>
+        )}
+        {showReason && tender.reason && (
+          <p className="text-xs text-gray-600 italic mb-3 leading-relaxed">{tender.reason}</p>
+        )}
+
+        {/* Tags */}
+        <div className="flex flex-wrap gap-1.5">
+          {tender.procedure_libelle && (
+            <span className="text-xs bg-[#E6E6FF] text-[#0000FF] px-2 py-0.5 rounded-full">{tender.procedure_libelle}</span>
+          )}
+          {descripteurs.slice(0, 3).map((d, i) => (
+            <span key={i} className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">{d}</span>
+          ))}
+        </div>
+      </div>
+
+      {/* Footer */}
+      <div className="px-5 py-3 border-t border-[#E0E0F0] flex items-center justify-between">
+        <div className="flex items-center gap-1 text-xs">
+          <Clock className="w-3.5 h-3.5 text-gray-400" />
           <span className={cn(
-            'text-xs font-semibold px-2 py-0.5 rounded-full',
-            deadline.urgent ? 'bg-red-100 text-red-700' :
-            deadline.days !== null && deadline.days <= 30 ? 'bg-amber-50 text-amber-700' :
-            'bg-surface text-text-secondary',
+            'font-medium',
+            deadline.expired ? 'text-orange-500' : deadline.urgent ? 'text-red-600' : 'text-gray-500',
           )}>
             {deadline.label}
           </span>
-          <StarButton isFav={isFav} onToggle={onToggleFav} loading={favLoading} />
         </div>
-      </div>
-
-      {/* Ligne 2 : raison du score (mise en avant) */}
-      {tender.reason && (
-        <div className="flex items-start gap-1.5 bg-primary-light/50 border border-primary/10 rounded-lg px-3 py-2 mb-2.5 text-xs text-primary">
-          <Zap className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-          <span className="italic">{tender.reason}</span>
-        </div>
-      )}
-
-      {/* Description détaillée */}
-      {hasDescription && (
-        <div className="text-xs text-text-secondary mb-2 leading-relaxed">
-          {expanded ? tender.description_detail : descShort}
-          {needsTruncate && (
-            <button
-              onClick={() => setExpanded(!expanded)}
-              className="ml-1 text-primary font-medium hover:underline"
-            >
-              {expanded ? '← Moins' : '… Voir plus'}
-            </button>
+        <div className="flex items-center gap-3">
+          {!deadline.expired && (
+            <>
+              <button
+                onClick={onRepondre}
+                className="text-xs font-semibold text-[#0000FF] hover:underline flex items-center gap-1"
+              >
+                Répondre
+              </button>
+              <button
+                onClick={onRepondre}
+                className="text-xs font-semibold text-[#0000FF] hover:underline flex items-center gap-1"
+              >
+                <ExternalLink className="w-3 h-3" />
+                Candidater
+              </button>
+            </>
           )}
         </div>
-      )}
-
-      {/* Méta + tags */}
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-text-secondary mb-2">
-        {tender.nomacheteur && (
-          <span className="flex items-center gap-1"><Building2 className="w-3 h-3" />{tender.nomacheteur}</span>
-        )}
-        {euros && (
-          <span className="flex items-center gap-1 font-medium text-text-primary"><Euro className="w-3 h-3" />{euros}</span>
-        )}
-        {tender.duree_mois && (
-          <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{tender.duree_mois} mois</span>
-        )}
-        {tender.nb_lots !== null && tender.nb_lots > 0 && (
-          <span className="flex items-center gap-1"><FileText className="w-3 h-3" />{tender.nb_lots} lot{tender.nb_lots > 1 ? 's' : ''}</span>
-        )}
-        <span className="flex items-center gap-1"><Calendar className="w-3 h-3" />Paru le {formatDate(tender.dateparution)}</span>
-      </div>
-
-      {/* Badges : procédure + départements + descripteurs */}
-      <div className="flex gap-1 flex-wrap mb-3">
-        {procedureLabel && (
-          <span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full border border-slate-200">{procedureLabel}</span>
-        )}
-        {depts.slice(0, 4).map((d, i) => (
-          <span key={i} className="text-xs bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full border border-blue-100">Dép. {d}</span>
-        ))}
-        {Array.isArray(tender.descripteur_libelles) && tender.descripteur_libelles.slice(0, 4).map((lib, i) => (
-          <span key={i} className="text-xs bg-primary-light text-primary px-2 py-0.5 rounded-full">{lib}</span>
-        ))}
-      </div>
-
-      {/* Actions */}
-      <div className="flex items-center justify-end gap-2">
-        <button
-          onClick={onRepondre}
-          className="flex items-center gap-1.5 text-xs bg-primary hover:bg-primary-hover text-white rounded-lg px-3 py-1.5 font-medium transition-colors"
-        >
-          Répondre à cet AO <ChevronRight className="w-3 h-3" />
-        </button>
       </div>
     </div>
   )
 }
 
-// ── Main component ─────────────────────────────────────────────────────────────
+// ── Main ─────────────────────────────────────────────────────────────────────
 
 export default function VeillePage() {
   const router = useRouter()
   const searchParams = useSearchParams()
 
-  // Tenders
   const [tenders, setTenders] = useState<TenderItem[]>([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(0)
@@ -265,7 +288,6 @@ export default function VeillePage() {
   const [hasActiviteMetier, setHasActiviteMetier] = useState(true)
   const LIMIT = 30
 
-  // Filtres & tri
   const [search, setSearch] = useState('')
   const [searchInput, setSearchInput] = useState('')
   const [activeOnly, setActiveOnly] = useState(true)
@@ -276,21 +298,16 @@ export default function VeillePage() {
   )
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // Favoris
   const [favorites, setFavorites] = useState<Set<string>>(new Set())
   const [favLoading, setFavLoading] = useState<Set<string>>(new Set())
 
-  // ── Chargement des favoris ──
   useEffect(() => {
     fetch('/api/veille/favorites')
       .then(r => r.json())
-      .then(d => {
-        if (Array.isArray(d.favorites)) setFavorites(new Set(d.favorites))
-      })
-      .catch(() => {}) // silent
+      .then(d => { if (Array.isArray(d.favorites)) setFavorites(new Set(d.favorites)) })
+      .catch(() => {})
   }, [])
 
-  // ── Toggle favori ──
   async function toggleFavorite(idweb: string) {
     const isFav = favorites.has(idweb)
     setFavLoading(prev => new Set(prev).add(idweb))
@@ -315,7 +332,6 @@ export default function VeillePage() {
     }
   }
 
-  // ── Chargement des tenders ──
   const fetchTenders = useCallback(async (p = 0, s = search) => {
     setLoading(true)
     try {
@@ -335,7 +351,6 @@ export default function VeillePage() {
       setHasBoampCodes(data.hasBoampCodes)
       setHasActiviteMetier(data.hasActiviteMetier)
 
-      // Auto-score les non-scorés
       const unscored = data.tenders.filter(t => t.score === null).map(t => t.idweb).slice(0, 20)
       if (unscored.length > 0 && data.hasActiviteMetier) autoScore(unscored)
     } catch {
@@ -405,7 +420,6 @@ export default function VeillePage() {
 
   useEffect(() => { fetchTenders(0, search) }, [search, activeOnly, minScore]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Tri + filtre onglet
   const sortedTenders = sortTenders(tenders, sortBy)
   const displayedTenders = tab === 'favorites'
     ? sortedTenders.filter(t => favorites.has(t.idweb))
@@ -419,119 +433,133 @@ export default function VeillePage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-text-primary">Veille marchés publics</h1>
-          <p className="text-text-secondary mt-1 text-sm">
+          <h1 className="text-2xl font-bold text-gray-900">Recherche d&apos;appels d&apos;offres</h1>
+          <p className="text-gray-500 mt-1 text-sm">
             Annonces pertinentes scorées par l&apos;IA selon votre profil
           </p>
         </div>
         <button
           onClick={handleManualScore}
           disabled={scoring || tenders.length === 0}
-          className="flex items-center gap-2 bg-primary hover:bg-primary-hover disabled:opacity-50 text-white rounded-lg px-4 py-2 text-sm font-medium transition-colors whitespace-nowrap shrink-0"
+          className="flex items-center gap-2 bg-[#0000FF] hover:bg-[#0000CC] disabled:opacity-50 text-white rounded-lg px-4 py-2 text-sm font-medium transition-colors whitespace-nowrap shrink-0"
         >
           {scoring ? <><RefreshCw className="w-4 h-4 animate-spin" />Scoring…</> : <><Zap className="w-4 h-4" />Scorer avec l&apos;IA</>}
         </button>
       </div>
 
-      {/* Alertes config */}
+      {/* Alerts */}
       {!hasBoampCodes && (
         <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-4 flex items-start gap-3">
-          <AlertCircle className="w-5 h-5 text-warning shrink-0 mt-0.5" />
+          <AlertCircle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
           <div className="flex-1">
             <p className="font-medium text-sm">Codes BOAMP non configurés</p>
-            <p className="text-text-secondary text-xs mt-0.5">Sans codes BOAMP, toutes les annonces sont affichées sans filtre.</p>
+            <p className="text-gray-500 text-xs mt-0.5">Sans codes BOAMP, toutes les annonces sont affichées sans filtre.</p>
           </div>
-          <Link href="/profil" className="flex items-center gap-1 text-primary text-xs font-medium hover:underline shrink-0">
+          <Link href="/profil" className="flex items-center gap-1 text-[#0000FF] text-xs font-medium hover:underline shrink-0">
             <Settings className="w-3 h-3" /> Configurer
           </Link>
         </div>
       )}
       {!hasActiviteMetier && (
-        <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-4 flex items-start gap-3">
-          <AlertCircle className="w-5 h-5 text-blue-500 shrink-0 mt-0.5" />
+        <div className="bg-[#E6E6FF] border border-[#ccccff] rounded-xl p-4 mb-4 flex items-start gap-3">
+          <AlertCircle className="w-5 h-5 text-[#0000FF] shrink-0 mt-0.5" />
           <div className="flex-1">
             <p className="font-medium text-sm">Profil métier non renseigné</p>
-            <p className="text-text-secondary text-xs mt-0.5">Renseignez votre activité pour activer le scoring IA.</p>
+            <p className="text-gray-500 text-xs mt-0.5">Renseignez votre activité pour activer le scoring IA.</p>
           </div>
-          <Link href="/profil" className="flex items-center gap-1 text-primary text-xs font-medium hover:underline shrink-0">
+          <Link href="/profil" className="flex items-center gap-1 text-[#0000FF] text-xs font-medium hover:underline shrink-0">
             <Settings className="w-3 h-3" /> Compléter
           </Link>
         </div>
       )}
 
-      {/* Filtres */}
-      <div className="bg-white rounded-xl border border-border p-3 mb-4 space-y-3">
-        {/* Barre de recherche */}
+      {/* Search + Filters */}
+      <div className="bg-white rounded-xl border border-[#E0E0F0] p-4 mb-4 space-y-3">
+        <div className="flex gap-3">
+          {/* Search tabs */}
+          <div className="flex rounded-lg border border-[#E0E0F0] overflow-hidden text-sm shrink-0">
+            <button className="px-4 py-2 bg-[#0000FF] text-white font-medium">Recherche par mots-clés</button>
+            <button className="px-4 py-2 text-gray-500 hover:bg-gray-50">Recherche IA (langage naturel)</button>
+          </div>
+        </div>
+
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-secondary" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
           <input
             type="text"
-            placeholder="Rechercher un objet, un acheteur…"
+            placeholder="Rechercher dans le titre, descripteur, acheteur..."
             value={searchInput}
             onChange={e => handleSearchChange(e.target.value)}
-            className="w-full pl-9 pr-8 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+            className="w-full pl-10 pr-8 py-2.5 border border-[#E0E0F0] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#0000FF]/20 focus:border-[#0000FF]"
           />
           {searchInput && (
-            <button onClick={() => { setSearchInput(''); setSearch('') }} className="absolute right-2 top-1/2 -translate-y-1/2 text-text-secondary hover:text-text-primary">
-              <X className="w-3.5 h-3.5" />
+            <button onClick={() => { setSearchInput(''); setSearch('') }} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+              <X className="w-4 h-4" />
             </button>
           )}
         </div>
 
-        {/* Ligne de contrôles */}
-        <div className="flex flex-wrap items-center gap-2">
-          {/* Tri */}
-          <div className="flex items-center gap-1.5 text-xs text-text-secondary">
-            <SortAsc className="w-3.5 h-3.5" />
-            <span>Trier&nbsp;:</span>
-          </div>
-          <div className="flex rounded-lg border border-border overflow-hidden text-xs">
-            {([['score', 'Score IA'], ['deadline', 'Échéance'], ['date', 'Date parution']] as [SortKey, string][]).map(([key, label]) => (
+        {/* Filter row */}
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-1.5 text-xs text-gray-500">Score min :</div>
+          <div className="flex rounded-lg border border-[#E0E0F0] overflow-hidden text-xs">
+            {([
+              [null, 'Tous'],
+              [40, '40+'],
+              [60, '60+'],
+              [80, '80+'],
+            ] as [number | null, string][]).map(([val, label]) => (
               <button
-                key={key}
-                onClick={() => setSortBy(key)}
+                key={label}
+                onClick={() => setMinScore(val)}
                 className={cn(
                   'px-3 py-1.5 transition-colors',
-                  sortBy === key ? 'bg-primary text-white font-medium' : 'hover:bg-surface text-text-secondary',
+                  minScore === val ? 'bg-[#0000FF] text-white font-medium' : 'hover:bg-gray-50 text-gray-500',
                 )}
               >{label}</button>
             ))}
           </div>
 
-          {/* Score min */}
-          <div className="flex items-center gap-1.5">
-            <Filter className="w-3.5 h-3.5 text-text-secondary" />
-            <select
-              value={minScore ?? ''}
-              onChange={e => setMinScore(e.target.value ? parseInt(e.target.value) : null)}
-              className="border border-border rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-primary/20"
-            >
-              <option value="">Tous scores</option>
-              <option value="60">Score ≥ 60%</option>
-              <option value="70">Score ≥ 70%</option>
-              <option value="80">Score ≥ 80%</option>
-            </select>
+          <span className="text-gray-300">|</span>
+
+          <div className="flex items-center gap-1.5 text-xs text-gray-500">Trier par :</div>
+          <div className="flex rounded-lg border border-[#E0E0F0] overflow-hidden text-xs">
+            {([['score', 'Pertinence'], ['date', 'Date'], ['deadline', 'Deadline']] as [SortKey, string][]).map(([key, label]) => (
+              <button
+                key={key}
+                onClick={() => setSortBy(key)}
+                className={cn(
+                  'px-3 py-1.5 transition-colors',
+                  sortBy === key ? 'bg-[#0000FF] text-white font-medium' : 'hover:bg-gray-50 text-gray-500',
+                )}
+              >{label}</button>
+            ))}
           </div>
 
-          {/* Actifs seulement */}
-          <label className="flex items-center gap-1.5 text-xs text-text-secondary cursor-pointer select-none">
-            <input type="checkbox" checked={activeOnly} onChange={e => setActiveOnly(e.target.checked)} className="rounded border-border text-primary focus:ring-primary" />
+          <label className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer select-none ml-auto">
+            <input type="checkbox" checked={activeOnly} onChange={e => setActiveOnly(e.target.checked)} className="rounded border-gray-300 text-[#0000FF] focus:ring-[#0000FF]" />
             Actifs seulement
           </label>
-
-          <span className="text-xs text-text-secondary ml-auto">{total} annonce{total > 1 ? 's' : ''}</span>
         </div>
       </div>
 
-      {/* Onglets Tous / Favoris */}
-      <div className="flex gap-1 mb-3">
+      {/* Suggestion bar */}
+      <div className="bg-[#E6E6FF] rounded-xl p-3 mb-4 flex items-center gap-2">
+        <Zap className="w-4 h-4 text-[#0000FF] shrink-0" />
+        <span className="text-sm text-[#0000FF] font-medium">
+          Suggestions pour votre profil — {total} annonces correspondantes. Tapez un mot-clé pour affiner.
+        </span>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex gap-2 mb-4">
         {([['all', 'Toutes les annonces', null], ['favorites', 'Mes favoris', favCount]] as [TabKey, string, number | null][]).map(([key, label, count]) => (
           <button
             key={key}
             onClick={() => setTab(key)}
             className={cn(
               'flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-colors',
-              tab === key ? 'bg-primary text-white' : 'bg-white border border-border text-text-secondary hover:border-primary/50',
+              tab === key ? 'bg-[#0000FF] text-white' : 'bg-white border border-[#E0E0F0] text-gray-500 hover:border-[#0000FF]/50',
             )}
           >
             {key === 'favorites' && <Star className={cn('w-3.5 h-3.5', tab === key ? 'fill-amber-300' : '')} />}
@@ -543,34 +571,34 @@ export default function VeillePage() {
         ))}
       </div>
 
-      {/* Liste */}
-      <div className="bg-white rounded-xl border border-border divide-y divide-border">
-        {loading ? (
-          <div className="flex items-center justify-center py-16">
-            <RefreshCw className="w-6 h-6 animate-spin text-primary" />
-          </div>
-        ) : displayedTenders.length === 0 ? (
-          <div className="text-center py-16">
-            {tab === 'favorites' ? (
-              <>
-                <BookmarkCheck className="w-12 h-12 text-border mx-auto mb-3" />
-                <p className="text-text-secondary font-medium">Aucun favori pour le moment</p>
-                <p className="text-text-secondary text-sm mt-1">Cliquez sur l&apos;étoile ★ d&apos;une annonce pour la sauvegarder ici.</p>
-              </>
-            ) : (
-              <>
-                <FileText className="w-12 h-12 text-border mx-auto mb-3" />
-                <p className="text-text-secondary font-medium">Aucune annonce trouvée</p>
-                {!hasBoampCodes && (
-                  <p className="text-sm mt-1">
-                    <Link href="/profil" className="text-primary hover:underline">Configurez vos codes BOAMP</Link> pour voir les annonces pertinentes
-                  </p>
-                )}
-              </>
-            )}
-          </div>
-        ) : (
-          displayedTenders.map(tender => (
+      {/* Card Grid */}
+      {loading ? (
+        <div className="flex items-center justify-center py-16">
+          <RefreshCw className="w-6 h-6 animate-spin text-[#0000FF]" />
+        </div>
+      ) : displayedTenders.length === 0 ? (
+        <div className="text-center py-16 bg-white rounded-xl border border-[#E0E0F0]">
+          {tab === 'favorites' ? (
+            <>
+              <Star className="w-12 h-12 text-gray-200 mx-auto mb-3" />
+              <p className="text-gray-500 font-medium">Aucun favori pour le moment</p>
+              <p className="text-gray-400 text-sm mt-1">Cliquez sur l&apos;étoile d&apos;une annonce pour la sauvegarder ici.</p>
+            </>
+          ) : (
+            <>
+              <FileText className="w-12 h-12 text-gray-200 mx-auto mb-3" />
+              <p className="text-gray-500 font-medium">Aucune annonce trouvée</p>
+              {!hasBoampCodes && (
+                <p className="text-sm mt-1">
+                  <Link href="/profil" className="text-[#0000FF] hover:underline">Configurez vos codes BOAMP</Link> pour voir les annonces pertinentes
+                </p>
+              )}
+            </>
+          )}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {displayedTenders.map(tender => (
             <TenderCard
               key={tender.idweb}
               tender={tender}
@@ -579,16 +607,16 @@ export default function VeillePage() {
               favLoading={favLoading.has(tender.idweb)}
               onRepondre={() => handleRepondre(tender)}
             />
-          ))
-        )}
-      </div>
+          ))}
+        </div>
+      )}
 
       {/* Pagination */}
       {totalPages > 1 && tab === 'all' && (
-        <div className="flex items-center justify-center gap-2 mt-4">
-          <button disabled={page === 0} onClick={() => fetchTenders(page - 1)} className="px-3 py-1.5 text-sm border border-border rounded-lg disabled:opacity-40 hover:bg-surface">Précédent</button>
-          <span className="text-sm text-text-secondary">Page {page + 1} / {totalPages}</span>
-          <button disabled={page >= totalPages - 1} onClick={() => fetchTenders(page + 1)} className="px-3 py-1.5 text-sm border border-border rounded-lg disabled:opacity-40 hover:bg-surface">Suivant</button>
+        <div className="flex items-center justify-center gap-2 mt-6">
+          <button disabled={page === 0} onClick={() => fetchTenders(page - 1)} className="px-4 py-2 text-sm border border-[#E0E0F0] rounded-lg disabled:opacity-40 hover:bg-gray-50 font-medium">Précédent</button>
+          <span className="text-sm text-gray-500">Page {page + 1} / {totalPages}</span>
+          <button disabled={page >= totalPages - 1} onClick={() => fetchTenders(page + 1)} className="px-4 py-2 text-sm border border-[#E0E0F0] rounded-lg disabled:opacity-40 hover:bg-gray-50 font-medium">Suivant</button>
         </div>
       )}
     </div>

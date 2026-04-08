@@ -87,11 +87,11 @@ export function Sidebar() {
               className={cn(
                 'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors group',
                 isActive
-                  ? 'bg-primary text-white font-semibold'
-                  : 'text-text-secondary font-medium hover:bg-surface hover:text-text-primary'
+                  ? 'bg-[#0000FF] text-white font-semibold'
+                  : 'text-gray-600 font-medium hover:bg-[#E6E6FF] hover:text-[#0000FF]'
               )}
             >
-              <item.icon className={cn('w-4 h-4 shrink-0', isActive ? 'text-white' : 'text-text-secondary group-hover:text-text-primary')} />
+              <item.icon className={cn('w-4 h-4 shrink-0', isActive ? 'text-white' : 'text-gray-400 group-hover:text-[#0000FF]')} />
               {item.name}
             </Link>
           )
