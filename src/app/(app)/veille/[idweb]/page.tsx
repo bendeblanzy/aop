@@ -654,6 +654,15 @@ export default function TenderDetailPage() {
             Contact de l&apos;acheteur
           </h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {(extra.contact_acheteur as Record<string, string>).organisme && (
+              <div className="flex items-center gap-2 text-sm sm:col-span-2">
+                <Building2 className="w-4 h-4 text-gray-400 shrink-0" />
+                <span className="text-gray-900 font-semibold">{(extra.contact_acheteur as Record<string, string>).organisme}</span>
+                {(extra.contact_acheteur as Record<string, string>).siret && (
+                  <span className="text-xs text-gray-400 font-mono ml-1">SIRET {(extra.contact_acheteur as Record<string, string>).siret}</span>
+                )}
+              </div>
+            )}
             {(extra.contact_acheteur as Record<string, string>).nom && (
               <div className="flex items-center gap-2 text-sm">
                 <Building2 className="w-4 h-4 text-gray-400 shrink-0" />

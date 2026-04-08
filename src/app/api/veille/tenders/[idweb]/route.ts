@@ -208,48 +208,63 @@ function parseEformsExtra(eforms: AnyObj): AnyObj {
   if (!cn) return {}
   const extra: AnyObj = {}
 
-  // Description complète
+  const lots = cn['cac:ProcurementProjectLot']
+  const lotList = Array.isArray(lots) ? lots : lots ? [lots] : []
+
+  // Description complète — projet principal + première description de lot
   try {
-    const lots = cn['cac:ProcurementProjectLot']
-    const lot = Array.isArray(lots) ? lots[0] : lots
-    const desc = str(lot?.['cac:ProcurementProject']?.['cbc:Description'])
-    if (desc) extra.description_complete = desc
+    const mainDesc = str(cn['cac:ProcurementProject']?.['cbc:Description'])
+    const lot0Desc = str(lotList[0]?.['cac:ProcurementProject']?.['cbc:Description'])
+    // Prefer main project desc if different from lot desc
+    if (mainDesc && mainDesc !== lot0Desc) {
+      extra.description_complete = mainDesc
+    } else if (lot0Desc) {
+      extra.description_complete = lot0Desc
+    }
   } catch { /* */ }
 
-  // Conditions de participation
+  // Conditions de participation (lot-level + global)
   try {
-    const lots = cn['cac:ProcurementProjectLot']
-    const lot = Array.isArray(lots) ? lots[0] : lots
-    const terms = lot?.['cac:TenderingTerms']
-    const qualCriteria = terms?.['cac:TendererQualificationRequest']
-    const qualList = Array.isArray(qualCriteria) ? qualCriteria : qualCriteria ? [qualCriteria] : []
     const conditions: string[] = []
-    for (const q of qualList) {
-      const desc = str(q?.['cbc:CompanyLegalForm'])
-      if (desc) conditions.push(desc)
-      for (const key of ['cac:TechnicalEvaluationCriteria', 'cac:FinancialEvaluationCriteria']) {
-        const criteria = q?.[key]
-        const list = Array.isArray(criteria) ? criteria : criteria ? [criteria] : []
-        for (const c of list) { const d = str(c?.['cbc:Description']); if (d) conditions.push(d) }
-      }
-    }
+    // Global-level
+    const globalTerms = cn['cac:TenderingTerms']
+    collectQualifications(globalTerms, conditions)
+    // Lot-level (first lot)
+    if (lotList[0]) collectQualifications(lotList[0]['cac:TenderingTerms'], conditions)
     if (conditions.length > 0) extra.conditions_participation = conditions
   } catch { /* */ }
 
-  // Critères d'attribution
+  // Conditions d'exécution (lot-level)
   try {
-    const lots = cn['cac:ProcurementProjectLot']
-    const lot = Array.isArray(lots) ? lots[0] : lots
-    const award = lot?.['cac:TenderingTerms']?.['cac:AwardingTerms']?.['cac:AwardingCriterion']
-    const critList = Array.isArray(award) ? award : award ? [award] : []
+    const execConditions: string[] = []
+    for (const lot of lotList.slice(0, 3)) {
+      const reqs = lot?.['cac:TenderingTerms']?.['cac:ContractExecutionRequirement']
+      const reqList = Array.isArray(reqs) ? reqs : reqs ? [reqs] : []
+      for (const r of reqList) {
+        const desc = str(r?.['cbc:Description'])
+        if (desc && desc !== 'Détails dans le CCP' && desc.length > 10) execConditions.push(desc)
+      }
+    }
+    if (execConditions.length > 0) extra.conditions_execution = execConditions
+  } catch { /* */ }
+
+  // Critères d'attribution — search in lot-level TenderingTerms (eForms puts them here)
+  try {
     const criteres: { nom: string; poids?: string }[] = []
-    for (const c of critList) {
-      const subs = c?.['cac:SubordinateAwardingCriterion']
-      const subList = Array.isArray(subs) ? subs : subs ? [subs] : []
-      for (const sc of subList) {
-        const name = str(sc?.['cbc:Name']) ?? str(sc?.['cbc:Description'])
-        const weight = str(sc?.['cbc:WeightNumeric']) ?? str(sc?.['cbc:Weight'])
-        if (name) criteres.push({ nom: name, poids: weight ?? undefined })
+    for (const lot of lotList.slice(0, 1)) { // first lot only
+      const award = lot?.['cac:TenderingTerms']?.['cac:AwardingTerms']?.['cac:AwardingCriterion']
+      const awardList = Array.isArray(award) ? award : award ? [award] : []
+      for (const a of awardList) {
+        const subs = a?.['cac:SubordinateAwardingCriterion']
+        const subList = Array.isArray(subs) ? subs : subs ? [subs] : []
+        for (const sc of subList) {
+          const name = str(sc?.['cbc:Name']) ?? str(sc?.['cbc:Description'])
+          // Weight can be in extensions
+          const ext = sc?.['ext:UBLExtensions']?.['ext:UBLExtension']?.['ext:ExtensionContent']
+            ?.['efext:EformsExtension']?.['efac:AwardCriterionParameter']
+          const weight = str(ext?.['efbc:ParameterNumeric']) ?? str(sc?.['cbc:WeightNumeric'])
+          if (name) criteres.push({ nom: name, poids: weight ?? undefined })
+        }
       }
     }
     if (criteres.length > 0) extra.criteres_attribution = criteres
@@ -257,9 +272,7 @@ function parseEformsExtra(eforms: AnyObj): AnyObj {
 
   // Lots détaillés
   try {
-    const lots = cn['cac:ProcurementProjectLot']
-    const lotList = Array.isArray(lots) ? lots : lots ? [lots] : []
-    if (lotList.length > 1) {
+    if (lotList.length > 0) {
       const lotsDetails: { titre: string; description?: string; cpv?: string }[] = []
       for (const lot of lotList) {
         const proj = lot?.['cac:ProcurementProject']
@@ -269,36 +282,115 @@ function parseEformsExtra(eforms: AnyObj): AnyObj {
           cpv: str(proj?.['cac:MainCommodityClassification']?.['cbc:ItemClassificationCode']),
         })
       }
-      extra.lots_details = lotsDetails
+      if (lotsDetails.length > 1 || (lotsDetails.length === 1 && lotsDetails[0].description)) {
+        extra.lots_details = lotsDetails
+      }
     }
   } catch { /* */ }
 
-  // Lieu d'exécution
+  // Lieu d'exécution — lots level and main project level
   try {
-    const loc = cn['cac:ProcurementProject']?.['cac:RealizedLocation']
-    const locList = Array.isArray(loc) ? loc : loc ? [loc] : []
     const lieux: string[] = []
-    for (const l of locList) {
-      const parts = [str(l?.['cbc:Description']), str(l?.['cac:Address']?.['cbc:CityName'])].filter(Boolean)
-      if (parts.length > 0) lieux.push(parts.join(', '))
+    // Main project
+    const mainLoc = cn['cac:ProcurementProject']?.['cac:RealizedLocation']
+    collectLocations(mainLoc, lieux)
+    // Lots
+    for (const lot of lotList.slice(0, 3)) {
+      const lotLoc = lot?.['cac:ProcurementProject']?.['cac:RealizedLocation']
+      collectLocations(lotLoc, lieux)
     }
-    if (lieux.length > 0) extra.lieu_execution = lieux.join(' ; ')
+    const unique = [...new Set(lieux)]
+    if (unique.length > 0) extra.lieu_execution = unique.join(' ; ')
   } catch { /* */ }
 
-  // Contact
+  // Contact — from Organizations extension (eForms puts full contact here, not in Party)
   try {
-    const party = cn['cac:ContractingParty']?.['cac:Party']
     const contact: AnyObj = {}
-    const c = party?.['cac:Contact']
-    if (str(c?.['cbc:Name'])) contact.nom = str(c['cbc:Name'])
-    if (str(c?.['cbc:Telephone'])) contact.telephone = str(c['cbc:Telephone'])
-    if (str(c?.['cbc:ElectronicMail'])) contact.email = str(c['cbc:ElectronicMail'])
-    const addr = party?.['cac:PostalAddress']
-    if (addr) contact.adresse = [str(addr['cbc:StreetName']), str(addr['cbc:PostalZone']), str(addr['cbc:CityName'])].filter(Boolean).join(' ')
+    const orgs = cn['ext:UBLExtensions']?.['ext:UBLExtension']?.['ext:ExtensionContent']
+      ?.['efext:EformsExtension']?.['efac:Organizations']?.['efac:Organization']
+    const orgList = Array.isArray(orgs) ? orgs : orgs ? [orgs] : []
+
+    // Find ORG-0001 (main buyer)
+    const mainOrg = orgList.find((o: AnyObj) =>
+      o?.['efac:Company']?.['cac:PartyIdentification']?.['cbc:ID'] === 'ORG-0001'
+    )?.['efac:Company']
+
+    if (mainOrg) {
+      const c = mainOrg['cac:Contact']
+      if (str(c?.['cbc:Name'])) contact.nom = str(c['cbc:Name'])
+      if (str(c?.['cbc:Telephone'])) contact.telephone = str(c['cbc:Telephone'])
+      if (str(c?.['cbc:ElectronicMail'])) contact.email = str(c['cbc:ElectronicMail'])
+      const name = str(mainOrg['cac:PartyName']?.['cbc:Name'])
+      if (name) contact.organisme = name
+      const addr = mainOrg['cac:PostalAddress']
+      if (addr) {
+        contact.adresse = [str(addr['cbc:StreetName']), str(addr['cbc:PostalZone']), str(addr['cbc:CityName'])].filter(Boolean).join(', ')
+      }
+      if (str(mainOrg['cac:PartyLegalEntity']?.['cbc:CompanyID'])) {
+        contact.siret = str(mainOrg['cac:PartyLegalEntity']['cbc:CompanyID'])
+      }
+    }
+
+    // Fallback to ContractingParty
+    if (Object.keys(contact).length === 0) {
+      const party = cn['cac:ContractingParty']?.['cac:Party']
+      const c = party?.['cac:Contact']
+      if (str(c?.['cbc:Name'])) contact.nom = str(c['cbc:Name'])
+      if (str(c?.['cbc:Telephone'])) contact.telephone = str(c['cbc:Telephone'])
+      if (str(c?.['cbc:ElectronicMail'])) contact.email = str(c['cbc:ElectronicMail'])
+    }
+
+    // URL profil acheteur
+    const buyerProfile = str(cn['cac:ContractingParty']?.['cbc:BuyerProfileURI'])
+    if (buyerProfile) extra.url_profil_acheteur_detail = buyerProfile
+
     if (Object.keys(contact).length > 0) extra.contact_acheteur = contact
   } catch { /* */ }
 
+  // URL documents de consultation
+  try {
+    const docRef = lotList[0]?.['cac:TenderingTerms']?.['cac:CallForTendersDocumentReference']
+    const ref = Array.isArray(docRef) ? docRef[0] : docRef
+    const uri = str(ref?.['cac:Attachment']?.['cac:ExternalReference']?.['cbc:URI'])
+    if (uri?.startsWith('http')) extra.url_documents = uri.replace(/&amp;/g, '&')
+  } catch { /* */ }
+
+  // Durée de validité des offres
+  try {
+    const validity = lotList[0]?.['cac:TenderingTerms']?.['cac:TenderValidityPeriod']
+    const dur = str(validity?.['cbc:DurationMeasure'])
+    const unit = validity?.['cbc:DurationMeasure']?.['@unitCode']
+    if (dur) {
+      const unitLabel = unit === 'DAY' ? 'jours' : unit === 'MONTH' ? 'mois' : ''
+      extra.duree_validite_offres = `${dur} ${unitLabel}`.trim()
+    }
+  } catch { /* */ }
+
   return extra
+}
+
+// Helpers for eForms parsing
+function collectQualifications(terms: AnyObj | undefined, conditions: string[]) {
+  if (!terms) return
+  const quals = terms['cac:TendererQualificationRequest']
+  const qualList = Array.isArray(quals) ? quals : quals ? [quals] : []
+  for (const q of qualList) {
+    const desc = str(q?.['cbc:CompanyLegalForm'])
+    if (desc) conditions.push(desc)
+    for (const key of ['cac:TechnicalEvaluationCriteria', 'cac:FinancialEvaluationCriteria']) {
+      const criteria = q?.[key]
+      const list = Array.isArray(criteria) ? criteria : criteria ? [criteria] : []
+      for (const c of list) { const d = str(c?.['cbc:Description']); if (d) conditions.push(d) }
+    }
+  }
+}
+
+function collectLocations(loc: unknown, lieux: string[]) {
+  const locList = Array.isArray(loc) ? loc : loc ? [loc] : []
+  for (const l of locList as AnyObj[]) {
+    const parts = [str(l?.['cbc:Description']), str(l?.['cac:Address']?.['cbc:CityName'])].filter(Boolean)
+    if (parts.length > 0) lieux.push(parts.join(', '))
+  }
 }
 
 // ── Generic fallback (FNS, JOUE, etc.) ─────────────────────────────
