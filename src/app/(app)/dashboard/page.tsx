@@ -34,19 +34,29 @@ interface TopTender {
   nature_libelle?: string | null
 }
 
+interface AppelOffre {
+  id: string
+  titre: string
+  acheteur: string | null
+  statut: string
+  date_limite_reponse: string | null
+  updated_at: string
+  tender_idweb: string | null
+}
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-function formatDeadline(iso: string | null): { label: string; urgent: boolean; expired: boolean; daysLeft: number | null } {
-  if (!iso) return { label: 'Pas de date limite', urgent: false, expired: false, daysLeft: null }
+function formatDeadline(iso: string | null): { label: string; short: string; urgent: boolean; expired: boolean; daysLeft: number | null } {
+  if (!iso) return { label: 'Pas de date limite', short: 'Pas de deadline', urgent: false, expired: false, daysLeft: null }
   try {
     const d = new Date(iso)
     const days = Math.ceil((d.getTime() - Date.now()) / 86400000)
     const formatted = d.toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' })
     const time = d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
-    if (days < 0) return { label: `${formatted}`, urgent: true, expired: true, daysLeft: days }
-    if (days === 0) return { label: `${formatted} à ${time} (0j restants)`, urgent: true, expired: false, daysLeft: 0 }
-    return { label: `${formatted} à ${time} (${days}j restants)`, urgent: days <= 7, expired: false, daysLeft: days }
-  } catch { return { label: '—', urgent: false, expired: false, daysLeft: null } }
+    if (days < 0) return { label: formatted, short: 'Expiré', urgent: true, expired: true, daysLeft: days }
+    if (days === 0) return { label: `${formatted} à ${time}`, short: '0j restants', urgent: true, expired: false, daysLeft: 0 }
+    return { label: `${formatted} à ${time}`, short: `${days}j restants`, urgent: days <= 7, expired: false, daysLeft: days }
+  } catch { return { label: '—', short: '—', urgent: false, expired: false, daysLeft: null } }
 }
 
 function formatEuros(v: number | null) {
@@ -77,7 +87,7 @@ function getScoreBadgeStyle(score: number) {
   return 'bg-gray-100 text-gray-600 border-gray-200'
 }
 
-// ── Tender Card ──────────────────────────────────────────────────────────────
+// ── Tender Card (entièrement cliquable) ─────────────────────────────────────
 
 function TenderCard({
   tender,
@@ -90,7 +100,6 @@ function TenderCard({
   onToggleFav: () => void
   favLoading: boolean
 }) {
-  const [showReason, setShowReason] = useState(false)
   const deadline = formatDeadline(tender.datelimitereponse)
   const euros = formatEuros(tender.valeur_estimee ?? tender.budget_estime)
   const depts = Array.isArray(tender.code_departement) ? tender.code_departement : []
@@ -98,163 +107,144 @@ function TenderCard({
   const nature = tender.nature_libelle ?? 'SERVICES'
   const duree = tender.duree_mois ? `${tender.duree_mois} mois` : null
 
-  // Build AI summary line
   const summaryParts: string[] = []
-  if (tender.score !== null) summaryParts.push(`Forte similarité sémantique (${tender.score}%)`)
+  if (tender.score !== null) summaryParts.push(`Similarité sémantique (${tender.score}%)`)
   if (euros) summaryParts.push(`budget estimé ${euros}`)
   if (duree) summaryParts.push(`durée ${duree}`)
   const summaryLine = summaryParts.join(' — ')
 
   return (
-    <div className="bg-white rounded-xl border border-[#E0E0F0] shadow-sm hover:shadow-md transition-all flex flex-col">
-      {/* Header: Title + Star */}
-      <div className="p-5 pb-3 flex-1">
-        <div className="flex items-start gap-2 mb-3">
-          <Link href={`/veille/${encodeURIComponent(tender.idweb)}`} className="font-bold text-[#0000FF] text-sm leading-snug flex-1 line-clamp-3 uppercase hover:underline">
+    <Link
+      href={`/veille/${encodeURIComponent(tender.idweb)}`}
+      className="bg-white rounded-xl border border-[#E0E0F0] shadow-sm hover:shadow-lg hover:border-[#0000FF]/30 transition-all flex flex-col group cursor-pointer"
+    >
+      <div className="p-4 sm:p-5 pb-3 flex-1 min-w-0">
+        {/* Title + Star */}
+        <div className="flex items-start gap-2 mb-2">
+          <h3 className="font-bold text-[#0000FF] text-sm leading-snug flex-1 line-clamp-2 uppercase group-hover:underline min-w-0">
             {tender.objet ?? '(sans titre)'}
-          </Link>
+          </h3>
           <button
-            onClick={e => { e.stopPropagation(); onToggleFav() }}
+            onClick={e => { e.preventDefault(); e.stopPropagation(); onToggleFav() }}
             disabled={favLoading}
-            className="p-1 shrink-0 mt-0.5"
-            title={isFav ? 'Retirer des favoris' : 'Ajouter aux favoris'}
+            className="p-1 shrink-0"
           >
-            <Star className={cn('w-5 h-5', isFav ? 'fill-amber-400 text-amber-500' : 'text-gray-300 hover:text-amber-400')} />
+            <Star className={cn('w-4 h-4', isFav ? 'fill-amber-400 text-amber-500' : 'text-gray-300 hover:text-amber-400')} />
           </button>
         </div>
 
-        {/* Expired badge */}
         {deadline.expired && (
-          <span className="inline-block text-xs font-semibold px-2.5 py-0.5 rounded-full bg-orange-100 text-orange-600 border border-orange-200 mb-3">
-            Expiré
-          </span>
+          <span className="inline-block text-xs font-semibold px-2 py-0.5 rounded-full bg-orange-100 text-orange-600 mb-2">Expiré</span>
         )}
 
-        {/* Meta: org, date, dept, nature */}
-        <div className="space-y-1.5 mb-3 text-xs text-gray-500">
+        {/* Meta */}
+        <div className="space-y-1 mb-2 text-xs text-gray-500 min-w-0">
           {tender.nomacheteur && (
-            <div className="flex items-center gap-1.5">
-              <Building2 className="w-3.5 h-3.5 shrink-0" />
-              <span className="font-medium text-gray-700">{tender.nomacheteur}</span>
+            <div className="flex items-center gap-1.5 min-w-0">
+              <Building2 className="w-3 h-3 shrink-0" />
+              <span className="font-medium text-gray-700 truncate">{tender.nomacheteur}</span>
             </div>
           )}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 flex-wrap">
             {tender.dateparution && (
-              <span className="flex items-center gap-1">
-                <Calendar className="w-3 h-3" />
-                {new Date(tender.dateparution).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' })}
+              <span className="flex items-center gap-1 whitespace-nowrap">
+                <Calendar className="w-3 h-3 shrink-0" />
+                {new Date(tender.dateparution).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' })}
               </span>
             )}
             {depts.length > 0 && (
-              <span className="flex items-center gap-1">
-                <MapPin className="w-3 h-3" />
+              <span className="flex items-center gap-1 whitespace-nowrap">
+                <MapPin className="w-3 h-3 shrink-0" />
                 {depts.slice(0, 2).join(', ')}
               </span>
             )}
-            <span className="text-gray-400">{nature}</span>
+            <span className="text-gray-400 whitespace-nowrap">{nature}</span>
           </div>
         </div>
 
-        {/* Score badge + progress bar */}
+        {/* Score */}
         {tender.score !== null && (
-          <div className="mb-3">
-            <div className="flex items-center justify-between mb-1.5">
-              <span className={cn(
-                'text-xs font-bold px-2.5 py-0.5 rounded-full border',
-                getScoreBadgeStyle(tender.score),
-              )}>
+          <div className="mb-2">
+            <div className="flex items-center justify-between mb-1">
+              <span className={cn('text-[10px] font-bold px-2 py-0.5 rounded-full border', getScoreBadgeStyle(tender.score))}>
                 {getScoreLabel(tender.score)}
               </span>
-              <span className="text-xs font-bold text-gray-600">{tender.score}%</span>
+              <span className="text-xs font-bold text-gray-500">{tender.score}%</span>
             </div>
-            <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
-              <div
-                className={cn('h-full rounded-full transition-all', getScoreColor(tender.score))}
-                style={{ width: `${tender.score}%` }}
-              />
+            <div className="w-full h-1 bg-gray-100 rounded-full overflow-hidden">
+              <div className={cn('h-full rounded-full', getScoreColor(tender.score))} style={{ width: `${tender.score}%` }} />
             </div>
           </div>
         )}
 
-        {/* AI Summary box */}
+        {/* AI Summary */}
         {summaryLine && (
-          <div className="bg-[#E6E6FF] rounded-lg px-3 py-2 mb-3">
-            <p className="text-xs text-[#0000FF] flex items-start gap-1.5">
-              <Zap className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-              {summaryLine}
+          <div className="bg-[#E6E6FF] rounded-lg px-2.5 py-1.5 mb-2">
+            <p className="text-[11px] text-[#0000FF] flex items-start gap-1">
+              <Zap className="w-3 h-3 shrink-0 mt-0.5" />
+              <span className="min-w-0">{summaryLine}</span>
             </p>
           </div>
         )}
 
-        {/* Expandable AI reason */}
-        {tender.reason && (
-          <button
-            onClick={() => setShowReason(!showReason)}
-            className="flex items-center gap-1 text-xs text-[#0000FF] font-medium mb-3 hover:underline"
-          >
-            <Zap className="w-3 h-3" />
-            Résumé IA
-            {showReason ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-          </button>
-        )}
-        {showReason && tender.reason && (
-          <p className="text-xs text-gray-600 italic mb-3 leading-relaxed">{tender.reason}</p>
-        )}
-
         {/* Tags */}
-        <div className="flex flex-wrap gap-1.5 mb-3">
-          {tender.procedure_libelle && (
-            <span className="text-xs bg-[#E6E6FF] text-[#0000FF] px-2 py-0.5 rounded-full">
-              {tender.procedure_libelle}
-            </span>
-          )}
-          {descripteurs.slice(0, 3).map((d, i) => (
-            <span key={i} className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
-              {d}
-            </span>
+        <div className="flex flex-wrap gap-1">
+          {descripteurs.slice(0, 2).map((d, i) => (
+            <span key={i} className="text-[10px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-full truncate max-w-[140px]">{d}</span>
           ))}
         </div>
       </div>
 
-      {/* Footer: deadline + actions */}
-      <div className="px-5 py-3 border-t border-[#E0E0F0] flex items-center justify-between">
-        <div className="flex items-center gap-1 text-xs">
-          <Clock className="w-3.5 h-3.5 text-gray-400" />
-          <span className={cn(
-            'font-medium',
-            deadline.expired ? 'text-orange-500' : deadline.urgent ? 'text-red-600' : 'text-gray-500',
-          )}>
-            {deadline.label}
-          </span>
-        </div>
-        <div className="flex items-center gap-2">
-          {!deadline.expired && (
-            <Link
-              href={`/veille?search=${encodeURIComponent(tender.objet ?? '')}`}
-              className="text-xs font-semibold text-[#0000FF] hover:underline flex items-center gap-1"
-              onClick={e => e.stopPropagation()}
-            >
-              <ExternalLink className="w-3 h-3" />
-              Candidater
-            </Link>
-          )}
-        </div>
+      {/* Footer */}
+      <div className="px-4 sm:px-5 py-2.5 border-t border-[#E0E0F0] flex items-center justify-between min-w-0">
+        <span className={cn(
+          'text-xs font-medium truncate',
+          deadline.expired ? 'text-orange-500' : deadline.urgent ? 'text-red-600' : 'text-gray-500',
+        )}>
+          {deadline.short}
+        </span>
+        <span className="text-xs font-semibold text-[#0000FF] flex items-center gap-1 shrink-0">
+          Détail <ArrowRight className="w-3 h-3" />
+        </span>
       </div>
-    </div>
+    </Link>
+  )
+}
+
+// ── AO En Cours Card ────────────────────────────────────────────────────────
+
+function AoCard({ ao }: { ao: AppelOffre }) {
+  const dl = formatDeadline(ao.date_limite_reponse)
+  return (
+    <Link
+      href={`/appels-offres/${ao.id}`}
+      className="bg-white rounded-xl border border-[#E0E0F0] shadow-sm hover:shadow-lg hover:border-[#0000FF]/30 transition-all p-4 sm:p-5 flex flex-col group cursor-pointer"
+    >
+      <h3 className="font-bold text-[#0000FF] text-sm leading-snug line-clamp-2 uppercase group-hover:underline mb-2 min-w-0">
+        {ao.titre}
+      </h3>
+      {ao.acheteur && (
+        <div className="flex items-center gap-1.5 text-xs text-gray-500 mb-2 min-w-0">
+          <Building2 className="w-3 h-3 shrink-0" />
+          <span className="truncate">{ao.acheteur}</span>
+        </div>
+      )}
+      <div className="mt-auto pt-2 flex items-center justify-between">
+        <span className={cn(
+          'text-xs font-medium',
+          dl.expired ? 'text-orange-500' : dl.urgent ? 'text-red-600' : 'text-gray-500',
+        )}>
+          {dl.short}
+        </span>
+        <span className="text-xs font-semibold text-[#0000FF] flex items-center gap-1">
+          Continuer <ArrowRight className="w-3 h-3" />
+        </span>
+      </div>
+    </Link>
   )
 }
 
 // ── Page ─────────────────────────────────────────────────────────────────────
-
-interface AppelOffre {
-  id: string
-  titre: string
-  acheteur: string | null
-  statut: string
-  date_limite_reponse: string | null
-  updated_at: string
-  tender_idweb: string | null
-}
 
 export default function DashboardPage() {
   const router = useRouter()
@@ -274,7 +264,6 @@ export default function DashboardPage() {
       setLoading(true)
       const supabase = createClient()
 
-      // Charger profil + AO en cours + tenders + favoris en parallèle
       const [
         { data: profile },
         { data: aoData },
@@ -283,7 +272,7 @@ export default function DashboardPage() {
         favTendersRes,
       ] = await Promise.all([
         supabase.from('profiles').select('raison_sociale').maybeSingle(),
-        supabase.from('appels_offres').select('*').in('statut', ['en_cours', 'analyse']).order('updated_at', { ascending: false }).limit(5),
+        supabase.from('appels_offres').select('*').in('statut', ['en_cours', 'analyse']).order('updated_at', { ascending: false }).limit(6),
         fetch('/api/veille/tenders?limit=50&active_only=true').then(r => r.ok ? r.json() : null),
         fetch('/api/veille/favorites').then(r => r.ok ? r.json() : null),
         fetch('/api/veille/tenders?favorites_only=true&limit=6&active_only=false').then(r => r.ok ? r.json() : null),
@@ -298,28 +287,28 @@ export default function DashboardPage() {
         const allTenders = tendersRes.tenders as TopTender[]
         setTotalCount(tendersRes.total ?? allTenders.length)
 
-        // Auto-score unscored (max 10)
-        const unscored = allTenders.filter(t => t.score === null).slice(0, 10)
+        // Auto-score en background (silencieux, pas de bouton)
+        const unscored = allTenders.filter(t => t.score === null).slice(0, 15)
         if (unscored.length > 0) {
-          try {
-            const res = await fetch('/api/veille/score', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ idwebs: unscored.map(t => t.idweb) }),
-            })
-            if (res.ok) {
-              const { scores } = await res.json()
-              if (Array.isArray(scores)) {
-                for (const s of scores) {
-                  const t = allTenders.find(x => x.idweb === s.idweb)
+          // Fire and forget — update state when done
+          fetch('/api/veille/score', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ idwebs: unscored.map(t => t.idweb) }),
+          }).then(r => r.ok ? r.json() : null).then(data => {
+            if (data?.scores && Array.isArray(data.scores)) {
+              setTopTenders(prev => {
+                const updated = [...prev]
+                for (const s of data.scores) {
+                  const t = updated.find(x => x.idweb === s.idweb)
                   if (t) { t.score = s.score; t.reason = s.raison ?? t.reason }
                 }
-              }
+                return updated.sort((a, b) => (b.score ?? -1) - (a.score ?? -1))
+              })
             }
-          } catch {}
+          }).catch(() => {})
         }
 
-        // Sort by score desc
         const sorted = [...allTenders].sort((a, b) => (b.score ?? -1) - (a.score ?? -1))
         setTopTenders(sorted)
       }
@@ -380,75 +369,45 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 overflow-hidden">
       {/* Header */}
-      <div className="flex items-start justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900 truncate">
             Bonjour{raisonSociale ? `, ${raisonSociale}` : ''} 👋
           </h1>
           <p className="text-gray-500 mt-1 text-sm">
             Votre veille du jour — {today}
           </p>
         </div>
-        <div className="flex items-center gap-3 shrink-0">
-          {lastSync && (
-            <span className="text-xs text-gray-400">Sync : {lastSync}</span>
-          )}
+        <div className="flex items-center gap-2 shrink-0">
+          {lastSync && <span className="text-xs text-gray-400 hidden sm:block">Sync : {lastSync}</span>}
           <button
             onClick={handleSync}
             disabled={syncing}
             className="flex items-center gap-2 border border-[#E0E0F0] rounded-lg px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
           >
             <RefreshCw className={cn('w-4 h-4', syncing && 'animate-spin')} />
-            Synchroniser
+            <span className="hidden sm:inline">Synchroniser</span>
           </button>
         </div>
       </div>
 
-      {/* ── Section 1 : Réponses en cours ── */}
+      {/* ── Section 1 : Réponses en cours (cartes) ── */}
       {aoEnCours.length > 0 && (
         <div>
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-              <Clock className="w-5 h-5 text-[#0000FF]" />
-              Réponses en cours
-              <span className="text-xs font-bold bg-orange-100 text-orange-600 px-2.5 py-0.5 rounded-full">
-                {aoEnCours.length}
-              </span>
+            <h2 className="text-base sm:text-lg font-bold text-gray-900 flex items-center gap-2">
+              <Clock className="w-5 h-5 text-[#0000FF] shrink-0" />
+              <span>Réponses en cours</span>
+              <span className="text-xs font-bold bg-orange-100 text-orange-600 px-2 py-0.5 rounded-full">{aoEnCours.length}</span>
             </h2>
-            <Link href="/appels-offres" className="text-sm text-[#0000FF] font-medium hover:underline flex items-center gap-1">
+            <Link href="/appels-offres" className="text-sm text-[#0000FF] font-medium hover:underline flex items-center gap-1 shrink-0">
               Voir tout <ArrowRight className="w-4 h-4" />
             </Link>
           </div>
-          <div className="bg-white rounded-xl border border-[#E0E0F0] divide-y divide-[#E0E0F0]">
-            {aoEnCours.map(ao => {
-              const dl = formatDeadline(ao.date_limite_reponse)
-              return (
-                <Link
-                  key={ao.id}
-                  href={`/appels-offres/${ao.id}`}
-                  className="flex items-center justify-between px-5 py-3.5 hover:bg-[#F5F5FF] transition-colors group"
-                >
-                  <div className="min-w-0 flex-1">
-                    <p className="font-medium text-sm text-gray-900 truncate">{ao.titre}</p>
-                    <p className="text-xs text-gray-500 mt-0.5">
-                      {ao.acheteur && `${ao.acheteur} — `}
-                      Modifié le {new Date(ao.updated_at).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' })}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0 ml-4">
-                    <span className={cn(
-                      'text-xs font-medium px-2 py-0.5 rounded-full',
-                      dl.expired ? 'bg-orange-100 text-orange-600' : dl.urgent ? 'bg-red-100 text-red-600' : 'bg-gray-100 text-gray-500',
-                    )}>
-                      {dl.label}
-                    </span>
-                    <ArrowRight className="w-4 h-4 text-gray-300 group-hover:text-[#0000FF] transition-colors" />
-                  </div>
-                </Link>
-              )
-            })}
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+            {aoEnCours.map(ao => <AoCard key={ao.id} ao={ao} />)}
           </div>
         </div>
       )}
@@ -457,26 +416,18 @@ export default function DashboardPage() {
       {favTenders.length > 0 && (
         <div>
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-              <Star className="w-5 h-5 text-amber-500" />
-              Mes favoris
-              <span className="text-xs font-bold bg-amber-100 text-amber-600 px-2.5 py-0.5 rounded-full">
-                {favorites.size}
-              </span>
+            <h2 className="text-base sm:text-lg font-bold text-gray-900 flex items-center gap-2">
+              <Star className="w-5 h-5 text-amber-500 shrink-0" />
+              <span>Mes favoris</span>
+              <span className="text-xs font-bold bg-amber-100 text-amber-600 px-2 py-0.5 rounded-full">{favorites.size}</span>
             </h2>
-            <Link href="/veille?tab=favorites" className="text-sm text-[#0000FF] font-medium hover:underline flex items-center gap-1">
+            <Link href="/veille?tab=favorites" className="text-sm text-[#0000FF] font-medium hover:underline flex items-center gap-1 shrink-0">
               Voir tout <ArrowRight className="w-4 h-4" />
             </Link>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
             {favTenders.slice(0, 3).map(tender => (
-              <TenderCard
-                key={tender.idweb}
-                tender={tender}
-                isFav={true}
-                onToggleFav={() => toggleFav(tender.idweb)}
-                favLoading={favLoading.has(tender.idweb)}
-              />
+              <TenderCard key={tender.idweb} tender={tender} isFav={true} onToggleFav={() => toggleFav(tender.idweb)} favLoading={favLoading.has(tender.idweb)} />
             ))}
           </div>
         </div>
@@ -485,17 +436,12 @@ export default function DashboardPage() {
       {/* ── Section 3 : Annonces pour vous ── */}
       <div>
         <div className="flex items-center justify-between mb-3">
-          <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-            <Zap className="w-5 h-5 text-[#0000FF]" />
-            Annonces pour vous
-            <span className="text-xs font-bold bg-[#0000FF] text-white px-2.5 py-0.5 rounded-full">
-              {totalCount} résultats
-            </span>
+          <h2 className="text-base sm:text-lg font-bold text-gray-900 flex items-center gap-2">
+            <Zap className="w-5 h-5 text-[#0000FF] shrink-0" />
+            <span>Annonces pour vous</span>
+            <span className="text-xs font-bold bg-[#0000FF] text-white px-2 py-0.5 rounded-full">{totalCount}</span>
           </h2>
-          <Link
-            href="/veille"
-            className="text-sm text-[#0000FF] font-medium hover:underline flex items-center gap-1"
-          >
+          <Link href="/veille" className="text-sm text-[#0000FF] font-medium hover:underline flex items-center gap-1 shrink-0">
             Voir tout <ArrowRight className="w-4 h-4" />
           </Link>
         </div>
@@ -511,14 +457,8 @@ export default function DashboardPage() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
             {topTenders.map(tender => (
-              <TenderCard
-                key={tender.idweb}
-                tender={tender}
-                isFav={favorites.has(tender.idweb)}
-                onToggleFav={() => toggleFav(tender.idweb)}
-                favLoading={favLoading.has(tender.idweb)}
-              />
-          ))}
+              <TenderCard key={tender.idweb} tender={tender} isFav={favorites.has(tender.idweb)} onToggleFav={() => toggleFav(tender.idweb)} favLoading={favLoading.has(tender.idweb)} />
+            ))}
           </div>
         )}
       </div>

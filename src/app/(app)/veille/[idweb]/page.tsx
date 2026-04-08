@@ -315,26 +315,99 @@ export default function TenderDetailPage() {
         </div>
       </div>
 
-      {/* Résumé rapide / Score IA */}
+      {/* Pourquoi cette offre vous correspond */}
+      {(tender.score !== null || (profile?.domaines_competences && profile.domaines_competences.length > 0)) && (
+        <div className="bg-[#F5F5FF] rounded-xl border border-[#0000FF]/20 p-6 space-y-4">
+          <h2 className="font-bold text-[#0000FF] flex items-center gap-2">
+            <Target className="w-5 h-5" />
+            Pourquoi cette offre vous correspond
+          </h2>
+
+          {/* Score bar */}
+          {tender.score !== null && (
+            <div>
+              <div className="flex items-center gap-3 mb-2">
+                <span className={cn('text-xs font-bold px-3 py-1 rounded-full border', getScoreBadgeStyle(tender.score))}>
+                  {getScoreLabel(tender.score)} — {tender.score}%
+                </span>
+                <div className="flex-1 h-2.5 bg-white rounded-full overflow-hidden">
+                  <div className={cn('h-full rounded-full transition-all', getScoreBarColor(tender.score))} style={{ width: `${tender.score}%` }} />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* AI reason */}
+          {tender.reason && (
+            <p className="text-sm text-gray-700 bg-white rounded-lg px-4 py-3 leading-relaxed border border-[#E0E0F0]">
+              <Zap className="w-3.5 h-3.5 text-[#0000FF] inline mr-1.5 -mt-0.5" />
+              {tender.reason}
+            </p>
+          )}
+
+          {/* Profile competences match hint */}
+          {profile?.domaines_competences && profile.domaines_competences.length > 0 && (
+            <div className="text-sm text-gray-600">
+              <span className="font-medium text-gray-700">Vos compétences en lien :</span>{' '}
+              {profile.domaines_competences.slice(0, 5).join(', ')}
+            </div>
+          )}
+
+          {!tender.score && !tender.reason && (
+            <p className="text-sm text-gray-500 italic">
+              Le scoring automatique de cette annonce est en cours. Revenez dans quelques instants.
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Résumé rapide */}
       <div className="bg-white rounded-xl border border-[#E0E0F0] p-6 space-y-5">
         <h2 className="font-bold text-gray-900 flex items-center gap-2">
           <Zap className="w-5 h-5 text-[#0000FF]" />
           Résumé rapide
         </h2>
 
-        {/* Mission */}
+        {/* Short summary (AI-generated or from BOAMP) */}
+        {tender.short_summary && (
+          <div className="bg-[#E6E6FF] rounded-lg px-4 py-3">
+            <p className="text-sm text-[#0000FF] leading-relaxed">{tender.short_summary}</p>
+          </div>
+        )}
+
+        {/* Key facts grid */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div className="bg-gray-50 rounded-lg p-3 text-center">
+            <p className="text-xs text-gray-400 uppercase font-bold mb-1">Nature</p>
+            <p className="text-sm font-semibold text-gray-800">{tender.nature_libelle ?? '—'}</p>
+          </div>
+          <div className="bg-gray-50 rounded-lg p-3 text-center">
+            <p className="text-xs text-gray-400 uppercase font-bold mb-1">Budget</p>
+            <p className="text-sm font-semibold text-gray-800">{euros ?? 'N/C'}</p>
+          </div>
+          <div className="bg-gray-50 rounded-lg p-3 text-center">
+            <p className="text-xs text-gray-400 uppercase font-bold mb-1">Durée</p>
+            <p className="text-sm font-semibold text-gray-800">{tender.duree_mois ? `${tender.duree_mois} mois` : 'N/C'}</p>
+          </div>
+          <div className="bg-gray-50 rounded-lg p-3 text-center">
+            <p className="text-xs text-gray-400 uppercase font-bold mb-1">Lots</p>
+            <p className="text-sm font-semibold text-gray-800">{tender.nb_lots ?? 'Unique'}</p>
+          </div>
+        </div>
+
+        {/* Mission / Description */}
         {tender.description_detail && (
           <div>
             <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider flex items-center gap-1.5 mb-2">
               <Target className="w-3.5 h-3.5" />
-              Mission
+              Description de la mission
             </h3>
             <div className="text-sm text-gray-700 leading-relaxed">
-              {showFullDescription || tender.description_detail.length <= 400
+              {showFullDescription || tender.description_detail.length <= 600
                 ? tender.description_detail
-                : `${tender.description_detail.slice(0, 400)}...`
+                : `${tender.description_detail.slice(0, 600)}...`
               }
-              {tender.description_detail.length > 400 && (
+              {tender.description_detail.length > 600 && (
                 <button
                   onClick={() => setShowFullDescription(!showFullDescription)}
                   className="ml-1 text-[#0000FF] font-medium hover:underline text-xs"
@@ -346,26 +419,39 @@ export default function TenderDetailPage() {
           </div>
         )}
 
-        {/* Score / Pourquoi ça matche */}
-        {tender.score !== null && (
+        {/* CPV codes */}
+        {tender.cpv_codes && tender.cpv_codes.length > 0 && (
           <div>
-            <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider flex items-center gap-1.5 mb-2">
-              <Zap className="w-3.5 h-3.5" />
-              Pourquoi ça matche
-            </h3>
-            <div className="flex items-center gap-3 mb-2">
-              <span className={cn('text-xs font-bold px-3 py-1 rounded-full border', getScoreBadgeStyle(tender.score))}>
-                {getScoreLabel(tender.score)} — {tender.score}%
-              </span>
-              <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
-                <div className={cn('h-full rounded-full', getScoreBarColor(tender.score))} style={{ width: `${tender.score}%` }} />
-              </div>
+            <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Codes CPV</h3>
+            <div className="flex flex-wrap gap-2">
+              {tender.cpv_codes.map((code, i) => (
+                <span key={i} className="text-xs bg-gray-100 text-gray-600 px-2.5 py-1 rounded-full font-mono">{code}</span>
+              ))}
             </div>
-            {tender.reason && (
-              <p className="text-sm text-[#0000FF] italic bg-[#E6E6FF] rounded-lg px-4 py-3 leading-relaxed">
-                {tender.reason}
-              </p>
-            )}
+          </div>
+        )}
+
+        {/* NUTS code */}
+        {tender.code_nuts && (
+          <div>
+            <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Code NUTS</h3>
+            <p className="text-sm text-gray-700 font-mono">{tender.code_nuts}</p>
+          </div>
+        )}
+
+        {/* Procedure detail */}
+        {tender.procedure_libelle && (
+          <div>
+            <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Type de procédure</h3>
+            <p className="text-sm text-gray-700">{tender.procedure_libelle}</p>
+          </div>
+        )}
+
+        {/* Diffusion end date */}
+        {tender.datefindiffusion && (
+          <div>
+            <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Fin de diffusion</h3>
+            <p className="text-sm text-gray-700">{formatDate(tender.datefindiffusion)}</p>
           </div>
         )}
       </div>

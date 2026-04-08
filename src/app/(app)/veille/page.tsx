@@ -1,10 +1,9 @@
 'use client'
 import { useEffect, useState, useCallback, useRef } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useSearchParams } from 'next/navigation'
 import {
   Search, Zap, AlertCircle, Settings, FileText, Building2, Calendar,
-  Clock, RefreshCw, Filter, X, Star, MapPin,
-  ChevronDown, ChevronUp, ExternalLink,
+  Clock, RefreshCw, X, Star, MapPin,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import Link from 'next/link'
@@ -117,15 +116,12 @@ function TenderCard({
   isFav,
   onToggleFav,
   favLoading,
-  onRepondre,
 }: {
   tender: TenderItem
   isFav: boolean
   onToggleFav: () => void
   favLoading: boolean
-  onRepondre: () => void
 }) {
-  const [showReason, setShowReason] = useState(false)
   const deadline = formatDeadline(tender.datelimitereponse)
   const euros = formatEuros(tender.valeur_estimee ?? tender.budget_estime)
   const depts = Array.isArray(tender.code_departement) ? tender.code_departement : []
@@ -134,21 +130,24 @@ function TenderCard({
   const duree = tender.duree_mois ? `${tender.duree_mois} mois` : null
 
   const summaryParts: string[] = []
-  if (tender.score !== null) summaryParts.push(`Forte similarité sémantique (${tender.score}%)`)
-  if (euros) summaryParts.push(`budget estimé ${euros}`)
+  if (tender.score !== null) summaryParts.push(`Similarité ${tender.score}%`)
+  if (euros) summaryParts.push(`budget ${euros}`)
   if (duree) summaryParts.push(`durée ${duree}`)
   const summaryLine = summaryParts.join(' — ')
 
   return (
-    <div className="bg-white rounded-xl border border-[#E0E0F0] shadow-sm hover:shadow-md transition-all flex flex-col">
-      <div className="p-5 pb-3 flex-1">
+    <Link
+      href={`/veille/${encodeURIComponent(tender.idweb)}`}
+      className="block bg-white rounded-xl border border-[#E0E0F0] shadow-sm hover:shadow-lg hover:border-[#0000FF]/30 transition-all flex flex-col group"
+    >
+      <div className="p-5 pb-3 flex-1 min-w-0">
         {/* Title + Star */}
-        <div className="flex items-start gap-2 mb-3">
-          <Link href={`/veille/${encodeURIComponent(tender.idweb)}`} className="font-bold text-[#0000FF] text-sm leading-snug flex-1 line-clamp-3 uppercase hover:underline">
+        <div className="flex items-start gap-2 mb-3 min-w-0">
+          <span className="font-bold text-[#0000FF] text-sm leading-snug flex-1 line-clamp-3 uppercase group-hover:underline min-w-0">
             {tender.objet ?? '(sans titre)'}
-          </Link>
+          </span>
           <button
-            onClick={e => { e.stopPropagation(); onToggleFav() }}
+            onClick={e => { e.preventDefault(); e.stopPropagation(); onToggleFav() }}
             disabled={favLoading}
             className="p-1 shrink-0 mt-0.5"
           >
@@ -163,27 +162,27 @@ function TenderCard({
         )}
 
         {/* Meta */}
-        <div className="space-y-1.5 mb-3 text-xs text-gray-500">
+        <div className="space-y-1.5 mb-3 text-xs text-gray-500 min-w-0">
           {tender.nomacheteur && (
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1.5 min-w-0">
               <Building2 className="w-3.5 h-3.5 shrink-0" />
-              <span className="font-medium text-gray-700">{tender.nomacheteur}</span>
+              <span className="font-medium text-gray-700 truncate">{tender.nomacheteur}</span>
             </div>
           )}
           <div className="flex items-center gap-3 flex-wrap">
             {tender.dateparution && (
               <span className="flex items-center gap-1">
-                <Calendar className="w-3 h-3" />
+                <Calendar className="w-3 h-3 shrink-0" />
                 {new Date(tender.dateparution).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' })}
               </span>
             )}
             {depts.length > 0 && (
               <span className="flex items-center gap-1">
-                <MapPin className="w-3 h-3" />
+                <MapPin className="w-3 h-3 shrink-0" />
                 {depts.slice(0, 2).join(', ')}
               </span>
             )}
-            <span className="text-gray-400">{nature}</span>
+            <span className="text-gray-400 truncate">{nature}</span>
           </div>
         </div>
 
@@ -207,83 +206,55 @@ function TenderCard({
           <div className="bg-[#E6E6FF] rounded-lg px-3 py-2 mb-3">
             <p className="text-xs text-[#0000FF] flex items-start gap-1.5">
               <Zap className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-              {summaryLine}
+              <span className="break-words min-w-0">{summaryLine}</span>
             </p>
           </div>
         )}
 
-        {/* Expandable reason */}
+        {/* Reason excerpt */}
         {tender.reason && (
-          <button
-            onClick={() => setShowReason(!showReason)}
-            className="flex items-center gap-1 text-xs text-[#0000FF] font-medium mb-3 hover:underline"
-          >
-            <Zap className="w-3 h-3" />
-            Résumé IA
-            {showReason ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-          </button>
-        )}
-        {showReason && tender.reason && (
-          <p className="text-xs text-gray-600 italic mb-3 leading-relaxed">{tender.reason}</p>
+          <p className="text-xs text-gray-500 italic mb-3 leading-relaxed line-clamp-2">{tender.reason}</p>
         )}
 
         {/* Tags */}
         <div className="flex flex-wrap gap-1.5">
           {tender.procedure_libelle && (
-            <span className="text-xs bg-[#E6E6FF] text-[#0000FF] px-2 py-0.5 rounded-full">{tender.procedure_libelle}</span>
+            <span className="text-xs bg-[#E6E6FF] text-[#0000FF] px-2 py-0.5 rounded-full truncate max-w-[200px]">{tender.procedure_libelle}</span>
           )}
           {descripteurs.slice(0, 3).map((d, i) => (
-            <span key={i} className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">{d}</span>
+            <span key={i} className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full truncate max-w-[150px]">{d}</span>
           ))}
         </div>
       </div>
 
       {/* Footer */}
-      <div className="px-5 py-3 border-t border-[#E0E0F0] flex items-center justify-between">
-        <div className="flex items-center gap-1 text-xs">
-          <Clock className="w-3.5 h-3.5 text-gray-400" />
+      <div className="px-5 py-3 border-t border-[#E0E0F0] flex items-center justify-between min-w-0">
+        <div className="flex items-center gap-1 text-xs min-w-0">
+          <Clock className="w-3.5 h-3.5 text-gray-400 shrink-0" />
           <span className={cn(
-            'font-medium',
+            'font-medium truncate',
             deadline.expired ? 'text-orange-500' : deadline.urgent ? 'text-red-600' : 'text-gray-500',
           )}>
             {deadline.label}
           </span>
         </div>
-        <div className="flex items-center gap-3">
-          {!deadline.expired && (
-            <>
-              <button
-                onClick={onRepondre}
-                className="text-xs font-semibold text-[#0000FF] hover:underline flex items-center gap-1"
-              >
-                Répondre
-              </button>
-              <button
-                onClick={onRepondre}
-                className="text-xs font-semibold text-[#0000FF] hover:underline flex items-center gap-1"
-              >
-                <ExternalLink className="w-3 h-3" />
-                Candidater
-              </button>
-            </>
-          )}
-        </div>
+        <span className="text-xs font-semibold text-[#0000FF] group-hover:underline shrink-0 ml-2">
+          Voir le détail →
+        </span>
       </div>
-    </div>
+    </Link>
   )
 }
 
 // ── Main ─────────────────────────────────────────────────────────────────────
 
 export default function VeillePage() {
-  const router = useRouter()
   const searchParams = useSearchParams()
 
   const [tenders, setTenders] = useState<TenderItem[]>([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(0)
   const [loading, setLoading] = useState(true)
-  const [scoring, setScoring] = useState(false)
   const [hasBoampCodes, setHasBoampCodes] = useState(true)
   const [hasActiviteMetier, setHasActiviteMetier] = useState(true)
   const LIMIT = 30
@@ -393,45 +364,10 @@ export default function VeillePage() {
     } catch { /* silent */ }
   }
 
-  async function handleManualScore() {
-    setScoring(true)
-    const idwebs = tenders.map(t => t.idweb).slice(0, 20)
-    try {
-      const res = await fetch('/api/veille/score', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ idwebs }),
-      })
-      if (!res.ok) throw new Error()
-      const { scores } = await res.json()
-      if (Array.isArray(scores)) {
-        setTenders(prev => prev.map(t => {
-          const found = scores.find((s: { idweb: string; score: number; raison: string }) => s.idweb === t.idweb)
-          return found ? { ...t, score: found.score, reason: found.raison } : t
-        }))
-        toast.success(`${scores.length} annonces scorées`)
-      }
-    } catch {
-      toast.error('Erreur lors du scoring IA')
-    } finally {
-      setScoring(false)
-    }
-  }
-
   function handleSearchChange(value: string) {
     setSearchInput(value)
     if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current)
     searchTimeoutRef.current = setTimeout(() => setSearch(value), 400)
-  }
-
-  function handleRepondre(tender: TenderItem) {
-    const params = new URLSearchParams()
-    if (tender.objet) params.set('titre', tender.objet)
-    if (tender.nomacheteur) params.set('acheteur', tender.nomacheteur)
-    if (tender.idweb) params.set('boamp_idweb', tender.idweb)
-    if (tender.datelimitereponse) params.set('deadline', tender.datelimitereponse.split('T')[0])
-    if (tender.url_profil_acheteur) params.set('boamp_url', tender.url_profil_acheteur)
-    router.push(`/appels-offres/nouveau?${params.toString()}`)
   }
 
   useEffect(() => { fetchTenders(0, search) }, [search, activeOnly, minScore]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -452,16 +388,9 @@ export default function VeillePage() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Recherche d&apos;appels d&apos;offres</h1>
           <p className="text-gray-500 mt-1 text-sm">
-            Annonces pertinentes scorées par l&apos;IA selon votre profil
+            Annonces pertinentes scorées automatiquement selon votre profil
           </p>
         </div>
-        <button
-          onClick={handleManualScore}
-          disabled={scoring || tenders.length === 0}
-          className="flex items-center gap-2 bg-[#0000FF] hover:bg-[#0000CC] disabled:opacity-50 text-white rounded-lg px-4 py-2 text-sm font-medium transition-colors whitespace-nowrap shrink-0"
-        >
-          {scoring ? <><RefreshCw className="w-4 h-4 animate-spin" />Scoring…</> : <><Zap className="w-4 h-4" />Scorer avec l&apos;IA</>}
-        </button>
       </div>
 
       {/* Alerts */}
@@ -496,7 +425,10 @@ export default function VeillePage() {
           {/* Search tabs */}
           <div className="flex rounded-lg border border-[#E0E0F0] overflow-hidden text-sm shrink-0">
             <button className="px-4 py-2 bg-[#0000FF] text-white font-medium">Recherche par mots-clés</button>
-            <button className="px-4 py-2 text-gray-500 hover:bg-gray-50">Recherche IA (langage naturel)</button>
+            <button className="px-4 py-2 text-gray-300 cursor-not-allowed relative" disabled title="Bientôt disponible">
+              Recherche IA
+              <span className="ml-1.5 text-[10px] bg-gray-100 text-gray-400 px-1.5 py-0.5 rounded-full font-medium">Bientôt</span>
+            </button>
           </div>
         </div>
 
@@ -622,7 +554,6 @@ export default function VeillePage() {
               isFav={favorites.has(tender.idweb)}
               onToggleFav={() => toggleFavorite(tender.idweb)}
               favLoading={favLoading.has(tender.idweb)}
-              onRepondre={() => handleRepondre(tender)}
             />
           ))}
         </div>
