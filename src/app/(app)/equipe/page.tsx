@@ -281,7 +281,7 @@ export default function EquipePage() {
             : (
               <div className="space-y-3">
                 {members.map(m => (
-                  <div key={m.id} className="bg-white rounded-xl border border-[#E0E0F0] shadow-sm p-5 flex items-center justify-between">
+                  <div key={m.id} className="bg-white rounded-xl border border-[#E0E0F0] shadow-sm p-5 flex items-center justify-between cursor-pointer hover:bg-[#F5F5FF] hover:shadow-lg hover:border-[#0000FF]/30 transition-all">
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 rounded-full bg-[#E6E6FF] flex items-center justify-center">
                         {m.role === 'admin' ? <Shield className="w-4 h-4 text-[#0000FF]" /> : <User className="w-4 h-4 text-[#0000FF]" />}
@@ -336,7 +336,7 @@ export default function EquipePage() {
             : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {collabs.map(c => (
-                  <div key={c.id} className="bg-white rounded-xl border border-[#E0E0F0] p-5 shadow-sm hover:shadow-md transition-all">
+                  <div key={c.id} className="bg-white rounded-xl border border-[#E0E0F0] p-5 shadow-sm hover:bg-[#F5F5FF] hover:shadow-lg hover:border-[#0000FF]/30 cursor-pointer transition-all" onClick={() => { setEditing(c); setShowCollabModal(true) }}>
                     <div className="flex justify-between items-start mb-3">
                       <div className="flex items-start gap-3">
                         <div className="w-10 h-10 rounded-full bg-[#E6E6FF] flex items-center justify-center shrink-0">

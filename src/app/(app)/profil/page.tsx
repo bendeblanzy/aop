@@ -161,6 +161,8 @@ export default function ProfilPage() {
     } else {
       toast.success('Profil sauvegardé !')
       refreshOrg()
+      // Recalculer l'embedding du profil en arrière-plan (pour le scoring vectoriel)
+      fetch('/api/veille/embed-profile', { method: 'POST' }).catch(() => {})
     }
     setSaving(false)
   }

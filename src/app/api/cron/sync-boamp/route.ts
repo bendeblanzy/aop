@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { adminClient } from '@/lib/supabase/admin'
 import { syncBoampTenders } from '@/lib/boamp/sync'
+import { getEmbeddingsBatch, buildTenderText } from '@/lib/ai/embeddings'
 
 /**
  * Route cron — appellée par Vercel Cron chaque jour à 6h (Europe/Paris)
  * Protégée par Authorization: Bearer {CRON_SECRET}
+ *
+ * 1. Sync les tenders depuis BOAMP
+ * 2. Embedd les nouveaux tenders sans embedding
  *
  * Peut aussi être déclenchée manuellement :
  *   curl -X POST /api/cron/sync-boamp \
@@ -35,8 +39,48 @@ export async function POST(request: NextRequest) {
   console.log(`[cron/sync-boamp] Démarrage sync, daysBack=${daysBack}`)
 
   try {
+    // Étape 1 : Sync BOAMP
     const result = await syncBoampTenders(adminClient, daysBack)
-    return NextResponse.json({ success: true, result })
+
+    // Étape 2 : Embedder les nouveaux tenders (sans embedding)
+    let embedded = 0
+    try {
+      const { data: unembedded } = await adminClient
+        .from('tenders')
+        .select('idweb, objet, description_detail, short_summary, nomacheteur, descripteur_libelles, nature_libelle, type_marche, cpv_codes, lots_titres')
+        .is('embedding', null)
+        .order('dateparution', { ascending: false })
+        .limit(200)
+
+      if (unembedded && unembedded.length > 0) {
+        console.log(`[cron/sync-boamp] Embedding ${unembedded.length} new tenders...`)
+        const texts = unembedded.map(t => buildTenderText(t))
+
+        // Batch par 100
+        for (let i = 0; i < texts.length; i += 100) {
+          const chunkTexts = texts.slice(i, i + 100)
+          const chunkTenders = unembedded.slice(i, i + 100)
+          const embeddings = await getEmbeddingsBatch(chunkTexts)
+
+          const promises = chunkTenders.map((t, idx) =>
+            adminClient
+              .from('tenders')
+              .update({ embedding: JSON.stringify(embeddings[idx]) })
+              .eq('idweb', t.idweb)
+          )
+          // Par lots de 20 requêtes parallèles
+          for (let j = 0; j < promises.length; j += 20) {
+            await Promise.all(promises.slice(j, j + 20))
+          }
+          embedded += chunkTenders.length
+        }
+        console.log(`[cron/sync-boamp] Embedded ${embedded} tenders`)
+      }
+    } catch (embedErr) {
+      console.error('[cron/sync-boamp] Embedding error (non-fatal):', embedErr)
+    }
+
+    return NextResponse.json({ success: true, result, embedded })
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     console.error('[cron/sync-boamp] Erreur:', message)

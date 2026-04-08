@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { adminClient, getOrgIdForUser } from '@/lib/supabase/admin'
+import { scoreWithVectors } from '@/lib/boamp/scoring-vector'
 
 /**
  * GET /api/veille/tenders
@@ -122,6 +123,26 @@ export async function GET(request: NextRequest) {
         scoreMap[s.tender_idweb] = { score: s.score, reason: s.reason }
       }
     }
+  }
+
+  // Auto-score vectoriel pour les tenders non encore scorés (fire & forget)
+  const unscoredIdwebs = idwebs.filter(id => !scoreMap[id])
+  if (unscoredIdwebs.length > 0 && profile?.activite_metier?.trim()) {
+    // Lancer en arrière-plan, sans bloquer la réponse
+    scoreWithVectors(orgId, unscoredIdwebs.slice(0, 30), { activiteMetier: profile.activite_metier })
+      .then(scores => {
+        const upsertData = scores.map(s => ({
+          tender_idweb: s.idweb,
+          organization_id: orgId,
+          score: s.score,
+          reason: s.raison,
+          scored_at: new Date().toISOString(),
+        }))
+        return adminClient
+          .from('tender_scores')
+          .upsert(upsertData, { onConflict: 'tender_idweb,organization_id' })
+      })
+      .catch(err => console.error('[veille/tenders] auto-score error:', err))
   }
 
   // Fusionner tenders + scores
