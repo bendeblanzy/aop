@@ -94,7 +94,11 @@ export function Sidebar() {
             : 'text-gray-600 font-medium hover:bg-[#E6E6FF] hover:text-[#0000FF]'
         )}
       >
-        <item.icon className={cn('w-4 h-4 shrink-0', isActive ? 'text-white' : 'text-gray-400 group-hover:text-[#0000FF]')} />
+        <item.icon className={cn(
+          'w-4 h-4 shrink-0',
+          isActive ? 'text-white' : 'text-gray-400 group-hover:text-[#0000FF]',
+          !isActive && item.name === 'Favoris' && 'text-amber-400 fill-amber-400 group-hover:text-amber-500 group-hover:fill-amber-500',
+        )} />
         {item.name}
       </Link>
     )

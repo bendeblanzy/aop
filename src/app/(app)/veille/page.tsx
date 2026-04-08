@@ -138,12 +138,12 @@ function TenderCard({
   return (
     <Link
       href={`/veille/${encodeURIComponent(tender.idweb)}`}
-      className="block bg-white rounded-xl border border-[#E0E0F0] shadow-sm hover:shadow-lg hover:border-[#0000FF]/30 transition-all flex flex-col group"
+      className="block bg-white rounded-xl border border-[#E0E0F0] shadow-sm hover:shadow-lg hover:border-[#0000FF]/30 hover:bg-[#F5F5FF] transition-all flex flex-col group"
     >
       <div className="p-5 pb-3 flex-1 min-w-0">
         {/* Title + Star */}
         <div className="flex items-start gap-2 mb-3 min-w-0">
-          <span className="font-bold text-[#0000FF] text-sm leading-snug flex-1 line-clamp-3 uppercase group-hover:underline min-w-0">
+          <span className="font-bold text-[#0000FF] text-sm leading-snug flex-1 line-clamp-3 uppercase min-w-0">
             {tender.objet ?? '(sans titre)'}
           </span>
           <button

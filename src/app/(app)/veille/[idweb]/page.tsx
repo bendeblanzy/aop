@@ -4,8 +4,9 @@ import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
   ArrowLeft, Building2, Calendar, MapPin, Clock,
-  ExternalLink, Zap, FileText, ChevronDown, ChevronUp,
+  ExternalLink, Zap, FileText,
   Star, RefreshCw, Layers, Target, Tag,
+  Mail, Phone, MapPinned, Award, CheckCircle2,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
@@ -116,6 +117,8 @@ export default function TenderDetailPage() {
 
   const [tender, setTender] = useState<TenderDetail | null>(null)
   const [profile, setProfile] = useState<ProfileInfo | null>(null)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [extra, setExtra] = useState<Record<string, any>>({})
   const [loading, setLoading] = useState(true)
   const [isFav, setIsFav] = useState(false)
   const [favLoading, setFavLoading] = useState(false)
@@ -134,6 +137,7 @@ export default function TenderDetailPage() {
           const data = await tenderRes.json()
           setTender(data.tender)
           setProfile(data.profile)
+          if (data.extra) setExtra(data.extra)
         }
 
         if (favsRes.ok) {
@@ -503,14 +507,40 @@ export default function TenderDetailPage() {
           </div>
         </div>
 
-        {/* Lots */}
+        {/* Lieu d'exécution (from BOAMP live) */}
+        {extra.lieu_execution && (
+          <div className="space-y-1">
+            <span className="text-xs font-bold text-gray-400 uppercase flex items-center gap-1.5">
+              <MapPinned className="w-3.5 h-3.5" />
+              Lieu d&apos;exécution
+            </span>
+            <p className="text-sm text-gray-700">{extra.lieu_execution as string}</p>
+          </div>
+        )}
+
+        {/* Lots — enriched with descriptions from BOAMP live */}
         {tender.nb_lots !== null && tender.nb_lots > 0 && (
           <div>
             <h3 className="text-xs font-bold text-gray-400 uppercase mb-2 flex items-center gap-1.5">
               <Layers className="w-3.5 h-3.5" />
               Lots ({tender.nb_lots})
             </h3>
-            {lots.length > 0 ? (
+            {Array.isArray(extra.lots_details) && extra.lots_details.length > 0 ? (
+              <div className="space-y-2">
+                {(extra.lots_details as { titre: string; description?: string; cpv?: string }[]).map((lot, i) => (
+                  <div key={i} className="bg-gray-50 rounded-lg px-4 py-3">
+                    <div className="flex items-start gap-2">
+                      <span className="text-xs font-bold text-[#0000FF] bg-[#E6E6FF] px-2 py-0.5 rounded shrink-0">Lot {i + 1}</span>
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-gray-900">{lot.titre}</p>
+                        {lot.description && <p className="text-xs text-gray-500 mt-1 leading-relaxed">{lot.description}</p>}
+                        {lot.cpv && <span className="text-xs text-gray-400 font-mono mt-1 inline-block">CPV: {lot.cpv}</span>}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : lots.length > 0 ? (
               <div className="space-y-1">
                 {lots.map((lot, i) => (
                   <div key={i} className="text-sm text-gray-700 bg-gray-50 rounded-lg px-3 py-2">
@@ -566,6 +596,92 @@ export default function TenderDetailPage() {
           )}
         </div>
       </div>
+
+      {/* Critères d'attribution (from BOAMP live) */}
+      {Array.isArray(extra.criteres_attribution) && extra.criteres_attribution.length > 0 && (
+        <div className="bg-white rounded-xl border border-[#E0E0F0] p-6 space-y-4">
+          <h2 className="font-bold text-gray-900 flex items-center gap-2">
+            <Award className="w-5 h-5 text-[#0000FF]" />
+            Critères d&apos;attribution
+          </h2>
+          <div className="space-y-2">
+            {(extra.criteres_attribution as { nom: string; poids?: string }[]).map((c, i) => (
+              <div key={i} className="flex items-center justify-between bg-gray-50 rounded-lg px-4 py-2.5">
+                <span className="text-sm text-gray-700 font-medium">{c.nom}</span>
+                {c.poids && (
+                  <span className="text-sm font-bold text-[#0000FF] bg-[#E6E6FF] px-2.5 py-0.5 rounded-full">{c.poids}%</span>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Conditions de participation (from BOAMP live) */}
+      {Array.isArray(extra.conditions_participation) && extra.conditions_participation.length > 0 && (
+        <div className="bg-white rounded-xl border border-[#E0E0F0] p-6 space-y-4">
+          <h2 className="font-bold text-gray-900 flex items-center gap-2">
+            <CheckCircle2 className="w-5 h-5 text-[#0000FF]" />
+            Conditions de participation
+          </h2>
+          <div className="space-y-2">
+            {(extra.conditions_participation as string[]).map((cond, i) => (
+              <div key={i} className="text-sm text-gray-700 bg-gray-50 rounded-lg px-4 py-3 leading-relaxed">
+                {cond}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Contact acheteur (from BOAMP live) */}
+      {extra.contact_acheteur && typeof extra.contact_acheteur === 'object' && (
+        <div className="bg-white rounded-xl border border-[#E0E0F0] p-6 space-y-4">
+          <h2 className="font-bold text-gray-900 flex items-center gap-2">
+            <Building2 className="w-5 h-5 text-[#0000FF]" />
+            Contact de l&apos;acheteur
+          </h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {(extra.contact_acheteur as Record<string, string>).nom && (
+              <div className="flex items-center gap-2 text-sm">
+                <Building2 className="w-4 h-4 text-gray-400 shrink-0" />
+                <span className="text-gray-700">{(extra.contact_acheteur as Record<string, string>).nom}</span>
+              </div>
+            )}
+            {(extra.contact_acheteur as Record<string, string>).email && (
+              <div className="flex items-center gap-2 text-sm">
+                <Mail className="w-4 h-4 text-gray-400 shrink-0" />
+                <a href={`mailto:${(extra.contact_acheteur as Record<string, string>).email}`} className="text-[#0000FF] hover:underline">
+                  {(extra.contact_acheteur as Record<string, string>).email}
+                </a>
+              </div>
+            )}
+            {(extra.contact_acheteur as Record<string, string>).telephone && (
+              <div className="flex items-center gap-2 text-sm">
+                <Phone className="w-4 h-4 text-gray-400 shrink-0" />
+                <span className="text-gray-700">{(extra.contact_acheteur as Record<string, string>).telephone}</span>
+              </div>
+            )}
+            {(extra.contact_acheteur as Record<string, string>).adresse && (
+              <div className="flex items-center gap-2 text-sm">
+                <MapPin className="w-4 h-4 text-gray-400 shrink-0" />
+                <span className="text-gray-700">{(extra.contact_acheteur as Record<string, string>).adresse}</span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Modalités de remise des offres (from BOAMP live) */}
+      {extra.modalites_remise && (
+        <div className="bg-white rounded-xl border border-[#E0E0F0] p-6 space-y-4">
+          <h2 className="font-bold text-gray-900 flex items-center gap-2">
+            <FileText className="w-5 h-5 text-[#0000FF]" />
+            Modalités de remise des offres
+          </h2>
+          <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">{extra.modalites_remise as string}</p>
+        </div>
+      )}
 
       {/* Bottom action bar */}
       <div className="flex items-center justify-between bg-white rounded-xl border border-[#E0E0F0] p-4">
