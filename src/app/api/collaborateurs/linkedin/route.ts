@@ -99,6 +99,44 @@ export async function POST(request: NextRequest) {
     const certs = p.certifications || []
     const certNames = certs.map((c: any) => c.name || c.title || '').filter(Boolean)
 
+    // Construire une bio descriptive à partir des données LinkedIn
+    const bioParts: string[] = []
+    if (firstName && lastName) {
+      const intro = poste && company
+        ? `${firstName} ${lastName} est ${poste} chez ${company}.`
+        : poste
+          ? `${firstName} ${lastName} occupe le poste de ${poste}.`
+          : `${firstName} ${lastName}.`
+      bioParts.push(intro)
+    }
+    if (totalYears > 0) {
+      bioParts.push(`Fort${lastName ? '' : 'e'} de ${totalYears} années d'expérience professionnelle.`)
+    }
+    if (headline && headline !== poste) {
+      bioParts.push(headline + '.')
+    }
+    // Parcours : dernières expériences significatives
+    const pastExps = experiences.filter((e: any) => !e.jobStillWorking).slice(0, 3)
+    if (pastExps.length > 0) {
+      const parcours = pastExps.map((e: any) => `${e.title || 'Poste'}${e.companyName ? ' chez ' + e.companyName : ''}`).join(', ')
+      bioParts.push(`Parcours : ${parcours}.`)
+    }
+    if (diplomes.length > 0) {
+      bioParts.push(`Formation : ${diplomes.slice(0, 2).join(', ')}.`)
+    }
+    if (certNames.length > 0) {
+      bioParts.push(`Certifications : ${certNames.slice(0, 3).join(', ')}.`)
+    }
+    if (competences.length > 0) {
+      bioParts.push(`Compétences clés : ${competences.slice(0, 6).join(', ')}.`)
+    }
+    if (summary) {
+      // Prendre les 200 premiers caractères du "about" LinkedIn
+      const shortSummary = summary.length > 200 ? summary.substring(0, 200).trim() + '…' : summary
+      bioParts.push(shortSummary)
+    }
+    const bio = bioParts.join(' ')
+
     return NextResponse.json({
       prenom: firstName,
       nom: lastName,
@@ -109,7 +147,7 @@ export async function POST(request: NextRequest) {
       competences_cles: competences,
       diplomes,
       certifications: certNames,
-      summary,
+      bio,
       company,
       linkedin_url: linkedinUrl,
     })

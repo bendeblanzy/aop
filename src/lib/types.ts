@@ -103,6 +103,7 @@ export interface Collaborateur {
   role_metier?: string
   cv_url?: string
   linkedin_url?: string
+  bio?: string
 }
 
 export interface AppelOffre {

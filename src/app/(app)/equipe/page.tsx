@@ -20,7 +20,7 @@ type Member = {
 
 const emptyCollab = (): Partial<Collaborateur> => ({
   nom: '', prenom: '', poste: '', experience_annees: undefined,
-  email: '', role_metier: '', competences_cles: [], linkedin_url: ''
+  email: '', role_metier: '', competences_cles: [], linkedin_url: '', bio: ''
 })
 
 // ─── Credential copy helper ──────────────────────────────────────────────────
@@ -213,6 +213,7 @@ export default function EquipePage() {
         email: data.email || p.email,
         experience_annees: data.experience_annees || p.experience_annees,
         competences_cles: data.competences_cles?.length > 0 ? data.competences_cles : p.competences_cles,
+        bio: data.bio || p.bio,
         linkedin_url: url,
       }))
       toast.success('Profil LinkedIn importé ! Vérifiez et ajustez les informations.')
@@ -420,6 +421,9 @@ export default function EquipePage() {
                         )}
                       </div>
                     )}
+                    {c.bio && (
+                      <p className="text-xs text-gray-500 mt-2 line-clamp-2">{c.bio}</p>
+                    )}
                   </div>
                 ))}
               </div>
@@ -600,6 +604,21 @@ export default function EquipePage() {
                   />
                   <button onClick={() => addTag(newTag)} className="bg-primary text-white rounded-lg px-3 py-2 text-sm"><Plus className="w-4 h-4" /></button>
                 </div>
+              </div>
+
+              {/* Bio — description de la personne */}
+              <div>
+                <label className="block text-sm font-medium text-text-primary mb-1.5">Présentation</label>
+                <textarea
+                  value={editing.bio || ''}
+                  onChange={e => setEditing(p => ({ ...p, bio: e.target.value }))}
+                  rows={4}
+                  className="w-full border border-border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary resize-none"
+                  placeholder="Quelques phrases décrivant le parcours et l'expertise de cette personne. Ce texte sera utilisé dans les réponses aux appels d'offres."
+                />
+                <p className="text-xs text-text-secondary mt-1">
+                  {(editing.bio || '').length} caractères — auto-généré depuis LinkedIn si disponible, modifiable librement
+                </p>
               </div>
             </div>
             <div className="flex justify-end gap-3 px-6 pb-6">
