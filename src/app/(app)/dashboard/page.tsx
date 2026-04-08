@@ -246,10 +246,22 @@ function TenderCard({
 
 // ── Page ─────────────────────────────────────────────────────────────────────
 
+interface AppelOffre {
+  id: string
+  titre: string
+  acheteur: string | null
+  statut: string
+  date_limite_reponse: string | null
+  updated_at: string
+  tender_idweb: string | null
+}
+
 export default function DashboardPage() {
   const router = useRouter()
   const [raisonSociale, setRaisonSociale] = useState<string | null>(null)
   const [topTenders, setTopTenders] = useState<TopTender[]>([])
+  const [favTenders, setFavTenders] = useState<TopTender[]>([])
+  const [aoEnCours, setAoEnCours] = useState<AppelOffre[]>([])
   const [totalCount, setTotalCount] = useState(0)
   const [favorites, setFavorites] = useState<Set<string>>(new Set())
   const [favLoading, setFavLoading] = useState<Set<string>>(new Set())
@@ -261,15 +273,26 @@ export default function DashboardPage() {
     async function load() {
       setLoading(true)
       const supabase = createClient()
-      const { data: profile } = await supabase.from('profiles').select('raison_sociale').maybeSingle()
-      setRaisonSociale(profile?.raison_sociale ?? null)
 
-      const [tendersRes, favsRes] = await Promise.all([
+      // Charger profil + AO en cours + tenders + favoris en parallèle
+      const [
+        { data: profile },
+        { data: aoData },
+        tendersRes,
+        favsRes,
+        favTendersRes,
+      ] = await Promise.all([
+        supabase.from('profiles').select('raison_sociale').maybeSingle(),
+        supabase.from('appels_offres').select('*').in('statut', ['en_cours', 'analyse']).order('updated_at', { ascending: false }).limit(5),
         fetch('/api/veille/tenders?limit=50&active_only=true').then(r => r.ok ? r.json() : null),
         fetch('/api/veille/favorites').then(r => r.ok ? r.json() : null),
+        fetch('/api/veille/tenders?favorites_only=true&limit=6&active_only=false').then(r => r.ok ? r.json() : null),
       ])
 
+      setRaisonSociale(profile?.raison_sociale ?? null)
+      setAoEnCours((aoData as AppelOffre[]) ?? [])
       if (favsRes?.favorites) setFavorites(new Set(favsRes.favorites))
+      if (favTendersRes?.tenders) setFavTenders(favTendersRes.tenders as TopTender[])
 
       if (tendersRes?.tenders) {
         const allTenders = tendersRes.tenders as TopTender[]
@@ -296,7 +319,7 @@ export default function DashboardPage() {
           } catch {}
         }
 
-        // Sort by score desc, show all (scored and unscored)
+        // Sort by score desc
         const sorted = [...allTenders].sort((a, b) => (b.score ?? -1) - (a.score ?? -1))
         setTopTenders(sorted)
       }
@@ -357,7 +380,7 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       {/* Header */}
       <div className="flex items-start justify-between">
         <div>
@@ -383,45 +406,122 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Section: Annonces pour vous */}
-      <div className="flex items-center justify-between">
-        <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-          <Zap className="w-5 h-5 text-[#0000FF]" />
-          Annonces pour vous
-          <span className="text-xs font-bold bg-[#0000FF] text-white px-2.5 py-0.5 rounded-full">
-            {totalCount} résultats
-          </span>
-        </h2>
-        <Link
-          href="/veille"
-          className="text-sm text-[#0000FF] font-medium hover:underline flex items-center gap-1"
-        >
-          Voir tout <ArrowRight className="w-4 h-4" />
-        </Link>
-      </div>
-
-      {/* Card Grid */}
-      {topTenders.length === 0 ? (
-        <div className="text-center py-16 bg-white rounded-xl border border-[#E0E0F0]">
-          <Zap className="w-12 h-12 text-gray-200 mx-auto mb-3" />
-          <p className="text-gray-500 font-medium">Aucune annonce pour le moment</p>
-          <p className="text-gray-400 text-sm mt-1">
-            <Link href="/profil" className="text-[#0000FF] hover:underline">Configurez votre profil</Link> pour recevoir des suggestions
-          </p>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {topTenders.map(tender => (
-            <TenderCard
-              key={tender.idweb}
-              tender={tender}
-              isFav={favorites.has(tender.idweb)}
-              onToggleFav={() => toggleFav(tender.idweb)}
-              favLoading={favLoading.has(tender.idweb)}
-            />
-          ))}
+      {/* ── Section 1 : Réponses en cours ── */}
+      {aoEnCours.length > 0 && (
+        <div>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+              <Clock className="w-5 h-5 text-[#0000FF]" />
+              Réponses en cours
+              <span className="text-xs font-bold bg-orange-100 text-orange-600 px-2.5 py-0.5 rounded-full">
+                {aoEnCours.length}
+              </span>
+            </h2>
+            <Link href="/appels-offres" className="text-sm text-[#0000FF] font-medium hover:underline flex items-center gap-1">
+              Voir tout <ArrowRight className="w-4 h-4" />
+            </Link>
+          </div>
+          <div className="bg-white rounded-xl border border-[#E0E0F0] divide-y divide-[#E0E0F0]">
+            {aoEnCours.map(ao => {
+              const dl = formatDeadline(ao.date_limite_reponse)
+              return (
+                <Link
+                  key={ao.id}
+                  href={`/appels-offres/${ao.id}`}
+                  className="flex items-center justify-between px-5 py-3.5 hover:bg-[#F5F5FF] transition-colors group"
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="font-medium text-sm text-gray-900 truncate">{ao.titre}</p>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      {ao.acheteur && `${ao.acheteur} — `}
+                      Modifié le {new Date(ao.updated_at).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' })}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0 ml-4">
+                    <span className={cn(
+                      'text-xs font-medium px-2 py-0.5 rounded-full',
+                      dl.expired ? 'bg-orange-100 text-orange-600' : dl.urgent ? 'bg-red-100 text-red-600' : 'bg-gray-100 text-gray-500',
+                    )}>
+                      {dl.label}
+                    </span>
+                    <ArrowRight className="w-4 h-4 text-gray-300 group-hover:text-[#0000FF] transition-colors" />
+                  </div>
+                </Link>
+              )
+            })}
+          </div>
         </div>
       )}
+
+      {/* ── Section 2 : Mes favoris ── */}
+      {favTenders.length > 0 && (
+        <div>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+              <Star className="w-5 h-5 text-amber-500" />
+              Mes favoris
+              <span className="text-xs font-bold bg-amber-100 text-amber-600 px-2.5 py-0.5 rounded-full">
+                {favorites.size}
+              </span>
+            </h2>
+            <Link href="/veille?tab=favorites" className="text-sm text-[#0000FF] font-medium hover:underline flex items-center gap-1">
+              Voir tout <ArrowRight className="w-4 h-4" />
+            </Link>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+            {favTenders.slice(0, 3).map(tender => (
+              <TenderCard
+                key={tender.idweb}
+                tender={tender}
+                isFav={true}
+                onToggleFav={() => toggleFav(tender.idweb)}
+                favLoading={favLoading.has(tender.idweb)}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── Section 3 : Annonces pour vous ── */}
+      <div>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+            <Zap className="w-5 h-5 text-[#0000FF]" />
+            Annonces pour vous
+            <span className="text-xs font-bold bg-[#0000FF] text-white px-2.5 py-0.5 rounded-full">
+              {totalCount} résultats
+            </span>
+          </h2>
+          <Link
+            href="/veille"
+            className="text-sm text-[#0000FF] font-medium hover:underline flex items-center gap-1"
+          >
+            Voir tout <ArrowRight className="w-4 h-4" />
+          </Link>
+        </div>
+
+        {topTenders.length === 0 ? (
+          <div className="text-center py-16 bg-white rounded-xl border border-[#E0E0F0]">
+            <Zap className="w-12 h-12 text-gray-200 mx-auto mb-3" />
+            <p className="text-gray-500 font-medium">Aucune annonce pour le moment</p>
+            <p className="text-gray-400 text-sm mt-1">
+              <Link href="/profil" className="text-[#0000FF] hover:underline">Configurez votre profil</Link> pour recevoir des suggestions
+            </p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+            {topTenders.map(tender => (
+              <TenderCard
+                key={tender.idweb}
+                tender={tender}
+                isFav={favorites.has(tender.idweb)}
+                onToggleFav={() => toggleFav(tender.idweb)}
+                favLoading={favLoading.has(tender.idweb)}
+              />
+          ))}
+          </div>
+        )}
+      </div>
     </div>
   )
 }

@@ -38,6 +38,29 @@ export async function GET(request: NextRequest) {
   const search = url.searchParams.get('search') ?? ''
   const minScore = url.searchParams.get('min_score') ? parseInt(url.searchParams.get('min_score')!) : null
   const activeOnly = url.searchParams.get('active_only') !== 'false'
+  const favoritesOnly = url.searchParams.get('favorites_only') === 'true'
+
+  // Si favorites_only, récupérer d'abord les idwebs favoris
+  let favIdwebs: string[] = []
+  if (favoritesOnly) {
+    const { data: favData } = await adminClient
+      .from('tender_favorites')
+      .select('tender_idweb')
+      .eq('organization_id', orgId)
+      .order('created_at', { ascending: false })
+    favIdwebs = (favData ?? []).map(f => f.tender_idweb)
+    if (favIdwebs.length === 0) {
+      return NextResponse.json({
+        tenders: [],
+        total: 0,
+        filteredTotal: 0,
+        page: 0,
+        limit,
+        hasBoampCodes: boampCodes.length > 0,
+        hasActiviteMetier: !!profile?.activite_metier?.trim(),
+      })
+    }
+  }
 
   // Construire la requête tenders
   let query = adminClient
@@ -46,14 +69,19 @@ export async function GET(request: NextRequest) {
     .order('dateparution', { ascending: false })
     .range(page * limit, (page + 1) * limit - 1)
 
-  // Filtre date limite
-  if (activeOnly) {
-    query = query.gte('datelimitereponse', new Date().toISOString())
-  }
+  // Si favorites_only, filtrer par idwebs
+  if (favoritesOnly) {
+    query = query.in('idweb', favIdwebs)
+  } else {
+    // Filtre date limite (pas pour les favoris — on veut voir même les expirés)
+    if (activeOnly) {
+      query = query.gte('datelimitereponse', new Date().toISOString())
+    }
 
-  // Filtre codes BOAMP (si l'org a des codes configurés)
-  if (boampCodes.length > 0) {
-    query = query.overlaps('descripteur_codes', boampCodes)
+    // Filtre codes BOAMP (si l'org a des codes configurés)
+    if (boampCodes.length > 0) {
+      query = query.overlaps('descripteur_codes', boampCodes)
+    }
   }
 
   // Filtre recherche texte

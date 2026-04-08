@@ -300,13 +300,29 @@ export default function VeillePage() {
 
   const [favorites, setFavorites] = useState<Set<string>>(new Set())
   const [favLoading, setFavLoading] = useState<Set<string>>(new Set())
+  const [favTenders, setFavTenders] = useState<TenderItem[]>([])
+  const [favTendersLoading, setFavTendersLoading] = useState(false)
 
+  // Charger la liste des idwebs favoris
   useEffect(() => {
     fetch('/api/veille/favorites')
       .then(r => r.json())
       .then(d => { if (Array.isArray(d.favorites)) setFavorites(new Set(d.favorites)) })
       .catch(() => {})
   }, [])
+
+  // Charger les tenders favoris quand tab=favorites
+  useEffect(() => {
+    if (tab !== 'favorites') return
+    setFavTendersLoading(true)
+    fetch('/api/veille/tenders?favorites_only=true&limit=50&active_only=false')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (data?.tenders) setFavTenders(data.tenders)
+      })
+      .catch(() => {})
+      .finally(() => setFavTendersLoading(false))
+  }, [tab, favorites.size]) // reload when favorites change
 
   async function toggleFavorite(idweb: string) {
     const isFav = favorites.has(idweb)
@@ -422,11 +438,12 @@ export default function VeillePage() {
 
   const sortedTenders = sortTenders(tenders, sortBy)
   const displayedTenders = tab === 'favorites'
-    ? sortedTenders.filter(t => favorites.has(t.idweb))
+    ? sortTenders(favTenders, sortBy)
     : sortedTenders
 
   const totalPages = Math.ceil(total / LIMIT)
-  const favCount = tenders.filter(t => favorites.has(t.idweb)).length
+  const favCount = favorites.size
+  const isLoadingDisplay = tab === 'favorites' ? favTendersLoading : loading
 
   return (
     <div>
@@ -572,7 +589,7 @@ export default function VeillePage() {
       </div>
 
       {/* Card Grid */}
-      {loading ? (
+      {isLoadingDisplay ? (
         <div className="flex items-center justify-center py-16">
           <RefreshCw className="w-6 h-6 animate-spin text-[#0000FF]" />
         </div>
