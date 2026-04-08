@@ -102,3 +102,32 @@ export function buildProfileText(profile: {
 
   return parts.join('\n')
 }
+
+/**
+ * Construit le texte à embedder pour un collaborateur.
+ * Utilisé pour le matching avec les AO et la génération de réponses.
+ */
+export function buildCollaborateurText(collab: {
+  prenom?: string | null
+  nom?: string | null
+  poste?: string | null
+  role_metier?: string | null
+  bio?: string | null
+  competences_cles?: string[] | null
+  diplomes?: string[] | null
+  certifications?: string[] | null
+  experience_annees?: number | null
+}): string {
+  const parts: string[] = []
+
+  if (collab.prenom && collab.nom) parts.push(`Nom: ${collab.prenom} ${collab.nom}`)
+  if (collab.poste) parts.push(`Poste: ${collab.poste}`)
+  if (collab.role_metier) parts.push(`Rôle: ${collab.role_metier}`)
+  if (collab.experience_annees) parts.push(`Expérience: ${collab.experience_annees} ans`)
+  if (collab.bio) parts.push(`Profil: ${collab.bio}`)
+  if (collab.competences_cles?.length) parts.push(`Compétences: ${collab.competences_cles.join(', ')}`)
+  if (collab.diplomes?.length) parts.push(`Diplômes: ${collab.diplomes.join(', ')}`)
+  if (collab.certifications?.length) parts.push(`Certifications: ${collab.certifications.join(', ')}`)
+
+  return parts.join('\n')
+}

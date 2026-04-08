@@ -163,6 +163,8 @@ export default function EquipePage() {
       toast.success(editing.id ? 'Collaborateur modifié' : 'Collaborateur ajouté')
       setShowCollabModal(false)
       loadCollabs()
+      // Vectoriser les collaborateurs en arrière-plan
+      fetch('/api/collaborateurs/embed', { method: 'POST' }).catch(() => {})
     }
     setSaving(false)
   }

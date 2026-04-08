@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { adminClient, getOrgIdForUser } from '@/lib/supabase/admin'
-import { getEmbedding, buildProfileText } from '@/lib/ai/embeddings'
+import { getEmbedding, buildProfileText, buildCollaborateurText } from '@/lib/ai/embeddings'
 
 /**
  * POST /api/veille/embed-profile
@@ -26,7 +26,24 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Activité métier non renseignée' }, { status: 400 })
   }
 
-  const text = buildProfileText(profile)
+  // Enrichir le profil avec les compétences des collaborateurs
+  const { data: collabs } = await adminClient
+    .from('collaborateurs')
+    .select('prenom, nom, poste, role_metier, bio, competences_cles, diplomes, certifications, experience_annees')
+    .eq('organization_id', orgId)
+
+  let text = buildProfileText(profile)
+
+  // Ajouter un résumé des compétences de l'équipe au texte du profil
+  if (collabs && collabs.length > 0) {
+    const collabTexts = collabs
+      .map(c => buildCollaborateurText(c))
+      .filter(t => t.length > 20)
+    if (collabTexts.length > 0) {
+      text += '\n\nÉquipe:\n' + collabTexts.join('\n---\n')
+    }
+  }
+
   const embedding = await getEmbedding(text)
 
   if (embedding.length === 0) {
