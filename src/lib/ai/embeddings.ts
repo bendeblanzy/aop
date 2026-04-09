@@ -4,6 +4,37 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
 
 const MODEL = 'text-embedding-3-small' // 1536 dimensions, très rapide, ~$0.02/1M tokens
 
+// ── Constantes de normalisation du score ─────────────────────────────────────
+// La similarité cosinus entre embeddings text-embedding-3-small en français
+// se distribue typiquement entre 0.10 (hors sujet) et 0.60 (très proche).
+// On normalise sur la plage [SIMILARITY_MIN, SIMILARITY_MAX] → score 0-100.
+export const SIMILARITY_MIN = 0.15
+export const SIMILARITY_MAX = 0.55
+
+/**
+ * Convertit une similarité cosinus (0-1) en score 0-100.
+ * Mapping linéaire : SIMILARITY_MIN → 0, SIMILARITY_MAX → 100.
+ */
+export function simToScore(sim: number): number {
+  const normalized = (sim - SIMILARITY_MIN) / (SIMILARITY_MAX - SIMILARITY_MIN)
+  return Math.max(0, Math.min(100, Math.round(normalized * 100)))
+}
+
+/**
+ * Calcul de similarité cosinus entre deux vecteurs.
+ */
+export function cosineSimilarity(a: number[], b: number[]): number {
+  if (a.length !== b.length || a.length === 0) return 0
+  let dotProduct = 0, normA = 0, normB = 0
+  for (let i = 0; i < a.length; i++) {
+    dotProduct += a[i] * b[i]
+    normA += a[i] * a[i]
+    normB += b[i] * b[i]
+  }
+  const denom = Math.sqrt(normA) * Math.sqrt(normB)
+  return denom === 0 ? 0 : dotProduct / denom
+}
+
 /**
  * Génère un embedding pour un texte donné.
  */

@@ -1,21 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { adminClient, getOrgIdForUser } from '@/lib/supabase/admin'
-import { getEmbedding, buildProfileText } from '@/lib/ai/embeddings'
+import { getEmbedding, buildProfileText, simToScore } from '@/lib/ai/embeddings'
+import { getCommunicationEmbedding, blendEmbeddings } from '@/lib/boamp/communication-domain'
 
 /**
  * GET /api/veille/tenders
  *
  * MATCHING VECTORIEL : Retourne les annonces BOAMP triées par pertinence
- * sémantique (similarité cosinus entre l'embedding du profil et celui du tender).
+ * sémantique, restreintes aux prestations de SERVICES en communication.
  *
- * Les codes BOAMP et le type de marché sont des filtres secondaires optionnels.
- * Le tri principal est la similarité vectorielle.
+ * Deux modes de recherche :
+ *  - Profil (défaut) : embedding profil × 60% + domaine communication × 40%
+ *  - Recherche IA (semantic_query) : embedding requête × 70% + domaine communication × 30%
+ *
+ * Le type de marché est toujours restreint aux SERVICES (ou non renseigné).
  *
  * Query params:
  *   - page: number (défaut: 0)
  *   - limit: number (défaut: 30, max: 50)
- *   - search: string (filtre textuel sur objet/nomacheteur)
+ *   - search: string (filtre textuel ILIKE sur objet/nomacheteur, mode mots-clés)
+ *   - semantic_query: string (requête sémantique libre, mode Recherche IA)
  *   - min_score: number (seuil de similarité minimum, défaut: 30)
  *   - active_only: boolean (défaut: true — exclut les dates limites passées)
  *   - favorites_only: boolean
@@ -36,20 +41,27 @@ export async function GET(request: NextRequest) {
     .maybeSingle()
 
   const boampCodes: string[] = Array.isArray(profile?.boamp_codes) ? profile.boamp_codes : []
-  const typesMarche: string[] = Array.isArray((profile as any)?.types_marche_filtres) ? (profile as any).types_marche_filtres : []
+
+  // Toujours restreindre aux SERVICES — règle métier L'ADN STUDIO
+  // Si l'utilisateur a configuré d'autres types, on les respecte ; sinon défaut = SERVICES
+  const configuredTypes: string[] = Array.isArray((profile as any)?.types_marche_filtres)
+    ? (profile as any).types_marche_filtres
+    : []
+  const typesMarche = configuredTypes.length > 0 ? configuredTypes : ['SERVICES']
 
   // Paramètres de requête
   const url = new URL(request.url)
-  const page = Math.max(0, parseInt(url.searchParams.get('page') ?? '0'))
-  const limit = Math.min(50, Math.max(1, parseInt(url.searchParams.get('limit') ?? '30')))
-  const search = url.searchParams.get('search') ?? ''
-  const minScore = url.searchParams.get('min_score') ? parseInt(url.searchParams.get('min_score')!) : null
-  const activeOnly = url.searchParams.get('active_only') !== 'false'
+  const page    = Math.max(0, parseInt(url.searchParams.get('page')  ?? '0'))
+  const limit   = Math.min(50, Math.max(1, parseInt(url.searchParams.get('limit') ?? '30')))
+  const search  = url.searchParams.get('search')       ?? ''
+  const semanticQuery = url.searchParams.get('semantic_query') ?? ''
+  const minScore      = url.searchParams.get('min_score') ? parseInt(url.searchParams.get('min_score')!) : null
+  const activeOnly    = url.searchParams.get('active_only') !== 'false'
   const favoritesOnly = url.searchParams.get('favorites_only') === 'true'
 
   const hasActiviteMetier = !!profile?.activite_metier?.trim()
 
-  // ── Favoris : chemin dédié ──
+  // ── Favoris : chemin dédié ────────────────────────────────────────────────
   if (favoritesOnly) {
     const { data: favData } = await adminClient
       .from('tender_favorites')
@@ -61,11 +73,16 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ tenders: [], total: 0, filteredTotal: 0, page: 0, limit, hasBoampCodes: boampCodes.length > 0, hasActiviteMetier })
     }
 
-    const { data: tenders } = await adminClient
+    let favQuery = adminClient
       .from('tenders')
       .select('*')
       .in('idweb', favIdwebs)
       .order('dateparution', { ascending: false })
+
+    // Filtre SERVICES même sur les favoris
+    favQuery = favQuery.or(`type_marche.in.(${typesMarche.join(',')}),type_marche.is.null`)
+
+    const { data: tenders } = await favQuery
 
     // Ajouter les scores existants
     const { data: scores } = await adminClient
@@ -79,15 +96,22 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ tenders: enriched, total: enriched.length, filteredTotal: enriched.length, page: 0, limit, hasBoampCodes: boampCodes.length > 0, hasActiviteMetier })
   }
 
-  // ── Matching vectoriel : chemin principal ──
+  // ── Construction de l'embedding de requête ────────────────────────────────
+  //
+  // On utilise toujours un blend avec l'embedding "domaine communication" pour
+  // biaiser les résultats vers les prestations de communication/numérique/événementiel.
+  //
+  //  Mode Recherche IA (semantic_query renseigné) :
+  //    query_embedding = 70% requête utilisateur + 30% domaine communication
+  //
+  //  Mode Profil (défaut) :
+  //    query_embedding = 60% profil entreprise + 40% domaine communication
 
-  // 1. Obtenir ou calculer l'embedding du profil
   let profileEmbedding: number[] | null = null
 
   if (profile?.embedding) {
     profileEmbedding = typeof profile.embedding === 'string' ? JSON.parse(profile.embedding) : profile.embedding
   } else if (hasActiviteMetier) {
-    // Calculer et persister l'embedding du profil
     try {
       const profileText = buildProfileText(profile as any)
       profileEmbedding = await getEmbedding(profileText)
@@ -102,19 +126,50 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  // 2. Si pas d'embedding profil → fallback codes BOAMP classique
-  if (!profileEmbedding || profileEmbedding.length === 0) {
-    return fallbackCodeBased(orgId, profile, boampCodes, typesMarche, { page, limit, search, minScore, activeOnly })
+  // Vérifier si on est en mode Recherche IA avec une vraie requête
+  const isSemanticSearch = semanticQuery.trim().length > 0
+
+  // Si ni embedding profil ni requête sémantique → fallback codes BOAMP
+  if (!profileEmbedding && !isSemanticSearch) {
+    return fallbackCodeBased(orgId, profile, boampCodes, typesMarche, { page, limit, search, minScore, activeOnly }, hasActiviteMetier)
   }
 
-  // 3. Appel à la fonction SQL match_tenders_by_embedding
-  //    Récupère les 300 tenders les plus pertinents sémantiquement
+  // Obtenir l'embedding du domaine communication (mis en cache entre les requêtes)
+  let commEmbedding: number[] = []
+  try {
+    commEmbedding = await getCommunicationEmbedding()
+  } catch (e) {
+    console.error('[veille/tenders] communication embedding error:', e)
+  }
+
+  // Construire l'embedding de requête final (blend)
+  let queryEmbedding: number[]
+
+  if (isSemanticSearch) {
+    // Mode Recherche IA : embed la requête utilisateur, blend avec domaine comm
+    try {
+      const queryEmb = await getEmbedding(semanticQuery.trim())
+      queryEmbedding = commEmbedding.length > 0
+        ? blendEmbeddings(queryEmb, commEmbedding, 0.70) // 70% requête + 30% comm
+        : queryEmb
+    } catch (e) {
+      console.error('[veille/tenders] semantic query embedding error:', e)
+      return NextResponse.json({ error: 'Erreur calcul embedding requête' }, { status: 500 })
+    }
+  } else {
+    // Mode Profil : blend profil + domaine communication
+    queryEmbedding = commEmbedding.length > 0 && profileEmbedding!.length > 0
+      ? blendEmbeddings(profileEmbedding!, commEmbedding, 0.60) // 60% profil + 40% comm
+      : profileEmbedding!
+  }
+
+  // ── Matching vectoriel pgvector ───────────────────────────────────────────
   const MATCH_POOL = 300
-  const SIMILARITY_THRESHOLD = 0.15 // seuil bas pour avoir un pool large, on trie ensuite
+  const SIMILARITY_THRESHOLD = 0.15
 
   const { data: matchedRaw, error: matchError } = await adminClient
     .rpc('match_tenders_by_embedding', {
-      query_embedding: JSON.stringify(profileEmbedding),
+      query_embedding: JSON.stringify(queryEmbedding),
       match_threshold: SIMILARITY_THRESHOLD,
       match_count: MATCH_POOL,
       filter_codes: boampCodes.length > 0 ? boampCodes : null,
@@ -122,17 +177,17 @@ export async function GET(request: NextRequest) {
 
   if (matchError) {
     console.error('[veille/tenders] vector match error:', matchError.message)
-    return fallbackCodeBased(orgId, profile, boampCodes, typesMarche, { page, limit, search, minScore, activeOnly })
+    return fallbackCodeBased(orgId, profile, boampCodes, typesMarche, { page, limit, search, minScore, activeOnly }, hasActiviteMetier)
   }
 
   const matchedIdwebs = (matchedRaw ?? []).map((m: any) => m.idweb)
   const similarityMap = Object.fromEntries((matchedRaw ?? []).map((m: any) => [m.idweb, m.similarity]))
 
   if (matchedIdwebs.length === 0) {
-    return NextResponse.json({ tenders: [], total: 0, filteredTotal: 0, page, limit, hasBoampCodes: boampCodes.length > 0, hasActiviteMetier })
+    return NextResponse.json({ tenders: [], total: 0, filteredTotal: 0, page, limit, hasBoampCodes: boampCodes.length > 0, hasActiviteMetier, searchMode: isSemanticSearch ? 'semantic' : 'profile' })
   }
 
-  // 4. Récupérer les tenders complets pour les IDs matchés
+  // ── Récupérer les tenders complets ────────────────────────────────────────
   let query = adminClient
     .from('tenders')
     .select('*')
@@ -143,14 +198,12 @@ export async function GET(request: NextRequest) {
     query = query.gte('datelimitereponse', new Date().toISOString())
   }
 
-  // Filtre type de marché (si configuré)
-  if (typesMarche.length > 0) {
-    query = query.or(`type_marche.in.(${typesMarche.join(',')}),type_marche.is.null`)
-  }
+  // Filtre type de marché — TOUJOURS restreindre aux SERVICES (+ null)
+  query = query.or(`type_marche.in.(${typesMarche.join(',')}),type_marche.is.null`)
 
-  // Filtre recherche texte
-  if (search.trim()) {
-    query = query.or(`objet.ilike.%${search}%,nomacheteur.ilike.%${search}%`)
+  // Filtre recherche texte (mode mots-clés uniquement)
+  if (search.trim() && !isSemanticSearch) {
+    query = query.or(`objet.ilike.%${search}%,nomacheteur.ilike.%${search}%,description_detail.ilike.%${search}%`)
   }
 
   const { data: tenders, error: tErr } = await query
@@ -159,7 +212,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: tErr.message }, { status: 500 })
   }
 
-  // 5. Exclure les tenders déjà en cours de réponse
+  // ── Exclure les tenders déjà en cours de réponse ─────────────────────────
   const { data: existingAOs } = await adminClient
     .from('appels_offres')
     .select('tender_idweb')
@@ -168,7 +221,7 @@ export async function GET(request: NextRequest) {
   const aoTenderIds = new Set((existingAOs ?? []).map(ao => ao.tender_idweb).filter(Boolean))
   const filteredTenders = (tenders ?? []).filter(t => !aoTenderIds.has(t.idweb))
 
-  // 6. Récupérer les scores existants
+  // ── Scores existants ──────────────────────────────────────────────────────
   const idwebs = filteredTenders.map(t => t.idweb)
   let scoreMap: Record<string, { score: number; reason: string }> = {}
   if (idwebs.length > 0) {
@@ -184,34 +237,32 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  // 7. Convertir similarité en score 0-100 et enrichir
-  function simToScore(sim: number): number {
-    const normalized = (sim - 0.15) / (0.55 - 0.15)
-    return Math.max(0, Math.min(100, Math.round(normalized * 100)))
-  }
-
+  // ── Conversion similarité → score 0-100 et enrichissement ────────────────
   const tendersWithScores = filteredTenders.map(t => {
     const sim = similarityMap[t.idweb] ?? 0
     const vectorScore = simToScore(sim)
-    // Si on a un score Claude existant, on l'utilise ; sinon on utilise le vectoriel
     const existingScore = scoreMap[t.idweb]
     return {
       ...t,
       score: existingScore?.score ?? vectorScore,
-      reason: existingScore?.reason ?? (vectorScore >= 70 ? 'Forte correspondance sémantique.' : vectorScore >= 40 ? 'Correspondance partielle.' : 'Faible correspondance.'),
+      reason: existingScore?.reason ?? (
+        vectorScore >= 70 ? 'Forte correspondance sémantique.' :
+        vectorScore >= 40 ? 'Correspondance partielle.' :
+        'Faible correspondance.'
+      ),
       similarity: Math.round(sim * 1000) / 1000,
     }
   })
 
-  // 8. Trier par score décroissant (pertinence)
+  // Tri par score décroissant
   tendersWithScores.sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
 
-  // 9. Filtre min_score
+  // Filtre min_score
   const afterMinScore = minScore !== null
     ? tendersWithScores.filter(t => t.score !== null && t.score >= minScore)
     : tendersWithScores
 
-  // 10. Pagination
+  // Pagination
   const totalFiltered = afterMinScore.length
   const paginated = afterMinScore.slice(page * limit, (page + 1) * limit)
 
@@ -223,16 +274,18 @@ export async function GET(request: NextRequest) {
     limit,
     hasBoampCodes: boampCodes.length > 0,
     hasActiviteMetier,
+    searchMode: isSemanticSearch ? 'semantic' : 'profile',
   })
 }
 
-// ── Fallback : filtrage par codes BOAMP (si pas d'embedding) ──
+// ── Fallback : filtrage par codes BOAMP (si pas d'embedding) ─────────────────
 async function fallbackCodeBased(
   orgId: string,
   profile: any,
   boampCodes: string[],
   typesMarche: string[],
-  opts: { page: number; limit: number; search: string; minScore: number | null; activeOnly: boolean }
+  opts: { page: number; limit: number; search: string; minScore: number | null; activeOnly: boolean },
+  hasActiviteMetier: boolean,
 ) {
   let query = adminClient
     .from('tenders')
@@ -243,20 +296,20 @@ async function fallbackCodeBased(
   if (opts.activeOnly) {
     query = query.gte('datelimitereponse', new Date().toISOString())
   }
+
+  // Filtre SERVICES — toujours appliqué (avec les types configurés ou SERVICES par défaut)
+  query = query.or(`type_marche.in.(${typesMarche.join(',')}),type_marche.is.null`)
+
   if (boampCodes.length > 0) {
     query = query.overlaps('descripteur_codes', boampCodes)
   }
-  if (typesMarche.length > 0) {
-    query = query.or(`type_marche.in.(${typesMarche.join(',')}),type_marche.is.null`)
-  }
   if (opts.search.trim()) {
-    query = query.or(`objet.ilike.%${opts.search}%,nomacheteur.ilike.%${opts.search}%`)
+    query = query.or(`objet.ilike.%${opts.search}%,nomacheteur.ilike.%${opts.search}%,description_detail.ilike.%${opts.search}%`)
   }
 
   const { data: tenders, count, error } = await query
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  // Scores existants
   const idwebs = (tenders ?? []).map(t => t.idweb)
   let scoreMap: Record<string, { score: number; reason: string }> = {}
   if (idwebs.length > 0) {
@@ -289,6 +342,7 @@ async function fallbackCodeBased(
     page: opts.page,
     limit: opts.limit,
     hasBoampCodes: boampCodes.length > 0,
-    hasActiviteMetier: !!profile?.activite_metier?.trim(),
+    hasActiviteMetier,
+    searchMode: 'fallback',
   })
 }

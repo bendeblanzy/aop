@@ -1,5 +1,5 @@
 import { adminClient } from '@/lib/supabase/admin'
-import { getEmbedding, buildProfileText } from '@/lib/ai/embeddings'
+import { getEmbedding, buildProfileText, cosineSimilarity, simToScore } from '@/lib/ai/embeddings'
 import { callClaude } from '@/lib/ai/claude-client'
 
 export interface VectorScoreResult {
@@ -9,16 +9,7 @@ export interface VectorScoreResult {
   raison: string
 }
 
-/**
- * Convertit une similarité cosinus (0-1) en score 0-100.
- * La distribution typique des embeddings donne des similarités entre 0.1 et 0.6
- * pour des textes en français. On normalise sur cette plage.
- */
-function similarityToScore(sim: number): number {
-  // Mapping linéaire : 0.15 → 0, 0.55 → 100
-  const normalized = (sim - 0.15) / (0.55 - 0.15)
-  return Math.max(0, Math.min(100, Math.round(normalized * 100)))
-}
+// simToScore et cosineSimilarity sont importés depuis @/lib/ai/embeddings (shared)
 
 /**
  * Scoring hybride Tier 1 + Tier 2
@@ -100,7 +91,7 @@ export async function scoreWithVectors(
       : t.embedding
 
     const sim = cosineSimilarity(profileEmbedding, tenderEmb)
-    const score = similarityToScore(sim)
+    const score = simToScore(sim)
 
     return {
       idweb: t.idweb,
@@ -165,19 +156,4 @@ Réponds UNIQUEMENT en JSON valide : [{"idweb":"...", "raison": "..."}]`,
   return results
 }
 
-/**
- * Calcul de similarité cosinus entre deux vecteurs.
- */
-function cosineSimilarity(a: number[], b: number[]): number {
-  if (a.length !== b.length || a.length === 0) return 0
-  let dotProduct = 0
-  let normA = 0
-  let normB = 0
-  for (let i = 0; i < a.length; i++) {
-    dotProduct += a[i] * b[i]
-    normA += a[i] * a[i]
-    normB += b[i] * b[i]
-  }
-  const denom = Math.sqrt(normA) * Math.sqrt(normB)
-  return denom === 0 ? 0 : dotProduct / denom
-}
+// cosineSimilarity est importé depuis @/lib/ai/embeddings

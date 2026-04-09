@@ -48,6 +48,7 @@ interface ApiResponse {
 
 type SortKey = 'score' | 'date' | 'deadline'
 type TabKey = 'all' | 'favorites'
+type SearchMode = 'keyword' | 'semantic'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -261,6 +262,7 @@ export default function VeillePage() {
 
   const [search, setSearch] = useState('')
   const [searchInput, setSearchInput] = useState('')
+  const [searchMode, setSearchMode] = useState<SearchMode>('keyword')
   const [activeOnly, setActiveOnly] = useState(true)
   const [minScore, setMinScore] = useState<number | null>(null)
   const [sortBy, setSortBy] = useState<SortKey>('score')
@@ -326,7 +328,10 @@ export default function VeillePage() {
         page: String(p),
         limit: String(LIMIT),
         active_only: String(activeOnly),
-        ...(s.trim() ? { search: s } : {}),
+        // Mode mots-clés : filtre ILIKE sur objet/acheteur/description
+        ...(searchMode === 'keyword' && s.trim() ? { search: s } : {}),
+        // Mode Recherche IA : embedding sémantique de la requête
+        ...(searchMode === 'semantic' && s.trim() ? { semantic_query: s } : {}),
         ...(minScore !== null ? { min_score: String(minScore) } : {}),
       })
       const res = await fetch(`/api/veille/tenders?${params}`)
@@ -345,7 +350,7 @@ export default function VeillePage() {
     } finally {
       setLoading(false)
     }
-  }, [search, activeOnly, minScore]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [search, activeOnly, minScore, searchMode]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function autoScore(idwebs: string[]) {
     try {
@@ -367,10 +372,12 @@ export default function VeillePage() {
   function handleSearchChange(value: string) {
     setSearchInput(value)
     if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current)
-    searchTimeoutRef.current = setTimeout(() => setSearch(value), 400)
+    // Mode sémantique : debounce plus long pour éviter des appels OpenAI excessifs
+    const delay = searchMode === 'semantic' ? 700 : 400
+    searchTimeoutRef.current = setTimeout(() => setSearch(value), delay)
   }
 
-  useEffect(() => { fetchTenders(0, search) }, [search, activeOnly, minScore]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { fetchTenders(0, search) }, [search, activeOnly, minScore, searchMode]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const sortedTenders = sortTenders(tenders, sortBy)
   const displayedTenders = tab === 'favorites'
@@ -421,25 +428,48 @@ export default function VeillePage() {
 
       {/* Search + Filters */}
       <div className="bg-white rounded-xl border border-[#E0E0F0] p-4 mb-4 space-y-3">
-        <div className="flex gap-3">
-          {/* Search tabs */}
+        <div className="flex gap-3 flex-wrap">
+          {/* Search mode tabs */}
           <div className="flex rounded-lg border border-[#E0E0F0] overflow-hidden text-sm shrink-0">
-            <button className="px-4 py-2 bg-[#0000FF] text-white font-medium">Recherche par mots-clés</button>
-            <button className="px-4 py-2 text-gray-300 cursor-not-allowed relative" disabled title="Bientôt disponible">
+            <button
+              onClick={() => { setSearchMode('keyword'); setSearchInput(''); setSearch('') }}
+              className={cn('px-4 py-2 font-medium transition-colors', searchMode === 'keyword' ? 'bg-[#0000FF] text-white' : 'text-gray-500 hover:bg-gray-50')}
+            >
+              Mots-clés
+            </button>
+            <button
+              onClick={() => { setSearchMode('semantic'); setSearchInput(''); setSearch('') }}
+              className={cn('px-4 py-2 font-medium transition-colors flex items-center gap-1.5', searchMode === 'semantic' ? 'bg-[#0000FF] text-white' : 'text-gray-500 hover:bg-gray-50')}
+            >
+              <Zap className={cn('w-3.5 h-3.5', searchMode === 'semantic' ? 'text-amber-300' : 'text-gray-400')} />
               Recherche IA
-              <span className="ml-1.5 text-[10px] bg-gray-100 text-gray-400 px-1.5 py-0.5 rounded-full font-medium">Bientôt</span>
             </button>
           </div>
+          {searchMode === 'semantic' && (
+            <span className="text-xs bg-[#E6E6FF] text-[#0000FF] px-2.5 py-1 rounded-full font-medium self-center">
+              Décrivez librement la prestation recherchée
+            </span>
+          )}
         </div>
 
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+          {searchMode === 'semantic'
+            ? <Zap className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#0000FF]" />
+            : <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+          }
           <input
             type="text"
-            placeholder="Rechercher dans le titre, descripteur, acheteur..."
+            placeholder={searchMode === 'semantic'
+              ? 'Ex : refonte site web, campagne pub événementielle, motion design...'
+              : 'Rechercher dans le titre, acheteur...'}
             value={searchInput}
             onChange={e => handleSearchChange(e.target.value)}
-            className="w-full pl-10 pr-8 py-2.5 border border-[#E0E0F0] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#0000FF]/20 focus:border-[#0000FF]"
+            className={cn(
+              'w-full pl-10 pr-8 py-2.5 border rounded-lg text-sm focus:outline-none focus:ring-2 transition-colors',
+              searchMode === 'semantic'
+                ? 'border-[#0000FF]/30 focus:ring-[#0000FF]/20 focus:border-[#0000FF] bg-[#F5F5FF]'
+                : 'border-[#E0E0F0] focus:ring-[#0000FF]/20 focus:border-[#0000FF]',
+            )}
           />
           {searchInput && (
             <button onClick={() => { setSearchInput(''); setSearch('') }} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
@@ -496,7 +526,10 @@ export default function VeillePage() {
       <div className="bg-[#E6E6FF] rounded-xl p-3 mb-4 flex items-center gap-2">
         <Zap className="w-4 h-4 text-[#0000FF] shrink-0" />
         <span className="text-sm text-[#0000FF] font-medium">
-          Suggestions pour votre profil — {total} annonces correspondantes. Tapez un mot-clé pour affiner.
+          {searchMode === 'semantic' && search.trim()
+            ? `Recherche IA : résultats sémantiques pour « ${search} » — ${total} annonces trouvées`
+            : `Annonces de services communication & numérique — ${total} correspondances profil${search.trim() ? ` · filtre « ${search} »` : ''}`
+          }
         </span>
       </div>
 
