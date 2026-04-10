@@ -38,7 +38,73 @@ export default function ProfilPage() {
   const [uploading, setUploading] = useState<string | null>(null)
   // Deep Research
   const [deepResearchLoading, setDeepResearchLoading] = useState(false)
+  // SIRET auto-fill
+  const [sirenLoading, setSirenLoading] = useState(false)
   const supabase = createClient()
+
+  // ── Auto-remplissage depuis l'API Annuaire des Entreprises (data.gouv.fr) ──
+  async function autoFillFromSiret() {
+    const siret = (profile.siret || '').replace(/\s/g, '')
+    if (siret.length < 9) {
+      toast.error('Entrez au moins les 9 premiers chiffres du SIREN/SIRET')
+      return
+    }
+    setSirenLoading(true)
+    try {
+      const res = await fetch(
+        `https://recherche-entreprises.api.gouv.fr/search?q=${siret}&page=1&per_page=1`
+      )
+      if (!res.ok) throw new Error('API indisponible')
+      const json = await res.json()
+      const company = json.results?.[0]
+      if (!company) {
+        toast.error('Aucune entreprise trouvée pour ce SIRET')
+        return
+      }
+
+      // Mapping forme juridique → valeur du dropdown
+      const libelleNJ: string = company.libelle_nature_juridique_n3 ?? ''
+      const formeMap: Record<string, string> = {
+        'Société à responsabilité limitée': 'SARL',
+        'Société par actions simplifiée': 'SAS',
+        'Société anonyme': 'SA',
+        'Entreprise unipersonnelle à responsabilité limitée': 'EURL',
+        'Entrepreneur individuel': 'EI',
+        'Société par actions simplifiée unipersonnelle': 'SASU',
+        'Société en nom collectif': 'SNC',
+        'Association': 'Association',
+      }
+      const formeJuridique = Object.entries(formeMap).find(([k]) =>
+        libelleNJ.toLowerCase().includes(k.toLowerCase())
+      )?.[1] ?? 'Autre'
+
+      // Calcul du numéro TVA intracommunautaire
+      const siren = company.siren ?? siret.slice(0, 9)
+      const tvaKey = (12 + 3 * (parseInt(siren) % 97)) % 97
+      const numeroTva = `FR${String(tvaKey).padStart(2, '0')}${siren}`
+
+      // Mise à jour du profil avec les données récupérées
+      setProfile(p => ({
+        ...p,
+        raison_sociale: company.nom_complet ?? p.raison_sociale,
+        forme_juridique: formeJuridique,
+        code_naf: company.activite_principale ?? p.code_naf,
+        adresse_siege: company.siege?.adresse ?? p.adresse_siege,
+        code_postal: company.siege?.code_postal ?? p.code_postal,
+        ville: company.siege?.libelle_commune ?? p.ville,
+        numero_tva: p.numero_tva || numeroTva,
+        date_creation_entreprise: company.date_creation
+          ? company.date_creation.substring(0, 10)
+          : p.date_creation_entreprise,
+      }))
+
+      toast.success(`✅ ${company.nom_complet} — données pré-remplies ! Vérifiez et sauvegardez.`)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erreur lors de la recherche')
+    } finally {
+      setSirenLoading(false)
+    }
+  }
 
   async function load() {
     if (!orgId) {
@@ -237,6 +303,27 @@ export default function ProfilPage() {
         <div className="p-6">
           {/* Onglet Identité */}
           {activeTab === 'identite' && (
+            <div className="space-y-5">
+              {/* Bandeau auto-remplissage SIRET */}
+              <div className="bg-[#F5F5FF] rounded-xl border border-[#0000FF]/10 p-4 flex flex-col sm:flex-row sm:items-center gap-3">
+                <div className="flex-1">
+                  <p className="text-sm font-semibold text-[#0000FF] mb-0.5 flex items-center gap-1.5">
+                    <Search className="w-4 h-4" /> Auto-remplissage depuis le SIRET
+                  </p>
+                  <p className="text-xs text-gray-500">
+                    Renseignez votre SIRET ci-dessous et cliquez sur le bouton pour pré-remplir automatiquement les champs (source : Annuaire des Entreprises, data.gouv.fr).
+                  </p>
+                </div>
+                <button
+                  onClick={autoFillFromSiret}
+                  disabled={sirenLoading || (profile.siret || '').replace(/\s/g, '').length < 9}
+                  className="flex items-center gap-2 bg-[#0000FF] hover:bg-[#0000CC] text-white rounded-lg px-4 py-2.5 text-sm font-medium transition-colors disabled:opacity-40 shrink-0"
+                >
+                  {sirenLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                  Auto-remplir
+                </button>
+              </div>
+
             <div className="grid grid-cols-2 gap-5">
               <FormField label="Raison sociale *" value={profile.raison_sociale || ''} onChange={v => update('raison_sociale', v)} placeholder="Ma Société SAS" />
               <FormSelect label="Forme juridique" value={profile.forme_juridique || ''} onChange={v => update('forme_juridique', v)} options={FORMES_JURIDIQUES} />
@@ -250,6 +337,7 @@ export default function ProfilPage() {
               </div>
               <FormField label="Code postal" value={profile.code_postal || ''} onChange={v => update('code_postal', v)} placeholder="75001" maxLength={5} />
               <FormField label="Ville" value={profile.ville || ''} onChange={v => update('ville', v)} placeholder="Paris" />
+            </div>
             </div>
           )}
 
