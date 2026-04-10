@@ -271,6 +271,11 @@ export default function VeillePage() {
   )
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  // Synchronise le tab lorsque l'URL change (ex. clic sidebar "Mes favoris" depuis n'importe quelle page)
+  useEffect(() => {
+    setTab(searchParams.get('tab') === 'favorites' ? 'favorites' : 'all')
+  }, [searchParams])
+
   const [favorites, setFavorites] = useState<Set<string>>(new Set())
   const [favLoading, setFavLoading] = useState<Set<string>>(new Set())
   const [favTenders, setFavTenders] = useState<TenderItem[]>([])

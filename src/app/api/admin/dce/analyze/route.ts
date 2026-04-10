@@ -121,7 +121,18 @@ export async function POST(request: NextRequest) {
     }))
 
     // Fusionner avec les documents existants (éviter les doublons par filename)
-    const existingDocs: DceDocument[] = Array.isArray(ao.fichiers_source) ? ao.fichiers_source : []
+    // Note : ao.fichiers_source est en format FichierSource { nom, url, type, taille }
+    // — on le convertit en DceDocument pour uniformiser la déduplication.
+    type RawFichierSource = { nom: string; url: string; type: string; taille: number }
+    const rawSource: RawFichierSource[] = Array.isArray(ao.fichiers_source) ? ao.fichiers_source : []
+    const existingDocs: DceDocument[] = rawSource.map(f => ({
+      filename: f.nom,
+      url: f.url,
+      type: f.type,
+      label: f.nom,
+      taille: f.taille,
+      uploaded_at: '',
+    }))
     const existingFilenames = new Set(existingDocs.map(d => d.filename))
     const merged = [
       ...existingDocs,
