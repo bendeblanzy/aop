@@ -2,7 +2,11 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { adminClient, getOrgIdForUser } from '@/lib/supabase/admin'
 import { getEmbedding, buildProfileText, simToScore } from '@/lib/ai/embeddings'
-import { getCommunicationEmbedding, blendEmbeddings } from '@/lib/boamp/communication-domain'
+import {
+  getCommunicationEmbedding,
+  getNonCommunicationEmbedding,
+  blendEmbeddings,
+} from '@/lib/boamp/communication-domain'
 
 /**
  * GET /api/veille/tenders
@@ -150,7 +154,7 @@ export async function GET(request: NextRequest) {
     try {
       const queryEmb = await getEmbedding(semanticQuery.trim())
       queryEmbedding = commEmbedding.length > 0
-        ? blendEmbeddings(queryEmb, commEmbedding, 0.70) // 70% requête + 30% comm
+        ? blendEmbeddings(queryEmb, commEmbedding, 0.80) // 80% requête + 20% comm (requête plus dominante)
         : queryEmb
     } catch (e) {
       console.error('[veille/tenders] semantic query embedding error:', e)
@@ -159,11 +163,13 @@ export async function GET(request: NextRequest) {
   } else {
     // Mode Profil : blend profil + domaine communication
     queryEmbedding = commEmbedding.length > 0 && profileEmbedding!.length > 0
-      ? blendEmbeddings(profileEmbedding!, commEmbedding, 0.60) // 60% profil + 40% comm
+      ? blendEmbeddings(profileEmbedding!, commEmbedding, 0.70) // 70% profil + 30% comm (profil plus dominant)
       : profileEmbedding!
   }
 
   // ── Matching vectoriel pgvector ───────────────────────────────────────────
+  // On garde un pool LARGE (volume attrayant pour l'utilisateur) mais le scoring
+  // aval est sévère : beaucoup d'AO remontent, peu scorent haut.
   const MATCH_POOL = 300
   const SIMILARITY_THRESHOLD = 0.15
 
@@ -182,6 +188,29 @@ export async function GET(request: NextRequest) {
 
   const matchedIdwebs = (matchedRaw ?? []).map((m: any) => m.idweb)
   const similarityMap = Object.fromEntries((matchedRaw ?? []).map((m: any) => [m.idweb, m.similarity]))
+
+  // ── Pénalité anti-domaine ────────────────────────────────────────────────
+  // Pour chaque tender matché, on calcule sa similarité avec l'anti-domaine
+  // (fournitures, travaux, infogérance pure…). Si elle est élevée, on applique
+  // une pénalité au score final pour écarter les faux positifs "communication".
+  const antiSimilarityMap: Record<string, number> = {}
+  if (matchedIdwebs.length > 0) {
+    try {
+      const antiEmbedding = await getNonCommunicationEmbedding()
+      if (antiEmbedding.length > 0) {
+        const { data: antiRows } = await adminClient
+          .rpc('similarity_for_idwebs', {
+            query_embedding: JSON.stringify(antiEmbedding),
+            target_idwebs: matchedIdwebs,
+          })
+        for (const row of antiRows ?? []) {
+          antiSimilarityMap[row.idweb] = row.similarity
+        }
+      }
+    } catch (e) {
+      console.error('[veille/tenders] anti-domain similarity error:', e)
+    }
+  }
 
   if (matchedIdwebs.length === 0) {
     return NextResponse.json({ tenders: [], total: 0, filteredTotal: 0, page, limit, hasBoampCodes: boampCodes.length > 0, hasActiviteMetier, searchMode: isSemanticSearch ? 'semantic' : 'profile' })
@@ -238,19 +267,42 @@ export async function GET(request: NextRequest) {
   }
 
   // ── Conversion similarité → score 0-100 et enrichissement ────────────────
+  // Principe : score = simToScore(sim) × pénalité_anti_domaine.
+  // Pénalité = 1.0 si le tender est loin de l'anti-domaine, descend jusqu'à ~0.35
+  // si le tender ressemble fortement à des fournitures/travaux/infogérance.
   const tendersWithScores = filteredTenders.map(t => {
     const sim = similarityMap[t.idweb] ?? 0
-    const vectorScore = simToScore(sim)
+    const antiSim = antiSimilarityMap[t.idweb] ?? 0
+    const baseScore = simToScore(sim)
+
+    // Pénalité anti-domaine : on la déclenche si antiSim > 0.30
+    // et si antiSim > sim (le tender ressemble plus à l'anti-domaine qu'au profil).
+    // Pénalité linéaire douce : de 1.0 (pas de pénalité) à 0.35 (grosse pénalité).
+    let penalty = 1.0
+    if (antiSim > 0.30) {
+      const delta = antiSim - sim
+      if (delta > 0) {
+        // delta typiquement dans [0, 0.25]. Pénalité = 1 - 2.6 × delta (clamp 0.35-1.0)
+        penalty = Math.max(0.35, 1.0 - 2.6 * delta)
+      } else if (antiSim > 0.45) {
+        // Très fortement anti-domaine, même si sim est plus haute : pénalité légère
+        penalty = 0.85
+      }
+    }
+
+    const vectorScore = Math.round(baseScore * penalty)
     const existingScore = scoreMap[t.idweb]
     return {
       ...t,
       score: existingScore?.score ?? vectorScore,
       reason: existingScore?.reason ?? (
-        vectorScore >= 70 ? 'Forte correspondance sémantique.' :
-        vectorScore >= 40 ? 'Correspondance partielle.' :
+        vectorScore >= 75 ? 'Forte correspondance sémantique avec votre profil.' :
+        vectorScore >= 50 ? 'Correspondance intéressante, à évaluer.' :
+        vectorScore >= 25 ? 'Correspondance partielle, probablement hors cœur de métier.' :
         'Faible correspondance.'
       ),
       similarity: Math.round(sim * 1000) / 1000,
+      antiSimilarity: Math.round(antiSim * 1000) / 1000,
     }
   })
 

@@ -6,18 +6,36 @@ const MODEL = 'text-embedding-3-small' // 1536 dimensions, très rapide, ~$0.02/
 
 // ── Constantes de normalisation du score ─────────────────────────────────────
 // La similarité cosinus entre embeddings text-embedding-3-small en français
-// se distribue typiquement entre 0.10 (hors sujet) et 0.60 (très proche).
-// On normalise sur la plage [SIMILARITY_MIN, SIMILARITY_MAX] → score 0-100.
-export const SIMILARITY_MIN = 0.15
-export const SIMILARITY_MAX = 0.55
+// se distribue typiquement entre 0.10 (hors sujet) et 0.65 (très proche).
+// On normalise sur la plage [SIMILARITY_MIN, SIMILARITY_MAX] puis on applique
+// une courbe de puissance pour être SÉVÈRE sur les scores moyens et réserver
+// les scores ≥ 80 aux correspondances vraiment fortes.
+export const SIMILARITY_MIN = 0.22
+export const SIMILARITY_MAX = 0.72
+
+// Exposant de la courbe de scoring.
+// > 1 → plus sévère (creuse les scores moyens). 1.0 = linéaire.
+// Avec 1.6 : sim=0.40 (50% normalisé) → score ~33 (au lieu de 50).
+export const SCORE_CURVE_EXPONENT = 1.6
 
 /**
  * Convertit une similarité cosinus (0-1) en score 0-100.
- * Mapping linéaire : SIMILARITY_MIN → 0, SIMILARITY_MAX → 100.
+ * Mapping non-linéaire (courbe puissance) : durcit le scoring au milieu
+ * pour éviter les faux "60-80%" sur des correspondances tièdes.
+ *
+ * Exemples :
+ *   sim=0.22 → 0   (seuil plancher)
+ *   sim=0.35 → 11
+ *   sim=0.45 → 29
+ *   sim=0.55 → 51
+ *   sim=0.65 → 77
+ *   sim=0.72 → 100 (seuil plafond, correspondance forte)
  */
 export function simToScore(sim: number): number {
   const normalized = (sim - SIMILARITY_MIN) / (SIMILARITY_MAX - SIMILARITY_MIN)
-  return Math.max(0, Math.min(100, Math.round(normalized * 100)))
+  const clamped = Math.max(0, Math.min(1, normalized))
+  const curved = Math.pow(clamped, SCORE_CURVE_EXPONENT)
+  return Math.max(0, Math.min(100, Math.round(curved * 100)))
 }
 
 /**

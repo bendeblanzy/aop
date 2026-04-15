@@ -489,9 +489,9 @@ export default function VeillePage() {
           <div className="flex rounded-lg border border-[#E0E0F0] overflow-hidden text-xs">
             {([
               [null, 'Tous'],
+              [20, '20+'],
               [40, '40+'],
               [60, '60+'],
-              [80, '80+'],
             ] as [number | null, string][]).map(([val, label]) => (
               <button
                 key={label}

@@ -8,41 +8,61 @@ import { getEmbedding } from '@/lib/ai/embeddings'
  * numérique, événementiel et éditorial.
  */
 export const COMMUNICATION_DOMAIN_TEXT = `
-Agence de communication et services numériques spécialisée dans les marchés publics.
+Agence de communication et de création spécialisée dans les marchés publics de prestation de services.
 
-Services de communication institutionnelle et marketing :
+Communication institutionnelle et marketing :
 stratégie de communication, plan de communication, communication externe, communication interne,
-communication corporate, campagnes publicitaires, publicité print et digitale, achat d'espaces médias,
-médias planning, relations presse, relations médias, relations publiques, attaché de presse,
-communication de crise, notoriété de marque, identité de marque.
+communication corporate, campagnes publicitaires, publicité print et digitale,
+relations presse, relations médias, attaché de presse, communication de crise,
+notoriété de marque, identité de marque, storytelling.
 
-Services de création graphique et audiovisuelle :
+Création graphique et audiovisuelle :
 identité visuelle, charte graphique, logo, design graphique, conception graphique, PAO,
-mise en page, création de supports de communication, brochures, plaquettes, affiches, flyers,
-signalétique, habillage véhicule, goodies, objets publicitaires, production vidéo,
-réalisation film institutionnel, photographie, motion design, animation 2D/3D, podcast.
+mise en page, édition, supports de communication, brochures, plaquettes, affiches, flyers,
+signalétique, habillage véhicule, objets publicitaires, production vidéo, réalisation film
+institutionnel, photographie, motion design, animation 2D/3D, podcast, scénographie.
 
-Services événementiels :
+Événementiel :
 organisation d'événements, événementiel d'entreprise, séminaires, conférences, conventions,
 salons professionnels, expositions, inaugurations, cérémonies, lancements de produit,
-soirées d'entreprise, team building, accueil congressiste, logistique événementielle,
-gestion de la relation client, animation.
+logistique événementielle, scénographie événementielle, animation événementielle.
 
-Services éditoriaux et contenus :
-rédaction de contenu, journalisme, éditorial, copywriting, traduction, interprétariat,
-création de contenu web, blog, newsletter, livre blanc, rapport annuel, discours,
-documentation technique, conception-rédaction.
+Contenus éditoriaux :
+rédaction de contenu, copywriting, conception-rédaction, création de contenu web,
+blog, newsletter, livre blanc, rapport annuel, traduction éditoriale.
 
-Services numériques et informatiques :
-développement web, création de sites internet, refonte de site web, applications mobiles,
-développement logiciel sur mesure, intégration numérique, maintenance informatique,
-hébergement web, infogérance, UX design, UI design, webdesign, accessibilité numérique,
-gestion de contenu CMS, e-commerce.
+Web design et création numérique (prestation créative uniquement) :
+création de sites internet, refonte de site web, webdesign, UX design, UI design,
+accessibilité numérique, expérience utilisateur sur supports digitaux.
 
-Services digitaux et marketing en ligne :
-community management, gestion des réseaux sociaux, social media, stratégie digitale,
-SEO, référencement naturel, SEA, Google Ads, e-mailing, marketing automation,
-marketing digital, CRM, outil de gestion de la relation client, influence marketing.
+Médias sociaux et contenus digitaux :
+community management, gestion éditoriale des réseaux sociaux, création de contenus
+pour réseaux sociaux, stratégie éditoriale digitale.
+`
+
+/**
+ * Texte de référence anti-domaine : prestations qui ne relèvent PAS d'une agence
+ * de communication/création. Utilisé (optionnel) pour pénaliser les faux positifs.
+ * Fournitures, travaux BTP, infogérance pure, développement logiciel métier,
+ * services RH, conseil non-communication, maintenance technique.
+ */
+export const NON_COMMUNICATION_DOMAIN_TEXT = `
+Marchés publics qui ne relèvent pas d'une agence de communication ni de création.
+
+Fournitures et équipements : mobilier de bureau, fournitures de bureau, matériel
+informatique, consommables, véhicules, vêtements de travail, équipements de protection.
+
+Travaux et BTP : construction, rénovation, voirie, bâtiment, génie civil,
+chauffage, plomberie, électricité bâtiment, peinture bâtiment, couverture, étanchéité.
+
+Prestations techniques non créatives : infogérance, maintenance informatique,
+hébergement, tierce maintenance applicative, support technique, helpdesk,
+développement logiciel métier, intégration de progiciels, ERP, CRM,
+marketing automation, SEO/SEA pur sans création, audit technique, cybersécurité.
+
+Services métiers : recrutement, conseil RH, paie, SIRH, formation professionnelle
+hors communication, audit financier, conseil juridique, comptabilité, assurance,
+nettoyage, sécurité gardiennage, restauration collective, transport.
 `
 
 /**
@@ -56,6 +76,7 @@ export const COMMUNICATION_SIMILARITY_THRESHOLD = 0.18
 // Fonctionne entre requêtes chaudes en serverless (Vercel warm instances).
 // En cold start, l'embedding est recalculé (coût négligeable : ~1 appel OpenAI).
 let _cachedEmbedding: number[] | null = null
+let _cachedAntiEmbedding: number[] | null = null
 
 /**
  * Retourne l'embedding du domaine communication (avec cache module-level).
@@ -64,6 +85,18 @@ export async function getCommunicationEmbedding(): Promise<number[]> {
   if (_cachedEmbedding && _cachedEmbedding.length > 0) return _cachedEmbedding
   const embedding = await getEmbedding(COMMUNICATION_DOMAIN_TEXT)
   _cachedEmbedding = embedding
+  return embedding
+}
+
+/**
+ * Retourne l'embedding de l'anti-domaine (hors communication/création).
+ * Utilisé pour pénaliser les AO qui ressemblent à des fournitures/travaux/
+ * infogérance pure, même s'ils matchent partiellement le profil.
+ */
+export async function getNonCommunicationEmbedding(): Promise<number[]> {
+  if (_cachedAntiEmbedding && _cachedAntiEmbedding.length > 0) return _cachedAntiEmbedding
+  const embedding = await getEmbedding(NON_COMMUNICATION_DOMAIN_TEXT)
+  _cachedAntiEmbedding = embedding
   return embedding
 }
 
