@@ -24,7 +24,7 @@ async function sendWelcomeEmail(opts: {
 
   const contextLine = opts.type === 'team'
     ? `Vous avez été ajouté(e) à l'organisation <strong>${opts.orgName ?? 'AOP'}</strong> sur la plateforme de réponse aux appels d'offres.`
-    : 'Vous avez été invité(e) à tester la plateforme de réponse aux appels d'offres. Vous créerez votre organisation lors de votre première connexion.'
+    : "Vous avez été invité(e) à tester la plateforme de réponse aux appels d'offres. Vous créerez votre organisation lors de votre première connexion."
 
   const html = `
 <!DOCTYPE html>
