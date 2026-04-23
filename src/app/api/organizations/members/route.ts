@@ -2,6 +2,80 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { adminClient, getOrgIdForUser } from '@/lib/supabase/admin'
 
+/**
+ * Envoi d'un email de bienvenue via Resend.
+ * Si RESEND_API_KEY n'est pas configuré, l'envoi est ignoré silencieusement.
+ */
+async function sendWelcomeEmail(opts: {
+  to: string
+  password: string
+  type: 'team' | 'beta'
+  orgName?: string
+}): Promise<{ sent: boolean; error?: string }> {
+  const apiKey = process.env.RESEND_API_KEY
+  if (!apiKey) return { sent: false, error: 'RESEND_API_KEY non configuré' }
+
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://aop-woad.vercel.app'
+  const loginUrl = `${appUrl}/auth/login`
+
+  const subject = opts.type === 'team'
+    ? `Votre accès à l'outil AOP${opts.orgName ? ` — ${opts.orgName}` : ''}`
+    : 'Votre accès bêta à l\'outil AOP'
+
+  const contextLine = opts.type === 'team'
+    ? `Vous avez été ajouté(e) à l'organisation <strong>${opts.orgName ?? 'AOP'}</strong> sur la plateforme de réponse aux appels d'offres.`
+    : 'Vous avez été invité(e) à tester la plateforme de réponse aux appels d'offres. Vous créerez votre organisation lors de votre première connexion.'
+
+  const html = `
+<!DOCTYPE html>
+<html lang="fr">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+<body style="margin:0;padding:0;background:#f5f5f5;font-family:sans-serif;">
+  <div style="max-width:520px;margin:40px auto;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #e0e0e0;">
+    <div style="background:#0000FF;padding:24px 32px;">
+      <h1 style="color:#fff;margin:0;font-size:20px;font-weight:600;">Votre accès AOP</h1>
+    </div>
+    <div style="padding:32px;">
+      <p style="color:#374151;margin:0 0 16px;">${contextLine}</p>
+      <div style="background:#f5f5ff;border:1px solid #e0e0ff;border-radius:8px;padding:20px;margin:20px 0;">
+        <p style="margin:0 0 12px;font-size:13px;color:#6b7280;font-weight:600;text-transform:uppercase;letter-spacing:.05em;">Vos identifiants</p>
+        <p style="margin:0 0 8px;font-size:14px;color:#111;"><strong>Email :</strong> <code style="background:#e6e6ff;padding:2px 6px;border-radius:4px;">${opts.to}</code></p>
+        <p style="margin:0;font-size:14px;color:#111;"><strong>Mot de passe :</strong> <code style="background:#e6e6ff;padding:2px 6px;border-radius:4px;">${opts.password}</code></p>
+      </div>
+      <p style="color:#6b7280;font-size:13px;">Pensez à modifier votre mot de passe après la première connexion.</p>
+      <a href="${loginUrl}" style="display:inline-block;margin-top:16px;background:#0000FF;color:#fff;text-decoration:none;padding:12px 24px;border-radius:8px;font-weight:600;font-size:14px;">Se connecter →</a>
+    </div>
+    <div style="padding:16px 32px;border-top:1px solid #f0f0f0;text-align:center;">
+      <p style="margin:0;font-size:12px;color:#9ca3af;">Cet email a été envoyé automatiquement par la plateforme AOP.</p>
+    </div>
+  </div>
+</body>
+</html>`
+
+  try {
+    const res = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        from: 'AOP <noreply@ladn.studio>',
+        to: [opts.to],
+        subject,
+        html,
+      }),
+    })
+    if (!res.ok) {
+      const err = await res.text()
+      return { sent: false, error: err }
+    }
+    return { sent: true }
+  } catch (e) {
+    return { sent: false, error: e instanceof Error ? e.message : 'Erreur réseau' }
+  }
+}
+
 export async function GET() {
   try {
     const supabase = await createClient()
@@ -107,6 +181,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: createError.message }, { status: 500 })
     }
 
+    // Récupérer le nom de l'organisation pour l'email
+    let orgName: string | undefined
+    if (type === 'team') {
+      const { data: orgData } = await adminClient
+        .from('organizations')
+        .select('name')
+        .eq('id', requesterMember.organization_id)
+        .maybeSingle()
+      orgName = orgData?.name ?? undefined
+    }
+
     // If type is 'team', add to the admin's organization
     if (type === 'team' && newUser?.user) {
       const { data: existingMember } = await adminClient
@@ -125,14 +210,18 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Envoi automatique de l'email de bienvenue avec les identifiants
+    const emailResult = await sendWelcomeEmail({ to: email, password, type, orgName })
+
     return NextResponse.json({
       success: true,
       email,
       password,
       type,
+      emailSent: emailResult.sent,
       message: type === 'team'
-        ? 'Compte créé et ajouté à votre organisation'
-        : 'Compte créé — le testeur créera sa propre organisation à la connexion',
+        ? `Compte créé et ajouté à votre organisation${emailResult.sent ? ' — email envoyé' : ''}`
+        : `Compte créé${emailResult.sent ? ' — email envoyé au testeur' : ' — le testeur créera sa propre organisation à la connexion'}`,
     }, { status: 201 })
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Erreur interne'

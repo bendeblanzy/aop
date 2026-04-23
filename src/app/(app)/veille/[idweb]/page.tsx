@@ -212,6 +212,11 @@ export default function TenderDetailPage() {
   const lots = Array.isArray(tender.lots_titres) ? tender.lots_titres : []
   const boampRef = tender.idweb ? `BOAMP : ${tender.idweb}` : null
 
+  // Détecter ouvert / restreint
+  const src = ((tender.procedure_libelle ?? '') + ' ' + (tender.type_procedure ?? '')).toLowerCase()
+  const isRestreint = src.includes('restreint') || src.includes('restricted') || src.includes('négocié') || src.includes('negocie')
+  const isOuvert = !isRestreint && (src.includes('ouvert') || src.includes('open') || src.includes('mapa') || src.includes('adapté') || src.includes('adapte'))
+
   return (
     <div className="space-y-6">
       {/* Back button */}
@@ -225,6 +230,17 @@ export default function TenderDetailPage() {
 
       {/* Header badges */}
       <div className="flex items-center gap-2 flex-wrap">
+        {/* Badge OUVERT / RESTREINT — priorité maximale */}
+        {isRestreint && (
+          <span className="text-sm font-bold bg-amber-100 text-amber-800 border border-amber-300 px-4 py-1.5 rounded-full">
+            🔒 Procédure RESTREINTE
+          </span>
+        )}
+        {isOuvert && (
+          <span className="text-sm font-bold bg-green-100 text-green-800 border border-green-300 px-4 py-1.5 rounded-full">
+            ✓ Procédure OUVERTE
+          </span>
+        )}
         <span className="text-xs font-bold bg-[#0000FF] text-white px-3 py-1 rounded-full uppercase">
           {tender.nature_libelle ?? 'Services'}
         </span>
@@ -381,25 +397,41 @@ export default function TenderDetailPage() {
           </div>
         )}
 
-        {/* Key facts grid */}
+        {/* Key facts grid — données critiques toujours affichées */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <div className="bg-gray-50 rounded-lg p-3 text-center">
+          <div className="bg-gray-50 rounded-lg p-3 text-center border border-gray-100">
             <p className="text-xs text-gray-400 uppercase font-bold mb-1">Nature</p>
             <p className="text-sm font-semibold text-gray-800">{tender.nature_libelle ?? '—'}</p>
           </div>
-          <div className="bg-gray-50 rounded-lg p-3 text-center">
-            <p className="text-xs text-gray-400 uppercase font-bold mb-1">Budget</p>
-            <p className="text-sm font-semibold text-gray-800">{euros ?? 'N/C'}</p>
+          <div className={cn('rounded-lg p-3 text-center border', euros ? 'bg-blue-50 border-blue-100' : 'bg-gray-50 border-gray-100')}>
+            <p className="text-xs text-gray-400 uppercase font-bold mb-1">Budget estimé</p>
+            {euros
+              ? <p className="text-base font-bold text-[#0000FF]">{euros}</p>
+              : <p className="text-xs text-gray-400 italic mt-1">Non communiqué</p>
+            }
           </div>
-          <div className="bg-gray-50 rounded-lg p-3 text-center">
+          <div className={cn('rounded-lg p-3 text-center border', tender.duree_mois ? 'bg-blue-50 border-blue-100' : 'bg-gray-50 border-gray-100')}>
             <p className="text-xs text-gray-400 uppercase font-bold mb-1">Durée</p>
-            <p className="text-sm font-semibold text-gray-800">{tender.duree_mois ? `${tender.duree_mois} mois` : 'N/C'}</p>
+            {tender.duree_mois
+              ? <p className="text-base font-bold text-[#0000FF]">{tender.duree_mois} mois</p>
+              : <p className="text-xs text-gray-400 italic mt-1">Non précisée</p>
+            }
           </div>
-          <div className="bg-gray-50 rounded-lg p-3 text-center">
+          <div className="bg-gray-50 rounded-lg p-3 text-center border border-gray-100">
             <p className="text-xs text-gray-400 uppercase font-bold mb-1">Lots</p>
-            <p className="text-sm font-semibold text-gray-800">{tender.nb_lots ?? 'Unique'}</p>
+            <p className="text-sm font-semibold text-gray-800">{tender.nb_lots ?? 'Lot unique'}</p>
           </div>
         </div>
+        {/* Procédure mise en avant */}
+        {tender.procedure_libelle && (
+          <div className={cn('rounded-lg px-4 py-3 border text-sm font-medium flex items-center gap-2',
+            isRestreint ? 'bg-amber-50 border-amber-200 text-amber-800' :
+            isOuvert ? 'bg-green-50 border-green-200 text-green-800' :
+            'bg-gray-50 border-gray-200 text-gray-700'
+          )}>
+            <span className="font-bold">Procédure :</span> {tender.procedure_libelle}
+          </div>
+        )}
 
         {/* Mission / Description — use DB field or BOAMP live description */}
         {(() => {

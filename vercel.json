@@ -12,11 +12,17 @@
   "functions": {
     "src/app/api/ai/analyze-rc/route.ts": { "maxDuration": 60 },
     "src/app/api/ai/analyze-cctp/route.ts": { "maxDuration": 60 },
+    "src/app/api/ai/analyze-bpu/route.ts": { "maxDuration": 60 },
+    "src/app/api/ai/analyze-dce/route.ts": { "maxDuration": 60 },
     "src/app/api/ai/generate-memoire/route.ts": { "maxDuration": 60 },
     "src/app/api/ai/generate-dc1/route.ts": { "maxDuration": 60 },
     "src/app/api/ai/generate-dc2/route.ts": { "maxDuration": 60 },
     "src/app/api/ai/generate-dc4/route.ts": { "maxDuration": 60 },
     "src/app/api/ai/generate-dume/route.ts": { "maxDuration": 60 },
+    "src/app/api/profil/deep-research/route.ts": { "maxDuration": 60 },
+    "src/app/api/collaborateurs/linkedin/route.ts": { "maxDuration": 90 },
+    "src/app/api/veille/score/route.ts": { "maxDuration": 60 },
+    "src/app/api/veille/embed-profile/route.ts": { "maxDuration": 60 },
     "src/app/api/cron/sync-boamp/route.ts": { "maxDuration": 300 },
     "src/app/api/cron/trigger-dce/route.ts": { "maxDuration": 30 }
   }

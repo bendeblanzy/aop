@@ -1,10 +1,10 @@
 'use client'
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useOrganization } from '@/context/OrganizationContext'
 import { Profile, Reference } from '@/lib/types'
 import { calculateProfileCompletion, cn } from '@/lib/utils'
-import { Loader2, Save, Plus, Trash2, Building2, Radar, Award, Upload, FileText, X, ExternalLink, Search, Sparkles } from 'lucide-react'
+import { Loader2, Save, Plus, Trash2, Building2, Radar, Award, Upload, FileText, X, ExternalLink, Search, Sparkles, CheckCircle2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { BOAMP_CODES, BOAMP_CATEGORIES } from '@/lib/boamp/codes'
 
@@ -27,6 +27,9 @@ export default function ProfilPage() {
   const [activeTab, setActiveTab] = useState('positionnement')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [autoSaveStatus, setAutoSaveStatus] = useState<'idle' | 'pending' | 'saving' | 'saved'>('idle')
+  const isInitialLoad = useRef(true)
+  const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [newCert, setNewCert] = useState('')
   const [newST, setNewST] = useState({ nom: '', siret: '', adresse: '', specialite: '' })
   // Références
@@ -51,54 +54,27 @@ export default function ProfilPage() {
     }
     setSirenLoading(true)
     try {
-      const res = await fetch(
-        `https://recherche-entreprises.api.gouv.fr/search?q=${siret}&page=1&per_page=1`
-      )
-      if (!res.ok) throw new Error('API indisponible')
-      const json = await res.json()
-      const company = json.results?.[0]
-      if (!company) {
-        toast.error('Aucune entreprise trouvée pour ce SIRET')
+      // Appel server-side pour éviter les problèmes CORS/réseau en production
+      const res = await fetch(`/api/profil/siret?q=${encodeURIComponent(siret)}`)
+      const data = await res.json()
+      if (!res.ok) {
+        toast.error(data.error || 'Entreprise introuvable')
         return
       }
 
-      // Mapping forme juridique → valeur du dropdown
-      const libelleNJ: string = company.libelle_nature_juridique_n3 ?? ''
-      const formeMap: Record<string, string> = {
-        'Société à responsabilité limitée': 'SARL',
-        'Société par actions simplifiée': 'SAS',
-        'Société anonyme': 'SA',
-        'Entreprise unipersonnelle à responsabilité limitée': 'EURL',
-        'Entrepreneur individuel': 'EI',
-        'Société par actions simplifiée unipersonnelle': 'SASU',
-        'Société en nom collectif': 'SNC',
-        'Association': 'Association',
-      }
-      const formeJuridique = Object.entries(formeMap).find(([k]) =>
-        libelleNJ.toLowerCase().includes(k.toLowerCase())
-      )?.[1] ?? 'Autre'
-
-      // Calcul du numéro TVA intracommunautaire
-      const siren = company.siren ?? siret.slice(0, 9)
-      const tvaKey = (12 + 3 * (parseInt(siren) % 97)) % 97
-      const numeroTva = `FR${String(tvaKey).padStart(2, '0')}${siren}`
-
-      // Mise à jour du profil avec les données récupérées
       setProfile(p => ({
         ...p,
-        raison_sociale: company.nom_complet ?? p.raison_sociale,
-        forme_juridique: formeJuridique,
-        code_naf: company.activite_principale ?? p.code_naf,
-        adresse_siege: company.siege?.adresse ?? p.adresse_siege,
-        code_postal: company.siege?.code_postal ?? p.code_postal,
-        ville: company.siege?.libelle_commune ?? p.ville,
-        numero_tva: p.numero_tva || numeroTva,
-        date_creation_entreprise: company.date_creation
-          ? company.date_creation.substring(0, 10)
-          : p.date_creation_entreprise,
+        raison_sociale: data.nom_complet ?? p.raison_sociale,
+        forme_juridique: data.forme_juridique ?? p.forme_juridique,
+        code_naf: data.code_naf ?? p.code_naf,
+        adresse_siege: data.adresse_siege ?? p.adresse_siege,
+        code_postal: data.code_postal ?? p.code_postal,
+        ville: data.ville ?? p.ville,
+        numero_tva: p.numero_tva || data.numero_tva,
+        date_creation_entreprise: data.date_creation ?? p.date_creation_entreprise,
       }))
 
-      toast.success(`✅ ${company.nom_complet} — données pré-remplies ! Vérifiez et sauvegardez.`)
+      toast.success(`✅ ${data.nom_complet} — données pré-remplies ! Vérifiez et sauvegardez.`)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Erreur lors de la recherche')
     } finally {
@@ -109,12 +85,15 @@ export default function ProfilPage() {
   async function load() {
     if (!orgId) {
       setLoading(false)
+      isInitialLoad.current = false
       return
     }
     const { data, error } = await supabase.from('profiles').select('*').eq('organization_id', orgId).maybeSingle()
     if (error) console.error('[profil] load error:', error.message)
     if (data) setProfile(data)
     setLoading(false)
+    // Marquer la fin du chargement initial pour activer l'auto-save
+    setTimeout(() => { isInitialLoad.current = false }, 300)
   }
 
   const loadReferences = useCallback(async () => {
@@ -213,7 +192,13 @@ export default function ProfilPage() {
     setSaving(true)
 
     const DATE_FIELDS = ['date_creation_entreprise', 'assurance_rc_expiration', 'assurance_decennale_expiration']
-    const { created_at, updated_at, siren, id, ...editableFields } = profile as any
+    // Exclure les champs non-éditables par le client : colonnes système + vecteurs pgvector
+    // (l'embedding est recalculé par l'API /api/veille/embed-profile après la sauvegarde)
+    const {
+      created_at, updated_at, siren, id,
+      embedding, embedding_updated_at,
+      ...editableFields
+    } = profile as any
     const payload: Record<string, unknown> = { ...editableFields, organization_id: orgId }
     for (const f of DATE_FIELDS) {
       if (payload[f] === '') payload[f] = null
@@ -238,6 +223,42 @@ export default function ProfilPage() {
   function update(field: keyof Profile, value: unknown) {
     setProfile(p => ({ ...p, [field]: value }))
   }
+
+  // ── Auto-save avec debounce 2s ─────────────────────────────────────────────
+  useEffect(() => {
+    // Ne pas déclencher l'auto-save lors du chargement initial
+    if (isInitialLoad.current) return
+    if (!orgId) return
+
+    setAutoSaveStatus('pending')
+    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current)
+    autoSaveTimer.current = setTimeout(async () => {
+      setAutoSaveStatus('saving')
+      const DATE_FIELDS = ['date_creation_entreprise', 'assurance_rc_expiration', 'assurance_decennale_expiration']
+      const {
+        created_at, updated_at, siren, id,
+        embedding, embedding_updated_at,
+        ...editableFields
+      } = profile as any
+      const payload: Record<string, unknown> = { ...editableFields, organization_id: orgId }
+      for (const f of DATE_FIELDS) {
+        if (payload[f] === '') payload[f] = null
+      }
+      const { error } = await supabase.from('profiles').upsert(
+        { ...payload, organization_id: orgId },
+        { onConflict: 'organization_id' }
+      )
+      if (!error) {
+        setAutoSaveStatus('saved')
+        // Recalculer l'embedding en arrière-plan
+        fetch('/api/veille/embed-profile', { method: 'POST' }).catch(() => {})
+        setTimeout(() => setAutoSaveStatus('idle'), 2500)
+      } else {
+        setAutoSaveStatus('idle')
+        console.error('[auto-save] error:', error.message)
+      }
+    }, 2000)
+  }, [profile]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const completion = calculateProfileCompletion(profile)
 
@@ -266,11 +287,32 @@ export default function ProfilPage() {
             <h1 className="text-lg sm:text-2xl font-bold text-text-primary flex items-center gap-2 truncate"><Building2 className="w-5 h-5 sm:w-6 sm:h-6 text-primary shrink-0" /> Mon profil entreprise</h1>
             <p className="text-text-secondary mt-1 text-xs sm:text-sm hidden sm:block">Ces informations servent à remplir automatiquement vos formulaires</p>
           </div>
-          <button onClick={save} disabled={saving} className="flex items-center gap-2 bg-primary hover:bg-primary-hover text-white rounded-lg px-3 sm:px-5 py-2 sm:py-2.5 text-xs sm:text-sm font-medium transition-colors disabled:opacity-60 shrink-0">
-            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-            <span className="hidden sm:inline">Sauvegarder</span>
-            <span className="sm:hidden">Sauver</span>
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            {/* Indicateur auto-save */}
+            {autoSaveStatus === 'pending' && (
+              <span className="text-xs text-gray-400 hidden sm:flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse inline-block" />
+                Modifications non sauvegardées
+              </span>
+            )}
+            {autoSaveStatus === 'saving' && (
+              <span className="text-xs text-gray-400 hidden sm:flex items-center gap-1.5">
+                <Loader2 className="w-3 h-3 animate-spin" />
+                Enregistrement…
+              </span>
+            )}
+            {autoSaveStatus === 'saved' && (
+              <span className="text-xs text-green-600 hidden sm:flex items-center gap-1.5">
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                Enregistré
+              </span>
+            )}
+            <button onClick={save} disabled={saving || autoSaveStatus === 'saving'} className="flex items-center gap-2 bg-primary hover:bg-primary-hover text-white rounded-lg px-3 sm:px-5 py-2 sm:py-2.5 text-xs sm:text-sm font-medium transition-colors disabled:opacity-60">
+              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+              <span className="hidden sm:inline">Sauvegarder</span>
+              <span className="sm:hidden">Sauver</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -679,16 +721,16 @@ export default function ProfilPage() {
                       setDeepResearchLoading(true)
                       try {
                         const res = await fetch('/api/profil/deep-research', { method: 'POST' })
-                        if (!res.ok) throw new Error()
                         const data = await res.json()
-                        // Proposer les résultats — l'utilisateur peut accepter ou ignorer chaque champ
-                        if (data.activite_metier && !profile.activite_metier?.trim()) update('activite_metier', data.activite_metier)
+                        if (!res.ok) throw new Error(data.error || `Erreur ${res.status}`)
+                        // Pré-remplir les champs — l'utilisateur vérifie et ajuste
+                        if (data.activite_metier) update('activite_metier', data.activite_metier)
                         if (data.positionnement) update('positionnement', data.positionnement)
                         if (data.atouts_differenciants) update('atouts_differenciants' as keyof Profile, data.atouts_differenciants)
                         if (data.methodologie_type) update('methodologie_type' as keyof Profile, data.methodologie_type)
-                        toast.success('Positionnement généré ! Vérifiez et ajustez les textes.')
-                      } catch {
-                        toast.error('Erreur lors de l\'analyse. Réessayez.')
+                        toast.success('Positionnement généré ! Vérifiez et ajustez les textes avant de sauvegarder.')
+                      } catch (err: unknown) {
+                        toast.error(err instanceof Error ? err.message : 'Erreur lors de l\'analyse. Réessayez.')
                       }
                       setDeepResearchLoading(false)
                     }}
