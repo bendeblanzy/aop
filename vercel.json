@@ -23,6 +23,7 @@
     "src/app/api/collaborateurs/linkedin/route.ts": { "maxDuration": 90 },
     "src/app/api/veille/score/route.ts": { "maxDuration": 60 },
     "src/app/api/veille/embed-profile/route.ts": { "maxDuration": 60 },
+    "src/app/api/veille/tenders/route.ts": { "maxDuration": 60 },
     "src/app/api/cron/sync-boamp/route.ts": { "maxDuration": 300 },
     "src/app/api/cron/trigger-dce/route.ts": { "maxDuration": 30 }
   }

@@ -62,6 +62,8 @@ export interface Profile {
   boamp_codes?: string[]
   activite_metier?: string
   types_marche_filtres?: string[]
+  // Géolocalisation
+  region?: string
 }
 
 export interface SousTraitant {

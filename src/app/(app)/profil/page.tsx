@@ -7,6 +7,7 @@ import { calculateProfileCompletion, cn } from '@/lib/utils'
 import { Loader2, Save, Plus, Trash2, Building2, Radar, Award, Upload, FileText, X, ExternalLink, Search, Sparkles, CheckCircle2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { BOAMP_CODES, BOAMP_CATEGORIES } from '@/lib/boamp/codes'
+import { REGIONS_FR } from '@/lib/boamp/regions'
 
 const FORMES_JURIDIQUES = ['SARL', 'SAS', 'SA', 'EURL', 'EI', 'SASU', 'SNC', 'Association', 'Autre']
 const DOMAINES = ['BTP', 'Informatique / IT', 'Conseil', 'Formation', 'Maintenance', 'Nettoyage', 'Sécurité', 'Transport', 'Restauration', 'Santé', 'Environnement', 'Communication', 'Juridique', 'Autre']
@@ -379,6 +380,14 @@ export default function ProfilPage() {
               </div>
               <FormField label="Code postal" value={profile.code_postal || ''} onChange={v => update('code_postal', v)} placeholder="75001" maxLength={5} />
               <FormField label="Ville" value={profile.ville || ''} onChange={v => update('ville', v)} placeholder="Paris" />
+              <div className="col-span-2">
+                <FormSelect
+                  label="Région (pour le filtrage des AO)"
+                  value={profile.region || ''}
+                  onChange={v => update('region', v)}
+                  options={[...REGIONS_FR]}
+                />
+              </div>
             </div>
             </div>
           )}

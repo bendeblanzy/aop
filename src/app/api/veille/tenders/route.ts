@@ -7,6 +7,7 @@ import {
   getNonCommunicationEmbedding,
   blendEmbeddings,
 } from '@/lib/boamp/communication-domain'
+import { getDepartementsForRegion } from '@/lib/boamp/regions'
 
 /**
  * GET /api/veille/tenders
@@ -40,7 +41,7 @@ export async function GET(request: NextRequest) {
   // Récupérer le profil complet pour embedding + filtres
   const { data: profile } = await adminClient
     .from('profiles')
-    .select('boamp_codes, activite_metier, types_marche_filtres, embedding, raison_sociale, domaines_competence, certifications, positionnement, atouts_differenciants, moyens_techniques')
+    .select('boamp_codes, activite_metier, types_marche_filtres, embedding, raison_sociale, domaines_competence, certifications, positionnement, atouts_differenciants, moyens_techniques, region')
     .eq('organization_id', orgId)
     .maybeSingle()
 
@@ -62,6 +63,11 @@ export async function GET(request: NextRequest) {
   const minScore      = url.searchParams.get('min_score') ? parseInt(url.searchParams.get('min_score')!) : null
   const activeOnly    = url.searchParams.get('active_only') !== 'false'
   const favoritesOnly = url.searchParams.get('favorites_only') === 'true'
+  // Filtre région : si fourni, on restreint aux départements de cette région
+  const regionParam = url.searchParams.get('region') ?? ''
+  // Si pas de param explicite, on utilise la région du profil comme valeur par défaut
+  const regionToApply = regionParam || (profile?.region ?? '')
+  const regionDepts = regionToApply ? getDepartementsForRegion(regionToApply) : null
 
   const hasActiviteMetier = !!profile?.activite_metier?.trim()
 
@@ -135,7 +141,7 @@ export async function GET(request: NextRequest) {
 
   // Si ni embedding profil ni requête sémantique → fallback codes BOAMP
   if (!profileEmbedding && !isSemanticSearch) {
-    return fallbackCodeBased(orgId, profile, boampCodes, typesMarche, { page, limit, search, minScore, activeOnly }, hasActiviteMetier)
+    return fallbackCodeBased(orgId, profile, boampCodes, typesMarche, { page, limit, search, minScore, activeOnly, regionDepts }, hasActiviteMetier)
   }
 
   // Obtenir l'embedding du domaine communication (mis en cache entre les requêtes)
@@ -183,7 +189,7 @@ export async function GET(request: NextRequest) {
 
   if (matchError) {
     console.error('[veille/tenders] vector match error:', matchError.message)
-    return fallbackCodeBased(orgId, profile, boampCodes, typesMarche, { page, limit, search, minScore, activeOnly }, hasActiviteMetier)
+    return fallbackCodeBased(orgId, profile, boampCodes, typesMarche, { page, limit, search, minScore, activeOnly, regionDepts }, hasActiviteMetier)
   }
 
   const matchedIdwebs = (matchedRaw ?? []).map((m: any) => m.idweb)
@@ -229,6 +235,11 @@ export async function GET(request: NextRequest) {
 
   // Filtre type de marché — TOUJOURS restreindre aux SERVICES (+ null)
   query = query.or(`type_marche.in.(${typesMarche.join(',')}),type_marche.is.null`)
+
+  // Filtre région — overlaps sur code_departement
+  if (regionDepts && regionDepts.length > 0) {
+    query = query.overlaps('code_departement', regionDepts)
+  }
 
   // Filtre recherche texte (mode mots-clés uniquement)
   if (search.trim() && !isSemanticSearch) {
@@ -336,7 +347,7 @@ async function fallbackCodeBased(
   profile: any,
   boampCodes: string[],
   typesMarche: string[],
-  opts: { page: number; limit: number; search: string; minScore: number | null; activeOnly: boolean },
+  opts: { page: number; limit: number; search: string; minScore: number | null; activeOnly: boolean; regionDepts?: string[] | null },
   hasActiviteMetier: boolean,
 ) {
   let query = adminClient
@@ -351,6 +362,11 @@ async function fallbackCodeBased(
 
   // Filtre SERVICES — toujours appliqué (avec les types configurés ou SERVICES par défaut)
   query = query.or(`type_marche.in.(${typesMarche.join(',')}),type_marche.is.null`)
+
+  // Filtre région
+  if (opts.regionDepts && opts.regionDepts.length > 0) {
+    query = query.overlaps('code_departement', opts.regionDepts)
+  }
 
   if (boampCodes.length > 0) {
     query = query.overlaps('descripteur_codes', boampCodes)

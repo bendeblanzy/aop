@@ -8,6 +8,7 @@ import {
 import { cn } from '@/lib/utils'
 import Link from 'next/link'
 import { toast } from 'sonner'
+import { REGIONS_FR } from '@/lib/boamp/regions'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -305,6 +306,7 @@ export default function VeillePage() {
   const [activeOnly, setActiveOnly] = useState(true)
   const [minScore, setMinScore] = useState<number | null>(null)
   const [sortBy, setSortBy] = useState<SortKey>('score')
+  const [regionFilter, setRegionFilter] = useState<string>('')
   const [tab, setTab] = useState<TabKey>(() =>
     searchParams.get('tab') === 'favorites' ? 'favorites' : 'all'
   )
@@ -377,6 +379,8 @@ export default function VeillePage() {
         // Mode Recherche IA : embedding sémantique de la requête
         ...(searchMode === 'semantic' && s.trim() ? { semantic_query: s } : {}),
         ...(minScore !== null ? { min_score: String(minScore) } : {}),
+        // Filtre région
+        ...(regionFilter ? { region: regionFilter } : {}),
       })
       const res = await fetch(`/api/veille/tenders?${params}`)
       if (!res.ok) throw new Error()
@@ -394,7 +398,7 @@ export default function VeillePage() {
     } finally {
       setLoading(false)
     }
-  }, [search, activeOnly, minScore, searchMode]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [search, activeOnly, minScore, searchMode, regionFilter]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function autoScore(idwebs: string[]) {
     try {
@@ -421,7 +425,7 @@ export default function VeillePage() {
     searchTimeoutRef.current = setTimeout(() => setSearch(value), delay)
   }
 
-  useEffect(() => { fetchTenders(0, search) }, [search, activeOnly, minScore, searchMode]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { fetchTenders(0, search) }, [search, activeOnly, minScore, searchMode, regionFilter]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const sortedTenders = sortTenders(tenders, sortBy)
   const displayedTenders = tab === 'favorites'
@@ -559,10 +563,35 @@ export default function VeillePage() {
             ))}
           </div>
 
-          <label className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer select-none ml-auto">
+          <label className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer select-none">
             <input type="checkbox" checked={activeOnly} onChange={e => setActiveOnly(e.target.checked)} className="rounded border-gray-300 text-[#0000FF] focus:ring-[#0000FF]" />
             Actifs seulement
           </label>
+
+          <span className="text-gray-300">|</span>
+
+          <div className="flex items-center gap-2 ml-auto">
+            <MapPin className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+            <select
+              value={regionFilter}
+              onChange={e => setRegionFilter(e.target.value)}
+              className="text-xs border border-[#E0E0F0] rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-[#0000FF]/20 focus:border-[#0000FF] text-gray-600 bg-white max-w-[200px]"
+            >
+              <option value="">Toutes les régions</option>
+              {REGIONS_FR.map(r => (
+                <option key={r} value={r}>{r}</option>
+              ))}
+            </select>
+            {regionFilter && (
+              <button
+                onClick={() => setRegionFilter('')}
+                className="text-gray-400 hover:text-gray-600"
+                title="Supprimer le filtre région"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
