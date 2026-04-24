@@ -269,9 +269,7 @@ export default function ProfilPage() {
     { id: 'references', label: 'Références & Docs' },
     { id: 'veille-boamp', label: '📡 Veille BOAMP' },
     // ── Infos techniques (ensuite) ──
-    { id: 'identite', label: 'Identité' },
-    { id: 'representant', label: 'Représentant' },
-    { id: 'financier', label: 'Financier' },
+    { id: 'entreprise', label: '🏢 Entreprise' },
     { id: 'capacites', label: 'Capacités' },
     { id: 'assurances', label: 'Assurances' },
     { id: 'declarations', label: 'Déclarations' },
@@ -345,82 +343,97 @@ export default function ProfilPage() {
 
         <div className="p-6">
           {/* Onglet Identité */}
-          {activeTab === 'identite' && (
-            <div className="space-y-5">
-              {/* Bandeau auto-remplissage SIRET */}
-              <div className="bg-[#F5F5FF] rounded-xl border border-[#0000FF]/10 p-4 flex flex-col sm:flex-row sm:items-center gap-3">
-                <div className="flex-1">
-                  <p className="text-sm font-semibold text-[#0000FF] mb-0.5 flex items-center gap-1.5">
-                    <Search className="w-4 h-4" /> Auto-remplissage depuis le SIRET
-                  </p>
-                  <p className="text-xs text-gray-500">
-                    Renseignez votre SIRET ci-dessous et cliquez sur le bouton pour pré-remplir automatiquement les champs (source : Annuaire des Entreprises, data.gouv.fr).
-                  </p>
-                </div>
-                <button
-                  onClick={autoFillFromSiret}
-                  disabled={sirenLoading || (profile.siret || '').replace(/\s/g, '').length < 9}
-                  className="flex items-center gap-2 bg-[#0000FF] hover:bg-[#0000CC] text-white rounded-lg px-4 py-2.5 text-sm font-medium transition-colors disabled:opacity-40 shrink-0"
-                >
-                  {sirenLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-                  Auto-remplir
-                </button>
-              </div>
+          {/* ── Onglet Entreprise (fusion Identité + Représentant + Financier) ── */}
+          {activeTab === 'entreprise' && (
+            <div className="space-y-8">
 
-            <div className="grid grid-cols-2 gap-5">
-              <FormField label="Raison sociale *" value={profile.raison_sociale || ''} onChange={v => update('raison_sociale', v)} placeholder="Ma Société SAS" />
-              <FormSelect label="Forme juridique" value={profile.forme_juridique || ''} onChange={v => update('forme_juridique', v)} options={FORMES_JURIDIQUES} />
-              <FormField label="SIRET *" value={profile.siret || ''} onChange={v => update('siret', v)} placeholder="12345678900000" maxLength={14} />
-              <FormField label="Code NAF / APE" value={profile.code_naf || ''} onChange={v => update('code_naf', v)} placeholder="6201Z" />
-              <FormField label="N° TVA intracommunautaire" value={profile.numero_tva || ''} onChange={v => update('numero_tva', v)} placeholder="FR12345678900" />
-              <FormField label="Date de création" type="date" value={profile.date_creation_entreprise || ''} onChange={v => update('date_creation_entreprise', v)} />
-              <FormField label="Capital social (€)" type="number" value={profile.capital_social?.toString() || ''} onChange={v => update('capital_social', parseFloat(v) || undefined)} />
-              <div className="col-span-2">
-                <FormField label="Adresse du siège social" value={profile.adresse_siege || ''} onChange={v => update('adresse_siege', v)} placeholder="12 rue de la Paix" />
-              </div>
-              <FormField label="Code postal" value={profile.code_postal || ''} onChange={v => update('code_postal', v)} placeholder="75001" maxLength={5} />
-              <FormField label="Ville" value={profile.ville || ''} onChange={v => update('ville', v)} placeholder="Paris" />
-              <div className="col-span-2">
-                <FormSelect
-                  label="Région (pour le filtrage des AO)"
-                  value={profile.region || ''}
-                  onChange={v => update('region', v)}
-                  options={[...REGIONS_FR]}
-                />
-              </div>
-            </div>
-            </div>
-          )}
-
-          {/* Onglet Représentant */}
-          {activeTab === 'representant' && (
-            <div className="grid grid-cols-2 gap-5">
+              {/* ── Section 1 : Identité ── */}
               <div>
-                <label className="block text-sm font-medium text-text-primary mb-1.5">Civilité</label>
-                <div className="flex gap-4">
-                  {['M.', 'Mme'].map(civ => (
-                    <label key={civ} className="flex items-center gap-2 cursor-pointer">
-                      <input type="radio" checked={profile.civilite_representant === civ} onChange={() => update('civilite_representant', civ)} className="accent-primary" />
-                      <span className="text-sm">{civ}</span>
-                    </label>
-                  ))}
+                <h3 className="text-sm font-semibold text-text-primary uppercase tracking-wider mb-4 pb-2 border-b border-border flex items-center gap-2">
+                  <Building2 className="w-4 h-4 text-primary" /> Identité
+                </h3>
+                {/* Bandeau auto-remplissage SIRET */}
+                <div className="bg-[#F5F5FF] rounded-xl border border-[#0000FF]/10 p-4 flex flex-col sm:flex-row sm:items-center gap-3 mb-5">
+                  <div className="flex-1">
+                    <p className="text-sm font-semibold text-[#0000FF] mb-0.5 flex items-center gap-1.5">
+                      <Search className="w-4 h-4" /> Auto-remplissage depuis le SIRET
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      Renseignez votre SIRET ci-dessous et cliquez sur le bouton pour pré-remplir automatiquement les champs (source : Annuaire des Entreprises, data.gouv.fr).
+                    </p>
+                  </div>
+                  <button
+                    onClick={autoFillFromSiret}
+                    disabled={sirenLoading || (profile.siret || '').replace(/\s/g, '').length < 9}
+                    className="flex items-center gap-2 bg-[#0000FF] hover:bg-[#0000CC] text-white rounded-lg px-4 py-2.5 text-sm font-medium transition-colors disabled:opacity-40 shrink-0"
+                  >
+                    {sirenLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                    Auto-remplir
+                  </button>
+                </div>
+                <div className="grid grid-cols-2 gap-5">
+                  <FormField label="Raison sociale *" value={profile.raison_sociale || ''} onChange={v => update('raison_sociale', v)} placeholder="Ma Société SAS" />
+                  <FormSelect label="Forme juridique" value={profile.forme_juridique || ''} onChange={v => update('forme_juridique', v)} options={FORMES_JURIDIQUES} />
+                  <FormField label="SIRET *" value={profile.siret || ''} onChange={v => update('siret', v)} placeholder="12345678900000" maxLength={14} />
+                  <FormField label="Code NAF / APE" value={profile.code_naf || ''} onChange={v => update('code_naf', v)} placeholder="6201Z" />
+                  <FormField label="N° TVA intracommunautaire" value={profile.numero_tva || ''} onChange={v => update('numero_tva', v)} placeholder="FR12345678900" />
+                  <FormField label="Date de création" type="date" value={profile.date_creation_entreprise || ''} onChange={v => update('date_creation_entreprise', v)} />
+                  <FormField label="Capital social (€)" type="number" value={profile.capital_social?.toString() || ''} onChange={v => update('capital_social', parseFloat(v) || undefined)} />
+                  <div className="col-span-2">
+                    <FormField label="Adresse du siège social" value={profile.adresse_siege || ''} onChange={v => update('adresse_siege', v)} placeholder="12 rue de la Paix" />
+                  </div>
+                  <FormField label="Code postal" value={profile.code_postal || ''} onChange={v => update('code_postal', v)} placeholder="75001" maxLength={5} />
+                  <FormField label="Ville" value={profile.ville || ''} onChange={v => update('ville', v)} placeholder="Paris" />
+                  <div className="col-span-2">
+                    <FormSelect
+                      label="Région (pour le filtrage des AO)"
+                      value={profile.region || ''}
+                      onChange={v => update('region', v)}
+                      options={[...REGIONS_FR]}
+                    />
+                  </div>
                 </div>
               </div>
-              <FormField label="Qualité / Fonction" value={profile.qualite_representant || ''} onChange={v => update('qualite_representant', v)} placeholder="Gérant, Président, DG..." />
-              <FormField label="Prénom *" value={profile.prenom_representant || ''} onChange={v => update('prenom_representant', v)} />
-              <FormField label="Nom *" value={profile.nom_representant || ''} onChange={v => update('nom_representant', v)} />
-              <FormField label="Email" type="email" value={profile.email_representant || ''} onChange={v => update('email_representant', v)} />
-              <FormField label="Téléphone" type="tel" value={profile.telephone_representant || ''} onChange={v => update('telephone_representant', v)} placeholder="06 00 00 00 00" />
-            </div>
-          )}
 
-          {/* Onglet Financier */}
-          {activeTab === 'financier' && (
-            <div className="grid grid-cols-2 gap-5">
-              <FormField label="Chiffre d'affaires N-1 (€)" type="number" value={profile.ca_annee_n1?.toString() || ''} onChange={v => update('ca_annee_n1', parseFloat(v) || undefined)} placeholder="500000" />
-              <FormField label="Chiffre d'affaires N-2 (€)" type="number" value={profile.ca_annee_n2?.toString() || ''} onChange={v => update('ca_annee_n2', parseFloat(v) || undefined)} placeholder="450000" />
-              <FormField label="Chiffre d'affaires N-3 (€)" type="number" value={profile.ca_annee_n3?.toString() || ''} onChange={v => update('ca_annee_n3', parseFloat(v) || undefined)} placeholder="400000" />
-              <FormField label="Effectif moyen annuel" type="number" value={profile.effectif_moyen?.toString() || ''} onChange={v => update('effectif_moyen', parseInt(v) || undefined)} placeholder="10" />
+              {/* ── Section 2 : Représentant légal ── */}
+              <div>
+                <h3 className="text-sm font-semibold text-text-primary uppercase tracking-wider mb-4 pb-2 border-b border-border flex items-center gap-2">
+                  <Award className="w-4 h-4 text-primary" /> Représentant légal
+                </h3>
+                <div className="grid grid-cols-2 gap-5">
+                  <div>
+                    <label className="block text-sm font-medium text-text-primary mb-1.5">Civilité</label>
+                    <div className="flex gap-4">
+                      {['M.', 'Mme'].map(civ => (
+                        <label key={civ} className="flex items-center gap-2 cursor-pointer">
+                          <input type="radio" checked={profile.civilite_representant === civ} onChange={() => update('civilite_representant', civ)} className="accent-primary" />
+                          <span className="text-sm">{civ}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                  <FormField label="Qualité / Fonction" value={profile.qualite_representant || ''} onChange={v => update('qualite_representant', v)} placeholder="Gérant, Président, DG..." />
+                  <FormField label="Prénom *" value={profile.prenom_representant || ''} onChange={v => update('prenom_representant', v)} />
+                  <FormField label="Nom *" value={profile.nom_representant || ''} onChange={v => update('nom_representant', v)} />
+                  <FormField label="Email" type="email" value={profile.email_representant || ''} onChange={v => update('email_representant', v)} />
+                  <FormField label="Téléphone" type="tel" value={profile.telephone_representant || ''} onChange={v => update('telephone_representant', v)} placeholder="06 00 00 00 00" />
+                </div>
+              </div>
+
+              {/* ── Section 3 : Données financières ── */}
+              <div>
+                <h3 className="text-sm font-semibold text-text-primary uppercase tracking-wider mb-4 pb-2 border-b border-border flex items-center gap-2">
+                  <Radar className="w-4 h-4 text-primary" /> Données financières
+                </h3>
+                <div className="grid grid-cols-2 gap-5">
+                  <FormField label="Chiffre d'affaires N-1 (€)" type="number" value={profile.ca_annee_n1?.toString() || ''} onChange={v => update('ca_annee_n1', parseFloat(v) || undefined)} placeholder="500000" />
+                  <FormField label="Chiffre d'affaires N-2 (€)" type="number" value={profile.ca_annee_n2?.toString() || ''} onChange={v => update('ca_annee_n2', parseFloat(v) || undefined)} placeholder="450000" />
+                  <FormField label="Chiffre d'affaires N-3 (€)" type="number" value={profile.ca_annee_n3?.toString() || ''} onChange={v => update('ca_annee_n3', parseFloat(v) || undefined)} placeholder="400000" />
+                  <FormField label="Marge brute N-1 (€)" type="number" value={profile.marge_brute?.toString() || ''} onChange={v => update('marge_brute', parseFloat(v) || undefined)} placeholder="250000" />
+                  <FormField label="Effectif moyen annuel" type="number" value={profile.effectif_moyen?.toString() || ''} onChange={v => update('effectif_moyen', parseInt(v) || undefined)} placeholder="10" />
+                </div>
+              </div>
+
             </div>
           )}
 

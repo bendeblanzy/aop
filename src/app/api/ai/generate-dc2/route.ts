@@ -3,6 +3,12 @@ import { adminClient, uploadGeneratedDoc, getOrgIdForUser, getOrgProfile } from 
 import { NextRequest, NextResponse } from 'next/server'
 import { generateDC2Docx } from '@/lib/documents/docx-generator'
 
+// DC2 = Déclaration du candidat individuel ou du membre du groupement
+// Contenu : identification administrative, CAPACITÉS FINANCIÈRES (CA sur 3 ans, effectifs),
+// déclarations légales (non-interdiction, à jour fiscal/social), assurances,
+// références de marchés similaires, et présentation synthétique de l'agence.
+// Ce document PROUVE LA CAPACITÉ à exécuter le marché — il diffère du DC1 qui identifie simplement le candidat.
+
 export async function POST(request: NextRequest) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -13,18 +19,57 @@ export async function POST(request: NextRequest) {
 
   const { ao_id } = await request.json()
 
-  const [{ data: ao }, profile, { data: references }] = await Promise.all([
+  // Charger l'AO, le profil, les références ET les collaborateurs
+  const [{ data: ao }, profile, { data: references }, { data: collaborateurs }] = await Promise.all([
     adminClient.from('appels_offres').select('*').eq('id', ao_id).eq('organization_id', orgId).single(),
     getOrgProfile(orgId),
     adminClient.from('references').select('*').eq('organization_id', orgId).limit(10),
+    adminClient
+      .from('collaborateurs')
+      .select('nom, prenom, poste, role_metier, competences_cles, experience_annees')
+      .eq('organization_id', orgId)
+      .limit(20),
   ])
   if (!ao) return NextResponse.json({ error: 'AO introuvable' }, { status: 404 })
 
   const p = profile as any
+
+  // Sélectionner les références pertinentes pour ce marché
   const selectedRefs = references?.filter(r => ao.references_selectionnees?.includes(r.id))
     ?? references?.slice(0, 5) ?? []
 
+  // ── Bloc "Présentation de l'agence" ──
+  // Construit à partir du positionnement, des atouts différenciants et de l'équipe
+  const presentationParts: string[] = []
+  if (p.positionnement) {
+    presentationParts.push(p.positionnement)
+  }
+  if (p.atouts_differenciants) {
+    presentationParts.push(`Atouts différenciants : ${p.atouts_differenciants}`)
+  }
+  if (p.activite_metier) {
+    presentationParts.push(`Activité principale : ${p.activite_metier}`)
+  }
+  if (p.domaines_competence?.length) {
+    presentationParts.push(`Domaines d'expertise : ${p.domaines_competence.join(', ')}`)
+  }
+  if (p.certifications?.length) {
+    presentationParts.push(`Certifications : ${p.certifications.join(', ')}`)
+  }
+  const presentation_agence = presentationParts.join('\n\n') || ''
+
+  // ── Bloc "Équipe" — liste structurée des collaborateurs ──
+  const equipe_membres = (collaborateurs ?? []).map((c: any) => {
+    const parts: string[] = [`${c.prenom || ''} ${c.nom || ''}`.trim()]
+    if (c.poste) parts.push(c.poste)
+    if (c.role_metier) parts.push(`(${c.role_metier})`)
+    if (c.competences_cles) parts.push(`— ${c.competences_cles}`)
+    if (c.experience_annees) parts.push(`${c.experience_annees} ans d'expérience`)
+    return parts.join(' ')
+  })
+
   const data: Record<string, any> = {
+    // ── Identification administrative ──
     raison_sociale: p.raison_sociale,
     siret: p.siret,
     forme_juridique: p.forme_juridique,
@@ -38,25 +83,43 @@ export async function POST(request: NextRequest) {
     representant_prenom: p.prenom_representant,
     representant_nom: p.nom_representant,
     representant_qualite: p.qualite_representant,
-    declaration_non_interdiction: p.declaration_non_interdiction,
-    declaration_a_jour_fiscal: p.declaration_a_jour_fiscal,
-    declaration_a_jour_social: p.declaration_a_jour_social,
+
+    // ── Capacités financières (cœur du DC2) ──
     ca_n1: p.ca_annee_n1,
     ca_n2: p.ca_annee_n2,
     ca_n3: p.ca_annee_n3,
+    marge_brute: p.marge_brute,
     effectif: p.effectif_moyen,
+
+    // ── Déclarations légales ──
+    declaration_non_interdiction: p.declaration_non_interdiction,
+    declaration_a_jour_fiscal: p.declaration_a_jour_fiscal,
+    declaration_a_jour_social: p.declaration_a_jour_social,
+
+    // ── Assurances ──
     certifications: Array.isArray(p.certifications) ? p.certifications : (p.certifications ? [String(p.certifications)] : []),
     assurance_rc_numero: p.assurance_rc_numero,
     assurance_rc_compagnie: p.assurance_rc_compagnie,
     assurance_rc_expiration: p.assurance_rc_expiration,
+
+    // ── Références de marchés similaires ──
     references_selectionnees: selectedRefs,
-    lieu_signature: p.ville,
-    date_signature: new Date().toLocaleDateString('fr-FR'),
+
+    // ── Présentation agence (bloc différenciateur) ──
+    presentation_agence,
+    equipe_membres,
+    nb_collaborateurs: (collaborateurs ?? []).length,
+
+    // ── Marché concerné ──
     acheteur_nom: ao.acheteur || '',
     objet_marche: ao.analyse_rc?.objet || ao.titre,
     lots_candidats: Array.isArray(ao.analyse_rc?.lots)
       ? ao.analyse_rc.lots.map((l: any) => `Lot ${l.numero} — ${l.intitule}`).join(', ')
       : 'Marché global',
+
+    // ── Signature ──
+    lieu_signature: p.ville,
+    date_signature: new Date().toLocaleDateString('fr-FR'),
   }
 
   const buffer = await generateDC2Docx(data)

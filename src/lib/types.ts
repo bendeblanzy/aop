@@ -39,6 +39,7 @@ export interface Profile {
   ca_annee_n1?: number
   ca_annee_n2?: number
   ca_annee_n3?: number
+  marge_brute?: number
   effectif_moyen?: number
   certifications?: string[]
   domaines_competence?: string[]

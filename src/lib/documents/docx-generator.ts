@@ -406,6 +406,7 @@ export async function generateDC2Docx(data: Record<string, any>): Promise<Buffer
     formTable([
       formRow('F2 — Autres informations financières', `Effectif moyen annuel : ${data.effectif ? `${data.effectif} salariés` : '[À renseigner]'}`),
       formRow('Capital social', data.capital_social ? `${Number(data.capital_social).toLocaleString('fr-FR')} €` : '[À renseigner]'),
+      formRow('Marge brute N-1', data.marge_brute ? `${Number(data.marge_brute).toLocaleString('fr-FR')} €` : '[À renseigner]'),
       formRow('F3 — Assurance RC professionnelle n°', data.assurance_rc_numero || '[À renseigner]'),
       formRow('Compagnie d\'assurance', data.assurance_rc_compagnie || '[À renseigner]'),
       formRow('Expiration', data.assurance_rc_expiration || '[À renseigner]'),
@@ -445,6 +446,44 @@ export async function generateDC2Docx(data: Record<string, any>): Promise<Buffer
     formRow('G2 — Documents disponibles en ligne', '[URL si applicable]'),
   ]))
   children.push(...spacer(1))
+
+  // H — Présentation de l'agence (bloc différenciateur, issu du profil)
+  if (data.presentation_agence || (data.equipe_membres && data.equipe_membres.length > 0)) {
+    children.push(heading2('H — PRÉSENTATION DE L\'AGENCE'))
+    children.push(para([run(
+      'Cette section présente l\'agence candidate, son positionnement et son équipe. Elle complète les données administratives et financières du présent DC2.',
+      { italic: true, size: 9, color: '6B7280' }
+    )]))
+    children.push(...spacer(1))
+
+    if (data.presentation_agence) {
+      children.push(para([run('Positionnement et atouts :', { bold: true })]))
+      // Chaque paragraphe séparé par \n\n
+      const paragraphs = String(data.presentation_agence).split('\n\n').filter(Boolean)
+      for (const p of paragraphs) {
+        children.push(para([run(p.trim())]))
+      }
+      children.push(...spacer(1))
+    }
+
+    if (data.equipe_membres && data.equipe_membres.length > 0) {
+      children.push(para([run(`Équipe (${data.nb_collaborateurs || data.equipe_membres.length} collaborateur(s)) :`, { bold: true })]))
+      children.push(
+        dataTable(
+          ['Collaborateur', 'Poste / Rôle'],
+          data.equipe_membres.map((m: string) => {
+            const sep = m.indexOf(' — ')
+            if (sep !== -1) {
+              return [m.substring(0, sep).trim(), m.substring(sep + 3).trim()]
+            }
+            return [m, '']
+          }),
+          [40, 60]
+        )
+      )
+      children.push(...spacer(1))
+    }
+  }
 
   // Signature (facultative)
   children.push(heading2('DÉCLARATION SUR L\'HONNEUR ET SIGNATURE'))

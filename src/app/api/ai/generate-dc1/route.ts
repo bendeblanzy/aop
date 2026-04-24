@@ -4,30 +4,44 @@ import { NextRequest, NextResponse } from 'next/server'
 import { callClaude } from '@/lib/ai/claude-client'
 import { generateDC1Docx } from '@/lib/documents/docx-generator'
 
-const DC1_PROMPT = `Tu es un expert en marchés publics français. À partir des données fournies, génère les champs du formulaire DC1 officiel.
+// DC1 = Lettre de candidature et désignation du mandataire (formulaire officiel)
+// Contenu : identification administrative du candidat, désignation éventuelle d'un mandataire,
+// habilitation du mandataire par les cotraitants, signature du candidat.
+// Ce document IDENTIFIE QUI candidate — il ne contient PAS de références ni de capacités financières.
+const DC1_PROMPT = `Tu es un expert en marchés publics français.
+
+Le DC1 est la LETTRE DE CANDIDATURE officielle (formulaire Cerfa). Il contient UNIQUEMENT :
+- L'identification administrative du candidat (raison sociale, SIRET, forme juridique, adresse)
+- L'objet du marché et les lots soumissionnés
+- La désignation d'un éventuel mandataire en cas de groupement
+- La signature du représentant légal
+
+IMPORTANT : Le DC1 ne contient PAS de références de marchés antérieurs, pas de CA, pas de présentation d'activité.
+
+À partir des données fournies, extrais les informations administratives pour remplir ce formulaire.
 
 Retourne UNIQUEMENT un JSON valide avec ces champs exacts :
 {
   "acheteur_nom": "nom complet de l'acheteur public",
-  "acheteur_adresse": "adresse complète de l'acheteur",
-  "objet_marche": "objet précis du marché",
+  "acheteur_adresse": "adresse complète de l'acheteur si disponible",
+  "objet_marche": "objet précis du marché tel que libellé dans l'avis",
   "reference_marche": "référence ou numéro du marché",
-  "lots_candidats": "lot(s) pour lesquels le candidat soumissionne",
-  "raison_sociale": "dénomination sociale du candidat",
-  "siret": "numéro SIRET du candidat",
-  "forme_juridique": "forme juridique",
-  "adresse_siege": "adresse du siège social",
+  "lots_candidats": "numéro(s) et intitulé(s) du ou des lots soumissionnés",
+  "raison_sociale": "dénomination sociale exacte du candidat",
+  "siret": "numéro SIRET du candidat (14 chiffres)",
+  "forme_juridique": "forme juridique (SAS, SARL, SA, etc.)",
+  "adresse_siege": "adresse complète du siège social",
   "code_postal": "code postal",
   "ville": "ville",
   "numero_tva": "numéro TVA intracommunautaire si disponible",
   "representant_civilite": "M. ou Mme",
-  "representant_nom": "nom du représentant",
-  "representant_prenom": "prénom du représentant",
-  "representant_qualite": "fonction/qualité du représentant",
-  "groupement": "non",
+  "representant_nom": "nom du représentant légal",
+  "representant_prenom": "prénom du représentant légal",
+  "representant_qualite": "qualité/fonction du représentant légal (Gérant, Président, DG...)",
+  "groupement": "non (sauf si indiqué)",
   "type_groupement": "",
   "mandataire": "",
-  "lieu_signature": "ville de signature",
+  "lieu_signature": "ville où est signé le document",
   "date_signature": "date du jour au format JJ/MM/AAAA"
 }
 
