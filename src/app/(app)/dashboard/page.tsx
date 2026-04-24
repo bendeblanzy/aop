@@ -267,30 +267,78 @@ function TenderCard({
 
 // ── AO En Cours Card ────────────────────────────────────────────────────────
 
+function getStatutBadge(statut: string): { label: string; className: string } {
+  const s = statut.toLowerCase()
+  if (s.includes('analyse') || s.includes('analyse')) return { label: '🔍 En analyse', className: 'bg-amber-100 text-amber-800 border border-amber-300' }
+  if (s.includes('valid') || s.includes('soumis') || s.includes('envoy')) return { label: '✓ Soumis', className: 'bg-green-100 text-green-800 border border-green-300' }
+  if (s.includes('refus') || s.includes('rejet')) return { label: '✗ Non retenu', className: 'bg-red-100 text-red-800 border border-red-300' }
+  if (s.includes('gagn') || s.includes('attribu')) return { label: '🏆 Attribué', className: 'bg-purple-100 text-purple-800 border border-purple-300' }
+  return { label: '✏️ En cours', className: 'bg-[#E6E6FF] text-[#0000FF] border border-[#ccccff]' }
+}
+
 function AoCard({ ao }: { ao: AppelOffre }) {
   const dl = formatDeadline(ao.date_limite_reponse)
+  const badge = getStatutBadge(ao.statut)
+  const updated = new Date(ao.updated_at).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' })
+
   return (
     <Link
       href={`/appels-offres/${ao.id}`}
-      className="bg-white rounded-xl border border-[#E0E0F0] shadow-sm hover:shadow-lg hover:border-[#0000FF]/30 hover:bg-[#F5F5FF] transition-all p-4 sm:p-5 flex flex-col group cursor-pointer"
+      className="block bg-white rounded-xl border border-[#E0E0F0] shadow-sm hover:shadow-lg hover:border-[#0000FF]/30 hover:bg-[#F5F5FF] transition-all flex flex-col group"
     >
-      <h3 className="font-bold text-[#0000FF] text-sm leading-snug line-clamp-2 uppercase group-hover:text-[#0000CC] mb-2 min-w-0">
-        {ao.titre}
-      </h3>
-      {ao.acheteur && (
-        <div className="flex items-center gap-1.5 text-xs text-gray-500 mb-2 min-w-0">
-          <Building2 className="w-3 h-3 shrink-0" />
-          <span className="truncate">{ao.acheteur}</span>
+      <div className="p-4 sm:p-5 pb-3 flex-1 min-w-0">
+        {/* Header : badge statut */}
+        <div className="flex items-start gap-2 mb-2.5 min-w-0">
+          <div className="flex-1 flex flex-wrap items-center gap-1.5 min-w-0">
+            <span className={cn('inline-flex items-center text-xs font-bold px-2.5 py-0.5 rounded-full shrink-0', badge.className)}>
+              {badge.label}
+            </span>
+          </div>
         </div>
-      )}
-      <div className="mt-auto pt-2 flex items-center justify-between">
+
+        {/* Title */}
+        <p className="font-bold text-[#0000FF] text-sm leading-snug line-clamp-3 uppercase mb-3 min-w-0">
+          {ao.titre}
+        </p>
+
+        {/* Meta acheteur + mise à jour */}
+        <div className="space-y-1.5 mb-3 text-xs text-gray-500 min-w-0">
+          {ao.acheteur && (
+            <div className="flex items-center gap-1.5 min-w-0">
+              <Building2 className="w-3.5 h-3.5 shrink-0" />
+              <span className="font-medium text-gray-700 truncate">{ao.acheteur}</span>
+            </div>
+          )}
+          <div className="flex items-center gap-1.5">
+            <Clock className="w-3 h-3 shrink-0" />
+            <span>Modifié le {updated}</span>
+          </div>
+        </div>
+
+        {/* Deadline / Statut grid */}
+        <div className="grid grid-cols-2 gap-2">
+          <div className="bg-gray-50 rounded-lg px-3 py-2">
+            <p className="text-xs text-gray-400 uppercase font-bold mb-0.5">Deadline</p>
+            <p className={cn('text-sm font-bold', dl.expired ? 'text-orange-500' : dl.urgent ? 'text-red-600' : 'text-gray-800')}>
+              {dl.daysLeft !== null ? (dl.expired ? 'Expiré' : `${dl.daysLeft}j`) : '—'}
+            </p>
+          </div>
+          <div className="bg-gray-50 rounded-lg px-3 py-2">
+            <p className="text-xs text-gray-400 uppercase font-bold mb-0.5">Statut</p>
+            <p className="text-sm font-bold text-gray-800 truncate">{ao.statut}</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Footer */}
+      <div className="px-4 sm:px-5 py-2.5 border-t border-[#E0E0F0] flex items-center justify-between min-w-0">
         <span className={cn(
-          'text-xs font-medium',
+          'text-xs font-medium truncate',
           dl.expired ? 'text-orange-500' : dl.urgent ? 'text-red-600' : 'text-gray-500',
         )}>
           {dl.short}
         </span>
-        <span className="text-xs font-semibold text-[#0000FF] flex items-center gap-1 group-hover:underline">
+        <span className="text-xs font-semibold text-[#0000FF] flex items-center gap-1 shrink-0 group-hover:underline">
           Continuer <ArrowRight className="w-3 h-3" />
         </span>
       </div>
