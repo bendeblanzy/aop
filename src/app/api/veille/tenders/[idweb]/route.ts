@@ -437,10 +437,10 @@ export async function GET(
     .eq('organization_id', orgId)
     .maybeSingle()
 
-  // Récupérer le profil pour le matching
+  // Récupérer le profil pour le matching lots
   const { data: profile } = await adminClient
     .from('profiles')
-    .select('activite_metier, raison_sociale, domaines_competences')
+    .select('activite_metier, raison_sociale, domaines_competences, positionnement, atouts_differenciants')
     .eq('organization_id', orgId)
     .maybeSingle()
 
@@ -477,6 +477,8 @@ export async function GET(
       activite_metier: profile.activite_metier,
       raison_sociale: profile.raison_sociale,
       domaines_competences: profile.domaines_competences,
+      positionnement: profile.positionnement,
+      atouts_differenciants: profile.atouts_differenciants,
     } : null,
     extra: extraEforms,
   })

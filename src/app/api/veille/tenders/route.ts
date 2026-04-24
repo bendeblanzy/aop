@@ -8,6 +8,7 @@ import {
   blendEmbeddings,
 } from '@/lib/boamp/communication-domain'
 import { getDepartementsForRegion } from '@/lib/boamp/regions'
+import { buildProfileKeywords } from '@/lib/boamp/lot-matching'
 
 /**
  * GET /api/veille/tenders
@@ -41,9 +42,17 @@ export async function GET(request: NextRequest) {
   // Récupérer le profil complet pour embedding + filtres
   const { data: profile } = await adminClient
     .from('profiles')
-    .select('boamp_codes, activite_metier, types_marche_filtres, embedding, raison_sociale, domaines_competence, certifications, positionnement, atouts_differenciants, moyens_techniques, region')
+    .select('boamp_codes, activite_metier, types_marche_filtres, embedding, raison_sociale, domaines_competence, certifications, positionnement, atouts_differenciants, moyens_techniques, region, domaines_competences')
     .eq('organization_id', orgId)
     .maybeSingle()
+
+  // Construire les mots-clés profil pour le matching des lots (inclus dans la réponse)
+  const profileKeywords = buildProfileKeywords({
+    activite_metier: profile?.activite_metier,
+    domaines_competence: profile?.domaines_competence ?? profile?.domaines_competences,
+    positionnement: profile?.positionnement,
+    atouts_differenciants: profile?.atouts_differenciants,
+  })
 
   const boampCodes: string[] = Array.isArray(profile?.boamp_codes) ? profile.boamp_codes : []
 
@@ -141,7 +150,7 @@ export async function GET(request: NextRequest) {
 
   // Si ni embedding profil ni requête sémantique → fallback codes BOAMP
   if (!profileEmbedding && !isSemanticSearch) {
-    return fallbackCodeBased(orgId, profile, boampCodes, typesMarche, { page, limit, search, minScore, activeOnly, regionDepts }, hasActiviteMetier)
+    return fallbackCodeBased(orgId, profile, boampCodes, typesMarche, { page, limit, search, minScore, activeOnly, regionDepts }, hasActiviteMetier, profileKeywords)
   }
 
   // Obtenir l'embedding du domaine communication (mis en cache entre les requêtes)
@@ -189,7 +198,7 @@ export async function GET(request: NextRequest) {
 
   if (matchError) {
     console.error('[veille/tenders] vector match error:', matchError.message)
-    return fallbackCodeBased(orgId, profile, boampCodes, typesMarche, { page, limit, search, minScore, activeOnly, regionDepts }, hasActiviteMetier)
+    return fallbackCodeBased(orgId, profile, boampCodes, typesMarche, { page, limit, search, minScore, activeOnly, regionDepts }, hasActiviteMetier, profileKeywords)
   }
 
   const matchedIdwebs = (matchedRaw ?? []).map((m: any) => m.idweb)
@@ -338,6 +347,7 @@ export async function GET(request: NextRequest) {
     hasBoampCodes: boampCodes.length > 0,
     hasActiviteMetier,
     searchMode: isSemanticSearch ? 'semantic' : 'profile',
+    profileKeywords,
   })
 }
 
@@ -349,6 +359,7 @@ async function fallbackCodeBased(
   typesMarche: string[],
   opts: { page: number; limit: number; search: string; minScore: number | null; activeOnly: boolean; regionDepts?: string[] | null },
   hasActiviteMetier: boolean,
+  profileKeywords: string[] = [],
 ) {
   let query = adminClient
     .from('tenders')
@@ -412,5 +423,6 @@ async function fallbackCodeBased(
     hasBoampCodes: boampCodes.length > 0,
     hasActiviteMetier,
     searchMode: 'fallback',
+    profileKeywords,
   })
 }

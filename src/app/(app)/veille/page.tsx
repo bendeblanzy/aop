@@ -9,6 +9,7 @@ import { cn } from '@/lib/utils'
 import Link from 'next/link'
 import { toast } from 'sonner'
 import { REGIONS_FR } from '@/lib/boamp/regions'
+import { countMatchingLots } from '@/lib/boamp/lot-matching'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -45,6 +46,7 @@ interface ApiResponse {
   limit: number
   hasBoampCodes: boolean
   hasActiviteMetier: boolean
+  profileKeywords?: string[]
 }
 
 type SortKey = 'score' | 'date' | 'deadline'
@@ -126,11 +128,13 @@ function TenderCard({
   isFav,
   onToggleFav,
   favLoading,
+  profileKeywords,
 }: {
   tender: TenderItem
   isFav: boolean
   onToggleFav: () => void
   favLoading: boolean
+  profileKeywords: string[]
 }) {
   const deadline = formatDeadline(tender.datelimitereponse)
   const euros = formatEuros(tender.valeur_estimee ?? tender.budget_estime)
@@ -139,6 +143,10 @@ function TenderCard({
   const nature = tender.nature_libelle ?? null
   const duree = tender.duree_mois ? `${tender.duree_mois} mois` : null
   const procedureAccess = getProcedureAccess(tender.procedure_libelle, tender.type_procedure)
+  // Lots pertinents — uniquement si l'AO a plusieurs lots et qu'on a des keywords
+  const lotsMatch = (tender.nb_lots ?? 0) > 1 && tender.lots_titres?.length > 0
+    ? countMatchingLots(tender.lots_titres, profileKeywords)
+    : null
 
   const summaryParts: string[] = []
   if (tender.score !== null) summaryParts.push(`Similarité ${tender.score}%`)
@@ -230,6 +238,25 @@ function TenderCard({
           </div>
         </div>
 
+        {/* Lots pertinents */}
+        {lotsMatch && (
+          <div className="mb-3">
+            {lotsMatch.matching > 0 ? (
+              <span className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full bg-green-50 text-green-700 border border-green-200">
+                <FileText className="w-3 h-3 shrink-0" />
+                {lotsMatch.matching === lotsMatch.total
+                  ? `${lotsMatch.total} lot${lotsMatch.total > 1 ? 's' : ''} — tous correspondent`
+                  : `${lotsMatch.matching}/${lotsMatch.total} lots correspondent à votre profil`}
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full bg-gray-50 text-gray-400 border border-gray-200">
+                <FileText className="w-3 h-3 shrink-0" />
+                {lotsMatch.total} lots — aucun ne correspond directement
+              </span>
+            )}
+          </div>
+        )}
+
         {/* Score */}
         {tender.score !== null && (
           <div className="mb-3">
@@ -298,6 +325,7 @@ export default function VeillePage() {
   const [loading, setLoading] = useState(true)
   const [hasBoampCodes, setHasBoampCodes] = useState(true)
   const [hasActiviteMetier, setHasActiviteMetier] = useState(true)
+  const [profileKeywords, setProfileKeywords] = useState<string[]>([])
   const LIMIT = 30
 
   const [search, setSearch] = useState('')
@@ -390,6 +418,9 @@ export default function VeillePage() {
       setPage(p)
       setHasBoampCodes(data.hasBoampCodes)
       setHasActiviteMetier(data.hasActiviteMetier)
+      if (data.profileKeywords && data.profileKeywords.length > 0) {
+        setProfileKeywords(data.profileKeywords)
+      }
 
       const unscored = data.tenders.filter(t => t.score === null).map(t => t.idweb).slice(0, 20)
       if (unscored.length > 0 && data.hasActiviteMetier) autoScore(unscored)
@@ -660,6 +691,7 @@ export default function VeillePage() {
               isFav={favorites.has(tender.idweb)}
               onToggleFav={() => toggleFavorite(tender.idweb)}
               favLoading={favLoading.has(tender.idweb)}
+              profileKeywords={profileKeywords}
             />
           ))}
         </div>
