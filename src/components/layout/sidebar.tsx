@@ -6,7 +6,7 @@ import { usePathname, useSearchParams } from 'next/navigation'
 import {
   LayoutDashboard, Building2, Users,
   Settings, LogOut, Search,
-  Menu, X, Star, FolderOpen, FileEdit, Lock,
+  Menu, X, Star, FolderOpen, FileEdit, Lock, UserCog,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
@@ -39,6 +39,7 @@ const navigation: NavItem[] = [
 // Admin items (shown separately)
 const adminNavigation: NavItem[] = [
   { name: 'Gestion DCE', href: '/admin/dce', icon: FolderOpen, section: 'admin' },
+  { name: 'Utilisateurs', href: '/admin/users', icon: UserCog, section: 'admin' },
 ]
 
 export function Sidebar() {
