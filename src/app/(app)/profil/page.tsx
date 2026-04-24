@@ -25,7 +25,7 @@ export default function ProfilPage() {
     boamp_codes: [],
     activite_metier: '',
   })
-  const [activeTab, setActiveTab] = useState('positionnement')
+  const [activeTab, setActiveTab] = useState('entreprise')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [autoSaveStatus, setAutoSaveStatus] = useState<'idle' | 'pending' | 'saving' | 'saved'>('idle')
@@ -264,12 +264,12 @@ export default function ProfilPage() {
   const completion = calculateProfileCompletion(profile)
 
   const tabs = [
-    // ── Contenu stratégique (en premier) ──
+    { id: 'entreprise', label: '🏢 Entreprise' },
+    // ── Contenu stratégique ──
     { id: 'positionnement', label: '✨ Positionnement' },
     { id: 'references', label: 'Références & Docs' },
     { id: 'veille-boamp', label: '📡 Veille BOAMP' },
-    // ── Infos techniques (ensuite) ──
-    { id: 'entreprise', label: '🏢 Entreprise' },
+    // ── Infos techniques ──
     { id: 'capacites', label: 'Capacités' },
     { id: 'assurances', label: 'Assurances' },
     { id: 'declarations', label: 'Déclarations' },
