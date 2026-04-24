@@ -4,12 +4,12 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import {
   FileText, Star, Zap, RefreshCw, Building2, Calendar,
-  ArrowRight, ChevronDown, ChevronUp, Clock, MapPin,
-  ExternalLink,
+  ArrowRight, Clock, MapPin,
 } from 'lucide-react'
 import Link from 'next/link'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
+import { countMatchingLots } from '@/lib/boamp/lot-matching'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -28,6 +28,7 @@ interface TopTender {
   procedure_libelle: string | null
   type_procedure: string | null
   nb_lots: number | null
+  lots_titres?: string[]
   code_departement: string[]
   descripteur_libelles?: string[]
   duree_mois?: number | null
@@ -87,43 +88,69 @@ function getScoreBadgeStyle(score: number) {
   return 'bg-gray-100 text-gray-600 border-gray-200'
 }
 
-// ── Tender Card (entièrement cliquable) ─────────────────────────────────────
+function getProcedureAccess(procedureLibelle: string | null, typeProcedure: string | null): 'restreint' | 'ouvert' | null {
+  const src = ((procedureLibelle ?? '') + ' ' + (typeProcedure ?? '')).toLowerCase()
+  if (src.includes('restreint') || src.includes('restricted') || src.includes('négocié') || src.includes('negocie')) return 'restreint'
+  if (src.includes('ouvert') || src.includes('open') || src.includes('mapa') || src.includes('adapté') || src.includes('adapte')) return 'ouvert'
+  return null
+}
+
+// ── Tender Card — identique à la page Veille ─────────────────────────────────
 
 function TenderCard({
   tender,
   isFav,
   onToggleFav,
   favLoading,
+  profileKeywords,
 }: {
   tender: TopTender
   isFav: boolean
   onToggleFav: () => void
   favLoading: boolean
+  profileKeywords: string[]
 }) {
   const deadline = formatDeadline(tender.datelimitereponse)
   const euros = formatEuros(tender.valeur_estimee ?? tender.budget_estime)
   const depts = Array.isArray(tender.code_departement) ? tender.code_departement : []
   const descripteurs = Array.isArray(tender.descripteur_libelles) ? tender.descripteur_libelles : []
-  const nature = tender.nature_libelle ?? 'SERVICES'
+  const nature = tender.nature_libelle ?? null
   const duree = tender.duree_mois ? `${tender.duree_mois} mois` : null
-
-  const summaryParts: string[] = []
-  if (tender.score !== null) summaryParts.push(`Similarité sémantique (${tender.score}%)`)
-  if (euros) summaryParts.push(`budget estimé ${euros}`)
-  if (duree) summaryParts.push(`durée ${duree}`)
-  const summaryLine = summaryParts.join(' — ')
+  const procedureAccess = getProcedureAccess(tender.procedure_libelle, tender.type_procedure)
+  const lotsMatch = (tender.nb_lots ?? 0) > 1 && (tender.lots_titres?.length ?? 0) > 0
+    ? countMatchingLots(tender.lots_titres!, profileKeywords)
+    : null
 
   return (
     <Link
       href={`/veille/${encodeURIComponent(tender.idweb)}`}
-      className="bg-white rounded-xl border border-[#E0E0F0] shadow-sm hover:shadow-lg hover:border-[#0000FF]/30 hover:bg-[#F5F5FF] transition-all flex flex-col group cursor-pointer"
+      className="block bg-white rounded-xl border border-[#E0E0F0] shadow-sm hover:shadow-lg hover:border-[#0000FF]/30 hover:bg-[#F5F5FF] transition-all flex flex-col group"
     >
       <div className="p-4 sm:p-5 pb-3 flex-1 min-w-0">
-        {/* Title + Star */}
-        <div className="flex items-start gap-2 mb-2">
-          <h3 className="font-bold text-[#0000FF] text-sm leading-snug flex-1 line-clamp-2 uppercase group-hover:text-[#0000CC] min-w-0">
-            {tender.objet ?? '(sans titre)'}
-          </h3>
+        {/* Header : badges critiques + étoile */}
+        <div className="flex items-start gap-2 mb-2.5 min-w-0">
+          <div className="flex-1 flex flex-wrap items-center gap-1.5 min-w-0">
+            {procedureAccess === 'restreint' && (
+              <span className="inline-flex items-center text-xs font-bold px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300 shrink-0">
+                🔒 Restreint
+              </span>
+            )}
+            {procedureAccess === 'ouvert' && (
+              <span className="inline-flex items-center text-xs font-bold px-2.5 py-0.5 rounded-full bg-green-100 text-green-800 border border-green-300 shrink-0">
+                ✓ Ouvert
+              </span>
+            )}
+            {nature && (
+              <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-[#E6E6FF] text-[#0000FF] border border-[#ccccff] shrink-0 truncate max-w-[160px]">
+                {nature}
+              </span>
+            )}
+            {deadline.expired && (
+              <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-orange-100 text-orange-600 border border-orange-200 shrink-0">
+                Expiré
+              </span>
+            )}
+          </div>
           <button
             onClick={e => { e.preventDefault(); e.stopPropagation(); onToggleFav() }}
             disabled={favLoading}
@@ -133,69 +160,96 @@ function TenderCard({
           </button>
         </div>
 
-        {deadline.expired && (
-          <span className="inline-block text-xs font-semibold px-2 py-0.5 rounded-full bg-orange-100 text-orange-600 mb-2">Expiré</span>
-        )}
+        {/* Title */}
+        <p className="font-bold text-[#0000FF] text-sm leading-snug line-clamp-3 uppercase mb-3 min-w-0">
+          {tender.objet ?? '(sans titre)'}
+        </p>
 
-        {/* Meta */}
-        <div className="space-y-1 mb-2 text-xs text-gray-500 min-w-0">
+        {/* Meta acheteur + localisation */}
+        <div className="space-y-1.5 mb-3 text-xs text-gray-500 min-w-0">
           {tender.nomacheteur && (
             <div className="flex items-center gap-1.5 min-w-0">
-              <Building2 className="w-3 h-3 shrink-0" />
+              <Building2 className="w-3.5 h-3.5 shrink-0" />
               <span className="font-medium text-gray-700 truncate">{tender.nomacheteur}</span>
             </div>
           )}
-          <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-3 flex-wrap">
             {tender.dateparution && (
-              <span className="flex items-center gap-1 whitespace-nowrap">
+              <span className="flex items-center gap-1">
                 <Calendar className="w-3 h-3 shrink-0" />
                 {new Date(tender.dateparution).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' })}
               </span>
             )}
             {depts.length > 0 && (
-              <span className="flex items-center gap-1 whitespace-nowrap">
+              <span className="flex items-center gap-1 font-medium text-gray-600">
                 <MapPin className="w-3 h-3 shrink-0" />
-                {depts.slice(0, 2).join(', ')}
+                {depts.slice(0, 3).join(', ')}
               </span>
             )}
-            <span className="text-gray-400 whitespace-nowrap">{nature}</span>
           </div>
         </div>
 
+        {/* Budget / Durée — TOUJOURS AFFICHÉ */}
+        <div className="grid grid-cols-2 gap-2 mb-3">
+          <div className="bg-gray-50 rounded-lg px-3 py-2">
+            <p className="text-xs text-gray-400 uppercase font-bold mb-0.5">Budget</p>
+            <p className={cn('text-sm font-bold', euros ? 'text-gray-800' : 'text-gray-400 italic text-xs font-normal mt-0.5')}>
+              {euros ?? 'Non communiqué'}
+            </p>
+          </div>
+          <div className="bg-gray-50 rounded-lg px-3 py-2">
+            <p className="text-xs text-gray-400 uppercase font-bold mb-0.5">Durée</p>
+            <p className={cn('text-sm font-bold', duree ? 'text-gray-800' : 'text-gray-400 italic text-xs font-normal mt-0.5')}>
+              {duree ?? 'Non précisée'}
+            </p>
+          </div>
+        </div>
+
+        {/* Lots pertinents */}
+        {lotsMatch && (
+          <div className="mb-3">
+            {lotsMatch.matching > 0 ? (
+              <span className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full bg-green-50 text-green-700 border border-green-200">
+                <FileText className="w-3 h-3 shrink-0" />
+                {lotsMatch.matching === lotsMatch.total
+                  ? `${lotsMatch.total} lot${lotsMatch.total > 1 ? 's' : ''} — tous correspondent`
+                  : `${lotsMatch.matching}/${lotsMatch.total} lots correspondent à votre profil`}
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full bg-gray-50 text-gray-400 border border-gray-200">
+                <FileText className="w-3 h-3 shrink-0" />
+                {lotsMatch.total} lots — aucun ne correspond directement
+              </span>
+            )}
+          </div>
+        )}
+
         {/* Score */}
         {tender.score !== null && (
-          <div className="mb-2">
-            <div className="flex items-center justify-between mb-1">
-              <span className={cn('text-[10px] font-bold px-2 py-0.5 rounded-full border', getScoreBadgeStyle(tender.score))}>
+          <div className="mb-3">
+            <div className="flex items-center justify-between mb-1.5">
+              <span className={cn('text-xs font-bold px-2.5 py-0.5 rounded-full border', getScoreBadgeStyle(tender.score))}>
                 {getScoreLabel(tender.score)}
               </span>
-              <span className="text-xs font-bold text-gray-500">{tender.score}%</span>
+              <span className="text-xs font-bold text-gray-600">{tender.score}%</span>
             </div>
-            <div className="w-full h-1 bg-gray-100 rounded-full overflow-hidden">
+            <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
               <div className={cn('h-full rounded-full', getScoreColor(tender.score))} style={{ width: `${tender.score}%` }} />
             </div>
           </div>
         )}
 
-        {/* AI Summary */}
-        {summaryLine && (
-          <div className="bg-[#E6E6FF] rounded-lg px-2.5 py-1.5 mb-2">
-            <p className="text-[11px] text-[#0000FF] flex items-start gap-1">
-              <Zap className="w-3 h-3 shrink-0 mt-0.5" />
-              <span className="min-w-0">{summaryLine}</span>
-            </p>
+        {/* Tags */}
+        {descripteurs.length > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            {descripteurs.slice(0, 3).map((d, i) => (
+              <span key={i} className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full truncate max-w-[140px]">{d}</span>
+            ))}
           </div>
         )}
-
-        {/* Tags */}
-        <div className="flex flex-wrap gap-1">
-          {descripteurs.slice(0, 2).map((d, i) => (
-            <span key={i} className="text-[10px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-full truncate max-w-[140px]">{d}</span>
-          ))}
-        </div>
       </div>
 
-      {/* Footer */}
+      {/* Footer deadline */}
       <div className="px-4 sm:px-5 py-2.5 border-t border-[#E0E0F0] flex items-center justify-between min-w-0">
         <span className={cn(
           'text-xs font-medium truncate',
@@ -203,8 +257,8 @@ function TenderCard({
         )}>
           {deadline.short}
         </span>
-        <span className="text-xs font-semibold text-[#0000FF] flex items-center gap-1 shrink-0">
-          Détail <ArrowRight className="w-3 h-3" />
+        <span className="text-xs font-semibold text-[#0000FF] flex items-center gap-1 shrink-0 group-hover:underline">
+          Voir le détail <ArrowRight className="w-3 h-3" />
         </span>
       </div>
     </Link>
@@ -236,7 +290,7 @@ function AoCard({ ao }: { ao: AppelOffre }) {
         )}>
           {dl.short}
         </span>
-        <span className="text-xs font-semibold text-[#0000FF] flex items-center gap-1">
+        <span className="text-xs font-semibold text-[#0000FF] flex items-center gap-1 group-hover:underline">
           Continuer <ArrowRight className="w-3 h-3" />
         </span>
       </div>
@@ -258,6 +312,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true)
   const [lastSync, setLastSync] = useState<string | null>(null)
   const [syncing, setSyncing] = useState(false)
+  const [profileKeywords, setProfileKeywords] = useState<string[]>([])
 
   useEffect(() => {
     async function load() {
@@ -286,15 +341,15 @@ export default function DashboardPage() {
       if (tendersRes?.tenders) {
         const allTenders = tendersRes.tenders as TopTender[]
         setTotalCount(tendersRes.total ?? allTenders.length)
+        if (tendersRes.profileKeywords?.length) setProfileKeywords(tendersRes.profileKeywords)
 
-        // Auto-score en background (silencieux, pas de bouton)
-        const unscored = allTenders.filter(t => t.score === null).slice(0, 15)
+        // Auto-score en background (silencieux)
+        const unscored = allTenders.filter((t: TopTender) => t.score === null).slice(0, 15)
         if (unscored.length > 0) {
-          // Fire and forget — update state when done
           fetch('/api/veille/score', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ idwebs: unscored.map(t => t.idweb) }),
+            body: JSON.stringify({ idwebs: unscored.map((t: TopTender) => t.idweb) }),
           }).then(r => r.ok ? r.json() : null).then(data => {
             if (data?.scores && Array.isArray(data.scores)) {
               setTopTenders(prev => {
@@ -348,6 +403,7 @@ export default function DashboardPage() {
         const data = await res.json()
         setTopTenders(data.tenders ?? [])
         setTotalCount(data.total ?? 0)
+        if (data.profileKeywords?.length) setProfileKeywords(data.profileKeywords)
         setLastSync(new Date().toLocaleString('fr-FR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }))
         toast.success('Synchronisation terminée')
       }
@@ -357,6 +413,9 @@ export default function DashboardPage() {
       setSyncing(false)
     }
   }
+
+  // Supprimer l'avertissement inutilisé
+  void router
 
   const today = new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })
 
@@ -369,7 +428,7 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="space-y-8 overflow-hidden">
+    <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
         <div className="min-w-0">
@@ -393,14 +452,14 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* ── Section 1 : Réponses en cours (cartes) ── */}
+      {/* ── Section 1 : Réponses en cours — fond #e2e9fc ── */}
       {aoEnCours.length > 0 && (
-        <div>
-          <div className="flex items-center justify-between mb-3">
+        <div className="rounded-2xl p-5" style={{ backgroundColor: '#e2e9fc' }}>
+          <div className="flex items-center justify-between mb-4">
             <h2 className="text-base sm:text-lg font-bold text-gray-900 flex items-center gap-2">
               <Clock className="w-5 h-5 text-[#0000FF] shrink-0" />
               <span>Réponses en cours</span>
-              <span className="text-xs font-bold bg-orange-100 text-orange-600 px-2 py-0.5 rounded-full">{aoEnCours.length}</span>
+              <span className="text-xs font-bold bg-white text-[#0000FF] px-2 py-0.5 rounded-full border border-[#0000FF]/20">{aoEnCours.length}</span>
             </h2>
             <Link href="/appels-offres" className="text-sm text-[#0000FF] font-medium hover:underline flex items-center gap-1 shrink-0">
               Voir tout <ArrowRight className="w-4 h-4" />
@@ -412,14 +471,14 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* ── Section 2 : Mes favoris ── */}
+      {/* ── Section 2 : Mes favoris — fond #fdf4de ── */}
       {favTenders.length > 0 && (
-        <div>
-          <div className="flex items-center justify-between mb-3">
+        <div className="rounded-2xl p-5" style={{ backgroundColor: '#fdf4de' }}>
+          <div className="flex items-center justify-between mb-4">
             <h2 className="text-base sm:text-lg font-bold text-gray-900 flex items-center gap-2">
               <Star className="w-5 h-5 text-amber-500 shrink-0" />
               <span>Mes favoris</span>
-              <span className="text-xs font-bold bg-amber-100 text-amber-600 px-2 py-0.5 rounded-full">{favorites.size}</span>
+              <span className="text-xs font-bold bg-white text-amber-600 px-2 py-0.5 rounded-full border border-amber-200">{favorites.size}</span>
             </h2>
             <Link href="/veille?tab=favorites" className="text-sm text-[#0000FF] font-medium hover:underline flex items-center gap-1 shrink-0">
               Voir tout <ArrowRight className="w-4 h-4" />
@@ -427,15 +486,15 @@ export default function DashboardPage() {
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
             {favTenders.slice(0, 3).map(tender => (
-              <TenderCard key={tender.idweb} tender={tender} isFav={true} onToggleFav={() => toggleFav(tender.idweb)} favLoading={favLoading.has(tender.idweb)} />
+              <TenderCard key={tender.idweb} tender={tender} isFav={true} onToggleFav={() => toggleFav(tender.idweb)} favLoading={favLoading.has(tender.idweb)} profileKeywords={profileKeywords} />
             ))}
           </div>
         </div>
       )}
 
-      {/* ── Section 3 : Annonces pour vous ── */}
-      <div>
-        <div className="flex items-center justify-between mb-3">
+      {/* ── Section 3 : Annonces pour vous — fond #e9fdf4 ── */}
+      <div className="rounded-2xl p-5" style={{ backgroundColor: '#e9fdf4' }}>
+        <div className="flex items-center justify-between mb-4">
           <h2 className="text-base sm:text-lg font-bold text-gray-900 flex items-center gap-2">
             <Zap className="w-5 h-5 text-[#0000FF] shrink-0" />
             <span>Annonces pour vous</span>
@@ -457,7 +516,7 @@ export default function DashboardPage() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
             {topTenders.map(tender => (
-              <TenderCard key={tender.idweb} tender={tender} isFav={favorites.has(tender.idweb)} onToggleFav={() => toggleFav(tender.idweb)} favLoading={favLoading.has(tender.idweb)} />
+              <TenderCard key={tender.idweb} tender={tender} isFav={favorites.has(tender.idweb)} onToggleFav={() => toggleFav(tender.idweb)} favLoading={favLoading.has(tender.idweb)} profileKeywords={profileKeywords} />
             ))}
           </div>
         )}

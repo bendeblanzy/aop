@@ -72,6 +72,8 @@ export async function GET(request: NextRequest) {
   const minScore      = url.searchParams.get('min_score') ? parseInt(url.searchParams.get('min_score')!) : null
   const activeOnly    = url.searchParams.get('active_only') !== 'false'
   const favoritesOnly = url.searchParams.get('favorites_only') === 'true'
+  // Filtre procédure : 'ouvert' | 'restreint' | '' (tous)
+  const procedureFilter = url.searchParams.get('procedure') ?? ''
   // Filtre région : si fourni, on restreint aux départements de cette région
   const regionParam = url.searchParams.get('region') ?? ''
   // Si pas de param explicite, on utilise la région du profil comme valeur par défaut
@@ -150,7 +152,7 @@ export async function GET(request: NextRequest) {
 
   // Si ni embedding profil ni requête sémantique → fallback codes BOAMP
   if (!profileEmbedding && !isSemanticSearch) {
-    return fallbackCodeBased(orgId, profile, boampCodes, typesMarche, { page, limit, search, minScore, activeOnly, regionDepts }, hasActiviteMetier, profileKeywords)
+    return fallbackCodeBased(orgId, profile, boampCodes, typesMarche, { page, limit, search, minScore, activeOnly, regionDepts, procedureFilter }, hasActiviteMetier, profileKeywords)
   }
 
   // Obtenir l'embedding du domaine communication (mis en cache entre les requêtes)
@@ -198,7 +200,7 @@ export async function GET(request: NextRequest) {
 
   if (matchError) {
     console.error('[veille/tenders] vector match error:', matchError.message)
-    return fallbackCodeBased(orgId, profile, boampCodes, typesMarche, { page, limit, search, minScore, activeOnly, regionDepts }, hasActiviteMetier, profileKeywords)
+    return fallbackCodeBased(orgId, profile, boampCodes, typesMarche, { page, limit, search, minScore, activeOnly, regionDepts, procedureFilter }, hasActiviteMetier, profileKeywords)
   }
 
   const matchedIdwebs = (matchedRaw ?? []).map((m: any) => m.idweb)
@@ -248,6 +250,13 @@ export async function GET(request: NextRequest) {
   // Filtre région — overlaps sur code_departement
   if (regionDepts && regionDepts.length > 0) {
     query = query.overlaps('code_departement', regionDepts)
+  }
+
+  // Filtre procédure ouvert/restreint
+  if (procedureFilter === 'ouvert') {
+    query = query.or('procedure_libelle.ilike.%ouvert%,procedure_libelle.ilike.%MAPA%,procedure_libelle.ilike.%adapt%,type_procedure.ilike.%ouvert%,type_procedure.ilike.%MAPA%,type_procedure.ilike.%adapt%')
+  } else if (procedureFilter === 'restreint') {
+    query = query.or('procedure_libelle.ilike.%restreint%,procedure_libelle.ilike.%négoci%,procedure_libelle.ilike.%negoci%,type_procedure.ilike.%restreint%,type_procedure.ilike.%négoci%,type_procedure.ilike.%negoci%')
   }
 
   // Filtre recherche texte (mode mots-clés uniquement)
@@ -357,7 +366,7 @@ async function fallbackCodeBased(
   profile: any,
   boampCodes: string[],
   typesMarche: string[],
-  opts: { page: number; limit: number; search: string; minScore: number | null; activeOnly: boolean; regionDepts?: string[] | null },
+  opts: { page: number; limit: number; search: string; minScore: number | null; activeOnly: boolean; regionDepts?: string[] | null; procedureFilter?: string },
   hasActiviteMetier: boolean,
   profileKeywords: string[] = [],
 ) {
@@ -377,6 +386,13 @@ async function fallbackCodeBased(
   // Filtre région
   if (opts.regionDepts && opts.regionDepts.length > 0) {
     query = query.overlaps('code_departement', opts.regionDepts)
+  }
+
+  // Filtre procédure
+  if (opts.procedureFilter === 'ouvert') {
+    query = query.or('procedure_libelle.ilike.%ouvert%,procedure_libelle.ilike.%MAPA%,procedure_libelle.ilike.%adapt%,type_procedure.ilike.%ouvert%,type_procedure.ilike.%MAPA%,type_procedure.ilike.%adapt%')
+  } else if (opts.procedureFilter === 'restreint') {
+    query = query.or('procedure_libelle.ilike.%restreint%,procedure_libelle.ilike.%négoci%,procedure_libelle.ilike.%negoci%,type_procedure.ilike.%restreint%,type_procedure.ilike.%négoci%,type_procedure.ilike.%negoci%')
   }
 
   if (boampCodes.length > 0) {

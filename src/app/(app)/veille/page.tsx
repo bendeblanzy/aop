@@ -335,6 +335,7 @@ export default function VeillePage() {
   const [minScore, setMinScore] = useState<number | null>(null)
   const [sortBy, setSortBy] = useState<SortKey>('score')
   const [regionFilter, setRegionFilter] = useState<string>('')
+  const [procedureFilter, setProcedureFilter] = useState<'' | 'ouvert' | 'restreint'>('')
   const [tab, setTab] = useState<TabKey>(() =>
     searchParams.get('tab') === 'favorites' ? 'favorites' : 'all'
   )
@@ -409,6 +410,8 @@ export default function VeillePage() {
         ...(minScore !== null ? { min_score: String(minScore) } : {}),
         // Filtre région
         ...(regionFilter ? { region: regionFilter } : {}),
+        // Filtre procédure
+        ...(procedureFilter ? { procedure: procedureFilter } : {}),
       })
       const res = await fetch(`/api/veille/tenders?${params}`)
       if (!res.ok) throw new Error()
@@ -429,7 +432,7 @@ export default function VeillePage() {
     } finally {
       setLoading(false)
     }
-  }, [search, activeOnly, minScore, searchMode, regionFilter]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [search, activeOnly, minScore, searchMode, regionFilter, procedureFilter]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function autoScore(idwebs: string[]) {
     try {
@@ -456,7 +459,7 @@ export default function VeillePage() {
     searchTimeoutRef.current = setTimeout(() => setSearch(value), delay)
   }
 
-  useEffect(() => { fetchTenders(0, search) }, [search, activeOnly, minScore, searchMode, regionFilter]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { fetchTenders(0, search) }, [search, activeOnly, minScore, searchMode, regionFilter, procedureFilter]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const sortedTenders = sortTenders(tenders, sortBy)
   const displayedTenders = tab === 'favorites'
@@ -559,6 +562,30 @@ export default function VeillePage() {
 
         {/* Filter row */}
         <div className="flex flex-wrap items-center gap-3">
+          {/* Filtre type de marché */}
+          <div className="flex rounded-lg border border-[#E0E0F0] overflow-hidden text-xs">
+            {([
+              ['', 'Tous'],
+              ['ouvert', '✓ Ouvert'],
+              ['restreint', '🔒 Restreint'],
+            ] as ['' | 'ouvert' | 'restreint', string][]).map(([val, label]) => (
+              <button
+                key={val || 'all'}
+                onClick={() => setProcedureFilter(val)}
+                className={cn(
+                  'px-3 py-1.5 transition-colors font-medium',
+                  procedureFilter === val
+                    ? val === 'ouvert' ? 'bg-green-600 text-white'
+                    : val === 'restreint' ? 'bg-amber-600 text-white'
+                    : 'bg-[#0000FF] text-white'
+                    : 'hover:bg-gray-50 text-gray-500',
+                )}
+              >{label}</button>
+            ))}
+          </div>
+
+          <span className="text-gray-300">|</span>
+
           <div className="flex items-center gap-1.5 text-xs text-gray-500">Score min :</div>
           <div className="flex rounded-lg border border-[#E0E0F0] overflow-hidden text-xs">
             {([
