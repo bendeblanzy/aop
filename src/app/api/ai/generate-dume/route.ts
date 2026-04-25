@@ -23,6 +23,8 @@ export async function POST(request: NextRequest) {
   if (!ao) return NextResponse.json({ error: 'AO introuvable' }, { status: 404 })
 
   const userMsg = `
+Date du jour (à utiliser obligatoirement pour "date_du_jour") : ${new Date().toLocaleDateString('fr-FR')}
+
 Profil entreprise :
 ${JSON.stringify(profile, null, 2)}
 

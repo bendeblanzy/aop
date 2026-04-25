@@ -59,13 +59,18 @@ export async function POST(request: NextRequest) {
   const presentation_agence = presentationParts.join('\n\n') || ''
 
   // ── Bloc "Équipe" — liste structurée des collaborateurs ──
+  // Format: objets {nom, role} pour un affichage propre dans le tableau DC2
   const equipe_membres = (collaborateurs ?? []).map((c: any) => {
-    const parts: string[] = [`${c.prenom || ''} ${c.nom || ''}`.trim()]
-    if (c.poste) parts.push(c.poste)
-    if (c.role_metier) parts.push(`(${c.role_metier})`)
-    if (c.competences_cles) parts.push(`— ${c.competences_cles}`)
-    if (c.experience_annees) parts.push(`${c.experience_annees} ans d'expérience`)
-    return parts.join(' ')
+    const nom = `${c.prenom || ''} ${c.nom || ''}`.trim()
+    // Poste : on préfère role_metier (plus court) ou poste, mais pas les deux si identiques
+    const poste = c.poste || c.role_metier || ''
+    // Compétences : limiter aux 3 premières pour ne pas surcharger le tableau
+    const competences = c.competences_cles
+      ? c.competences_cles.split(',').slice(0, 3).map((s: string) => s.trim()).join(', ')
+      : ''
+    const experience = c.experience_annees ? `${c.experience_annees} ans` : ''
+    const role = [poste, competences, experience].filter(Boolean).join(' · ')
+    return { nom, role }
   })
 
   const data: Record<string, any> = {

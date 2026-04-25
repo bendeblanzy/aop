@@ -470,13 +470,16 @@ export async function generateDC2Docx(data: Record<string, any>): Promise<Buffer
       children.push(para([run(`Équipe (${data.nb_collaborateurs || data.equipe_membres.length} collaborateur(s)) :`, { bold: true })]))
       children.push(
         dataTable(
-          ['Collaborateur', 'Poste / Rôle'],
-          data.equipe_membres.map((m: string) => {
-            const sep = m.indexOf(' — ')
-            if (sep !== -1) {
-              return [m.substring(0, sep).trim(), m.substring(sep + 3).trim()]
+          ['Collaborateur', 'Poste · Compétences · Expérience'],
+          data.equipe_membres.map((m: { nom: string; role: string } | string) => {
+            // Support ancien format string et nouveau format objet
+            if (typeof m === 'object' && m !== null) {
+              return [m.nom || '', m.role || '']
             }
-            return [m, '']
+            const sep = (m as string).indexOf(' — ')
+            return sep !== -1
+              ? [(m as string).substring(0, sep).trim(), (m as string).substring(sep + 3).trim()]
+              : [m as string, '']
           }),
           [40, 60]
         )
