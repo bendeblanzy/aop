@@ -3,6 +3,12 @@ import { NextRequest } from 'next/server'
 import { apiError, apiSuccess, getAuthContext, parseBody } from '@/lib/api-utils'
 import { upsertProfileSchema } from '@/lib/validations'
 
+// Migration depuis /api/profile (anglais) → /api/profil (français), pour
+// homogénéité avec /api/profil/deep-research et /api/profil/siret.
+// Au moment de la migration (2026-04-26), aucun appelant front n'utilisait
+// /api/profile — la route lit/écrit la table `profiles` directement via
+// adminClient, et le front passe par le client Supabase côté navigateur.
+
 export async function GET() {
   const { user, orgId } = await getAuthContext()
   if (!user) return apiError('Unauthorized', 401)

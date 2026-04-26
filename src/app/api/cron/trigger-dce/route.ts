@@ -12,6 +12,19 @@
  *     -d '{"dry_run": true}'   ← pour voir les AO sans déclencher Apify
  *
  * NOTE : fonctionnalité expérimentale — n'affecte pas le reste de l'application.
+ *
+ * ─── SÉCURITÉ ────────────────────────────────────────────────────────────────
+ * Les secrets (credentials achatpublic.com, clé service_role Supabase) NE SONT
+ * PAS envoyés dans le payload du run Apify. Ils doivent être configurés
+ * directement côté acteur Apify dans :
+ *   Apify Console → Actor → Settings → Environment variables
+ * Variables à définir côté acteur :
+ *   - ACHATPUBLIC_USERNAME
+ *   - ACHATPUBLIC_PASSWORD
+ *   - SUPABASE_SERVICE_KEY   (= valeur de SUPABASE_SERVICE_ROLE_KEY ici)
+ *   - SUPABASE_URL           (= valeur de NEXT_PUBLIC_SUPABASE_URL ici)
+ * Le code de l'acteur doit lire ces variables via process.env, pas via le payload.
+ * ─────────────────────────────────────────────────────────────────────────────
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -49,15 +62,17 @@ export async function POST(request: NextRequest) {
   const dryRun: boolean = body?.dry_run === true
 
   // 3. Clés nécessaires
+  // NB : les secrets achatpublic.com et la service_role Supabase ne sont PAS
+  // envoyés à Apify (cf. en-tête de fichier). On les lit ici uniquement pour
+  // échouer tôt si la config côté Vercel est incomplète — ça évite de déclencher
+  // un run Apify qui partirait dans le mur côté acteur.
   const apifyToken = process.env.APIFY_API_TOKEN
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
   const achatpublicUser = process.env.ACHATPUBLIC_USERNAME
   const achatpublicPass = process.env.ACHATPUBLIC_PASSWORD
 
-  if (!apifyToken || !supabaseUrl || !supabaseServiceKey) {
+  if (!apifyToken) {
     return NextResponse.json(
-      { error: 'Variables d\'environnement manquantes (APIFY_API_TOKEN, SUPABASE_*)' },
+      { error: 'Variable d\'environnement manquante : APIFY_API_TOKEN' },
       { status: 500 }
     )
   }
@@ -123,12 +138,10 @@ export async function POST(request: NextRequest) {
   }
 
   // 6. Déclencher le run Apify
+  // ATTENTION : ne JAMAIS injecter de secrets dans ce payload.
+  // L'acteur Apify lit ses secrets via process.env (cf. en-tête de fichier).
   const apifyInput = {
     tenders: tenderInput,
-    achatpublic_username: achatpublicUser,
-    achatpublic_password: achatpublicPass,
-    supabase_url: supabaseUrl,
-    supabase_service_key: supabaseServiceKey,
     rate_limit_per_hour: BATCH_SIZE,
   }
 

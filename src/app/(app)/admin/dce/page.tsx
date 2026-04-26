@@ -569,7 +569,7 @@ export default function AdminDcePage() {
           {error}
           {error.includes('does not exist') && (
             <span className="ml-2 font-medium">
-              → <a href="/api/admin/migrate-005" target="_blank" className="underline">Exécuter la migration 005</a> dans Supabase SQL Editor
+              → Exécuter la migration <code>006_sprint2_dce_universel.sql</code> dans Supabase SQL Editor
             </span>
           )}
         </div>

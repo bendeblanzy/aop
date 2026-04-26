@@ -2,7 +2,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { adminClient } from '@/lib/supabase/admin'
 
-const SUPER_ADMIN_EMAIL = process.env.SUPER_ADMIN_EMAIL ?? 'benjamindeblanzy@gmail.com'
+const SUPER_ADMIN_EMAIL = process.env.SUPER_ADMIN_EMAIL
+if (!SUPER_ADMIN_EMAIL) {
+  throw new Error('SUPER_ADMIN_EMAIL env variable is required')
+}
 
 // ── Guard super-admin ─────────────────────────────────────────────────────────
 
@@ -15,6 +18,16 @@ async function checkSuperAdmin() {
 }
 
 // ── Email de bienvenue ────────────────────────────────────────────────────────
+// TODO sécurité : le mot de passe est envoyé en clair dans cet email et n'a
+// pas d'expiration technique. Aujourd'hui on demande seulement à l'utilisateur
+// de le changer (warning visible dans l'email). À renforcer dans une session
+// dédiée :
+//   1. createUser → user_metadata.force_password_change = true
+//   2. (app)/layout.tsx → si force_password_change, redirect /parametres?force=1
+//      (avec un guard pour éviter la boucle quand on est déjà sur /parametres)
+//   3. /parametres : si force=1, masquer le reste de l'UI ; après succès,
+//      supabase.auth.updateUser({ data: { force_password_change: false } })
+// ─────────────────────────────────────────────────────────────────────────────
 
 async function sendWelcomeEmail(opts: {
   to: string
@@ -47,8 +60,13 @@ async function sendWelcomeEmail(opts: {
         <p style="margin:0 0 8px;font-size:14px;color:#111;"><strong>Email :</strong> <code style="background:#e6e6ff;padding:2px 6px;border-radius:4px;">${opts.to}</code></p>
         <p style="margin:0;font-size:14px;color:#111;"><strong>Mot de passe :</strong> <code style="background:#e6e6ff;padding:2px 6px;border-radius:4px;">${opts.password}</code></p>
       </div>
-      <p style="color:#6b7280;font-size:13px;">Pensez à modifier votre mot de passe après la première connexion.</p>
-      <a href="${loginUrl}" style="display:inline-block;margin-top:16px;background:#0000FF;color:#fff;text-decoration:none;padding:12px 24px;border-radius:8px;font-weight:600;font-size:14px;">Se connecter →</a>
+      <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:14px 16px;margin:20px 0;">
+        <p style="margin:0;font-size:13px;color:#9a3412;line-height:1.5;">
+          <strong>⚠ Important — à faire dès votre première connexion</strong><br/>
+          Ce mot de passe vous a été transmis par email, il doit être modifié <strong>immédiatement</strong> pour la sécurité de votre compte. Allez dans <strong>Paramètres → Changer le mot de passe</strong>.
+        </p>
+      </div>
+      <a href="${loginUrl}" style="display:inline-block;margin-top:8px;background:#0000FF;color:#fff;text-decoration:none;padding:12px 24px;border-radius:8px;font-weight:600;font-size:14px;">Se connecter →</a>
     </div>
     <div style="padding:16px 32px;border-top:1px solid #f0f0f0;text-align:center;">
       <p style="margin:0;font-size:12px;color:#9ca3af;">Cet email a été envoyé automatiquement par la plateforme AOP.</p>
