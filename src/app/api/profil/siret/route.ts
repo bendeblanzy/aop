@@ -23,7 +23,11 @@ export async function GET(request: NextRequest) {
       { headers: { 'User-Agent': 'AOP-App/1.0' }, signal: AbortSignal.timeout(8000) }
     )
     if (!res.ok) {
-      return NextResponse.json({ error: 'API Annuaire des Entreprises indisponible' }, { status: 502 })
+      const body = await res.text().catch(() => '')
+      return NextResponse.json(
+        { error: `API Annuaire des Entreprises indisponible (HTTP ${res.status})`, detail: body.slice(0, 200) },
+        { status: 502 }
+      )
     }
 
     const json = await res.json()
