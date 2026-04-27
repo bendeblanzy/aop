@@ -19,7 +19,7 @@ export default function ResetPasswordPage() {
     setLoading(true)
     const supabase = createClient()
     const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${appUrl}/auth/callback?next=/parametres`,
+      redirectTo: `${appUrl}/auth/callback?next=/auth/update-password`,
     })
     if (resetError) {
       console.error('[reset-password]', resetError.message)
@@ -38,7 +38,7 @@ export default function ResetPasswordPage() {
         <div className="w-full max-w-md text-center">
           <CheckCircle className="w-16 h-16 text-secondary mx-auto mb-4" />
           <h2 className="text-2xl font-bold text-text-primary mb-2">Email envoyé !</h2>
-          <p className="text-text-secondary">Vérifiez votre boîte mail pour réinitialiser votre mot de passe.</p>
+          <p className="text-text-secondary">Un lien de réinitialisation vous a été envoyé. Pensez à vérifier vos spams si vous ne le voyez pas dans les 2 minutes.</p>
           <Link href="/auth/login" className="text-primary hover:underline mt-4 block">Retour à la connexion</Link>
         </div>
       </div>
