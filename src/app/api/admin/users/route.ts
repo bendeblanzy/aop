@@ -18,15 +18,11 @@ async function checkSuperAdmin() {
 }
 
 // ── Email de bienvenue ────────────────────────────────────────────────────────
-// TODO sécurité : le mot de passe est envoyé en clair dans cet email et n'a
-// pas d'expiration technique. Aujourd'hui on demande seulement à l'utilisateur
-// de le changer (warning visible dans l'email). À renforcer dans une session
-// dédiée :
-//   1. createUser → user_metadata.force_password_change = true
-//   2. (app)/layout.tsx → si force_password_change, redirect /parametres?force=1
-//      (avec un guard pour éviter la boucle quand on est déjà sur /parametres)
-//   3. /parametres : si force=1, masquer le reste de l'UI ; après succès,
-//      supabase.auth.updateUser({ data: { force_password_change: false } })
+// Le mot de passe est envoyé en clair dans cet email et n'a pas d'expiration
+// technique. L'enforcement du changement à la première connexion est assuré par :
+//   1. user_metadata.force_password_change = true posé à la création (POST ci-dessous)
+//   2. middleware.ts → redirect /parametres?force=1 si flag actif
+//   3. parametres/page.tsx → mode force=1 (UI restreinte), clear le flag après succès
 // ─────────────────────────────────────────────────────────────────────────────
 
 async function sendWelcomeEmail(opts: {
@@ -161,11 +157,16 @@ export async function POST(request: NextRequest) {
     const password = Array.from({ length: 12 }, () => chars[Math.floor(Math.random() * chars.length)]).join('')
 
     // Créer le compte
+    // force_password_change: l'enforcement est fait côté middleware (redirect /parametres?force=1)
     const { data: newUser, error: createError } = await adminClient.auth.admin.createUser({
       email,
       password,
       email_confirm: true,
-      user_metadata: { invited_by: admin.id, invite_type: type },
+      user_metadata: {
+        invited_by: admin.id,
+        invite_type: type,
+        force_password_change: true,
+      },
     })
 
     if (createError) {

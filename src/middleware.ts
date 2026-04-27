@@ -38,6 +38,20 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url)
   }
 
+  // Force password change at first login (compte créé via /api/admin/users)
+  // Le flag est posé dans user_metadata.force_password_change à la création
+  // et nettoyé après un updateUser({ password }) côté /parametres?force=1.
+  if (user && !isPublicPath) {
+    const forceChange = user.user_metadata?.force_password_change === true
+    const onParametres = request.nextUrl.pathname.startsWith('/parametres')
+    if (forceChange && !onParametres) {
+      const url = request.nextUrl.clone()
+      url.pathname = '/parametres'
+      url.searchParams.set('force', '1')
+      return NextResponse.redirect(url)
+    }
+  }
+
   return supabaseResponse
 }
 

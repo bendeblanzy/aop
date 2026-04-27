@@ -47,9 +47,21 @@ export function Sidebar() {
   const searchParams = useSearchParams()
   const router = useRouter()
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [forceMode, setForceMode] = useState(false)
 
   useEffect(() => {
     setMobileOpen(false)
+  }, [pathname])
+
+  // Détecte si l'utilisateur doit changer son mdp à la première connexion.
+  // Tant que c'est le cas, on désactive la navigation et on masque la déconnexion
+  // (le middleware redirige déjà vers /parametres?force=1, mais autant éviter
+  // les clics inutiles côté UI).
+  useEffect(() => {
+    const supabase = createClient()
+    supabase.auth.getUser().then(({ data }) => {
+      setForceMode(data.user?.user_metadata?.force_password_change === true)
+    })
   }, [pathname])
 
   async function handleLogout() {
@@ -66,7 +78,10 @@ export function Sidebar() {
         ? pathname === item.href
         : pathname === item.href || pathname.startsWith(item.href + '/')
 
-    if (item.disabled) {
+    // En mode force_password_change, tout est désactivé sauf /parametres
+    const isLockedByForce = forceMode && !item.href.startsWith('/parametres')
+
+    if (item.disabled || isLockedByForce) {
       return (
         <div
           key={item.name}
@@ -161,16 +176,19 @@ export function Sidebar() {
         )}
       </nav>
 
-      {/* Footer: Logout */}
-      <div className="px-3 py-4 border-t border-[#E0E0F0]">
-        <button
-          onClick={handleLogout}
-          className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-gray-500 hover:bg-red-50 hover:text-red-600 w-full transition-colors"
-        >
-          <LogOut className="w-4 h-4" />
-          Déconnexion
-        </button>
-      </div>
+      {/* Footer: Logout — masqué en mode force_password_change pour empêcher
+          l'utilisateur de se déconnecter et se reconnecter avec le mdp initial */}
+      {!forceMode && (
+        <div className="px-3 py-4 border-t border-[#E0E0F0]">
+          <button
+            onClick={handleLogout}
+            className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-gray-500 hover:bg-red-50 hover:text-red-600 w-full transition-colors"
+          >
+            <LogOut className="w-4 h-4" />
+            Déconnexion
+          </button>
+        </div>
+      )}
     </>
   )
 
