@@ -16,7 +16,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     .eq('user_id', user.id)
     .maybeSingle()
 
-  if (!membership) redirect('/onboarding')
+  if (!membership) {
+    // Si l'utilisateur doit changer son mot de passe, on le laisse accéder à /parametres d'abord
+    const forcePasswordChange = user.user_metadata?.force_password_change === true
+    if (!forcePasswordChange) redirect('/onboarding')
+  }
 
   return (
     <OrganizationProvider>
