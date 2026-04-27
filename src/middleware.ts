@@ -41,7 +41,7 @@ export async function middleware(request: NextRequest) {
   // Force password change at first login (compte créé via /api/admin/users)
   // Le flag est posé dans user_metadata.force_password_change à la création
   // et nettoyé après un updateUser({ password }) côté /parametres?force=1.
-  if (user && !isPublicPath) {
+  if (user) {
     const forceChange = user.user_metadata?.force_password_change === true
     const onParametres = request.nextUrl.pathname.startsWith('/parametres')
     if (forceChange && !onParametres) {
