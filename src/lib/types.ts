@@ -109,6 +109,14 @@ export interface Collaborateur {
   bio?: string
 }
 
+/**
+ * Suivi d'un appel d'offres en cours.
+ * NB : la fonctionnalité "réponse aux AO" (génération DC1/DC2/DUME/mémoire,
+ * upload DCE, analyses RC/CCTP/BPU) a été retirée. Seuls les champs liés au
+ * suivi pur (titre, acheteur, dates, sources) restent utiles.
+ * Les anciens champs (analyse_*, documents_generes, fichiers_source...) ont
+ * été dropés par la migration 018.
+ */
 export interface AppelOffre {
   id: string
   organization_id: string
@@ -119,78 +127,10 @@ export interface AppelOffre {
   acheteur?: string
   date_limite_reponse?: string
   statut: 'brouillon' | 'en_cours' | 'analyse' | 'genere' | 'soumis' | 'archive'
-  fichiers_source?: FichierSource[]
-  analyse_rc?: AnalyseRC
-  analyse_cctp?: AnalyseCCTP
-  analyse_bpu?: AnalyseBPU
-  documents_generes?: DocumentGenere[]
   notes_utilisateur?: string
-  references_selectionnees?: string[]
-  collaborateurs_selectionnes?: string[]
   team_members?: string[]
-  phase?: 'comprendre' | 'preparer' | 'deposer'
-  checklist_conformite?: { item: string; fait: boolean }[]
-  // Lien vers le tender BOAMP source (migration 005)
+  // Lien vers le tender BOAMP/TED source
   tender_idweb?: string
   url_avis?: string
   url_profil_acheteur?: string
-}
-
-export interface FichierSource {
-  nom: string
-  url: string
-  type: 'rc' | 'cctp' | 'ccap' | 'bpu' | 'ae' | 'dpgf' | 'avis' | 'autre'
-  taille: number
-}
-
-export interface AnalyseBPU {
-  postes: { designation: string; unite: string; quantite?: number; prix_unitaire?: number }[]
-  total_estime?: number
-}
-
-export interface AnalyseRC {
-  objet?: string
-  acheteur?: string
-  lots?: { numero: string; intitule: string; montant_estime?: number }[]
-  criteres_notation?: { critere: string; ponderation_pourcentage: number }[]
-  pieces_exigees?: (string | { piece: string; detail?: string })[]
-  delai_reponse?: string
-  duree_marche?: string
-  clauses_eliminatoires?: string[]
-  forme_groupement?: string
-  variantes?: string
-  visite_obligatoire?: string
-  decision_go_nogo?: string
-  // Champs enrichis par l'analyse DCE unifiée
-  prestations_attendues?: string
-  normes_exigees?: string[]
-  certifications_requises?: string[]
-  moyens_humains_exiges?: string
-  moyens_techniques_exiges?: string
-  contraintes_techniques?: string
-  planning_prevu?: string
-  penalites?: string
-  livrables?: string[]
-  clauses_contractuelles_cles?: string
-  criteres_rse?: string
-  risques_identifies?: string[]
-}
-
-export interface AnalyseCCTP {
-  prestations_attendues?: string
-  normes_exigees?: string[]
-  certifications_requises?: string[]
-  moyens_humains_exiges?: string
-  moyens_techniques_exiges?: string
-  contraintes_techniques?: string[]
-  planning_prevu?: string
-  penalites?: string
-  livrables?: string[]
-}
-
-export interface DocumentGenere {
-  type: 'dc1' | 'dc2' | 'dc4' | 'dume' | 'memoire_technique'
-  url: string
-  version: number
-  genere_le: string
 }

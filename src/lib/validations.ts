@@ -8,15 +8,7 @@ export const createAppelOffreSchema = z.object({
   acheteur: z.string().optional(),
   date_limite_reponse: z.string().optional(),
   statut: z.enum(['brouillon', 'en_cours', 'analyse', 'genere', 'soumis', 'archive']).default('brouillon'),
-  fichiers_source: z.array(z.object({
-    nom: z.string(),
-    url: z.string().url(),
-    type: z.enum(['rc', 'cctp', 'avis', 'autre']),
-    taille: z.number(),
-  })).optional(),
   notes_utilisateur: z.string().optional(),
-  references_selectionnees: z.array(z.string()).optional(),
-  collaborateurs_selectionnes: z.array(z.string()).optional(),
   team_members: z.array(z.string()).optional(),
   tender_idweb: z.string().optional(),
   url_avis: z.string().optional(),
@@ -121,12 +113,5 @@ export const deleteByIdSchema = z.object({
 }).strict()
 
 // ── AI routes ────────────────────────────────────────────────────────────────
-
-export const aiAnalyzeSchema = z.object({
-  ao_id: z.string().uuid('ao_id invalide'),
-  file_url: z.string().url('URL de fichier invalide'),
-})
-
-export const aiGenerateSchema = z.object({
-  ao_id: z.string().uuid('ao_id invalide'),
-})
+// (les schemas aiAnalyzeSchema et aiGenerateSchema ont été retirés avec la
+// fonctionnalité de réponse aux AO.)

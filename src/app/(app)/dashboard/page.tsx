@@ -339,7 +339,7 @@ function AoCard({ ao }: { ao: AppelOffre }) {
           {dl.short}
         </span>
         <span className="text-xs font-semibold text-[#0000FF] flex items-center gap-1 shrink-0 group-hover:underline">
-          Continuer <ArrowRight className="w-3 h-3" />
+          Voir l&apos;AO <ArrowRight className="w-3 h-3" />
         </span>
       </div>
     </Link>
@@ -392,7 +392,8 @@ export default function DashboardPage() {
         if (tendersRes.profileKeywords?.length) setProfileKeywords(tendersRes.profileKeywords)
 
         // Auto-score en background (silencieux)
-        const unscored = allTenders.filter((t: TopTender) => t.score === null).slice(0, 15)
+        // Déclenche Claude pour les tenders sans score Claude persisté (scored_by_claude=false)
+        const unscored = allTenders.filter((t: TopTender) => !(t as any).scored_by_claude).slice(0, 15)
         if (unscored.length > 0) {
           fetch('/api/veille/score', {
             method: 'POST',
@@ -500,13 +501,13 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* ── Section 1 : Réponses en cours — fond #e2e9fc ── */}
+      {/* ── Section 1 : Mes AO suivis — fond #e2e9fc ── */}
       {aoEnCours.length > 0 && (
         <div className="rounded-2xl p-5" style={{ backgroundColor: '#e2e9fc' }}>
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-base sm:text-lg font-bold text-gray-900 flex items-center gap-2">
               <Clock className="w-5 h-5 text-[#0000FF] shrink-0" />
-              <span>Réponses en cours</span>
+              <span>Mes AO suivis</span>
               <span className="text-xs font-bold bg-white text-[#0000FF] px-2 py-0.5 rounded-full border border-[#0000FF]/20">{aoEnCours.length}</span>
             </h2>
             <Link href="/appels-offres" className="text-sm text-[#0000FF] font-medium hover:underline flex items-center gap-1 shrink-0">

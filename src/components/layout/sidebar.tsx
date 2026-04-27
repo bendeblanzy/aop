@@ -6,7 +6,7 @@ import { usePathname, useSearchParams } from 'next/navigation'
 import {
   LayoutDashboard, Building2, Users,
   Settings, LogOut, Search,
-  Menu, X, Star, FolderOpen, FileEdit, Lock, UserCog,
+  Menu, X, Star, Lock, UserCog,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
@@ -28,8 +28,6 @@ const navigation: NavItem[] = [
   { name: 'Tableau de bord', href: '/dashboard', icon: LayoutDashboard, section: 'main' },
   { name: 'Recherche', href: '/veille', icon: Search, activeWhen: (p, s) => p === '/veille' && !s.includes('tab=favorites'), section: 'main' },
   { name: 'Favoris', href: '/veille?tab=favorites', icon: Star, activeWhen: (p, s) => p === '/veille' && s.includes('tab=favorites'), section: 'main' },
-  // ── Réponse AO (grisé) ──
-  { name: 'Mes réponses', href: '#', icon: FileEdit, disabled: true, badge: 'Bientôt', section: 'main' },
   // ── Compte ──
   { name: 'Mon profil', href: '/profil', icon: Building2, section: 'account' },
   { name: 'Mon équipe', href: '/equipe', icon: Users, section: 'account' },
@@ -38,7 +36,6 @@ const navigation: NavItem[] = [
 
 // Admin items (shown separately)
 const adminNavigation: NavItem[] = [
-  { name: 'Gestion DCE', href: '/admin/dce', icon: FolderOpen, section: 'admin' },
   { name: 'Utilisateurs', href: '/admin/users', icon: UserCog, section: 'admin' },
 ]
 
