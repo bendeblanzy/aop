@@ -129,12 +129,21 @@ function cleanDate(v: unknown): string | null {
  * NB : TED v3 attend les dates au format YYYYMMDD (8 chiffres, sans tirets) ou
  * la fonction relative `today(-N)`. On utilise `today(-N)` qui est plus clair
  * et évite les soucis de fuseau horaire.
+ *
+ * Filtres :
+ * - `notice-type` ∈ {cn-standard, cn-social, cn-desg} = avis de marché classique,
+ *   social et concours de design (les types pertinents pour la veille)
+ * - `place-of-performance-country-lot = "FRA"` = lieu d'exécution en France
+ * - `contract-nature = "services"` = uniquement les marchés de services
+ *   (exclut travaux et fournitures, alignement avec le positionnement
+ *   services de L'ADN). À élargir plus tard si besoin clients BTP/distrib.
  */
 function buildQuery(daysBack: number): string {
   return [
     `publication-date >= today(-${daysBack})`,
     `notice-type IN (cn-standard cn-social cn-desg)`,
     `place-of-performance-country-lot = "FRA"`,
+    `contract-nature = "services"`,
   ].join(' AND ')
 }
 

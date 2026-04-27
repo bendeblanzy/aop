@@ -45,3 +45,6 @@ package-lock.json
 yarn.lock
 pnpm-lock.yaml
 test-ted-integration.ts
+test-ted-integration.ts
+run-ted-sync.ts
+finish-ted.ts
