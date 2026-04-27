@@ -130,10 +130,12 @@ export async function scoreWithVectors(
   }
 
   // 4. Tier 2 — Claude Sonnet 4.6 : score affiné + explication qualitative
-  //    Limité aux top 20 par appel pour maîtriser les coûts (~$0.06/appel max)
+  //    Toujours appliqué aux top 20 par score vectoriel, sans seuil minimum.
+  //    Le Tier 1 est un pré-filtre de tri, pas un filtre d'exclusion.
+  //    (~$0.06/appel max pour 20 tenders)
   const TOP_TIER2 = 20
   const needsReason = results
-    .filter(r => r.score >= claudeThreshold && !r.raison)
+    .filter(r => !r.raison)
     .sort((a, b) => b.score - a.score)
     .slice(0, TOP_TIER2)
 
