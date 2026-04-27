@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Loader2, CheckCircle2, ChevronRight } from 'lucide-react'
+import { createClient } from '@/lib/supabase/client'
 
 // ── Types ──────────────────────────────────────────────────────────────────
 interface Answers {
@@ -170,7 +171,12 @@ export default function OnboardingPage() {
           <p className="text-xs text-gray-400 mb-4">Vous pourrez affiner ce profil à tout moment dans vos paramètres.</p>
 
           <button
-            onClick={() => router.push('/dashboard')}
+            onClick={async () => {
+              // Rafraîchir la session pour que le middleware voie onboarding_completed=true
+              const supabase = createClient()
+              await supabase.auth.refreshSession()
+              window.location.href = '/dashboard'
+            }}
             className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors"
           >
             Accéder à mon tableau de bord
