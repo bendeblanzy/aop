@@ -23,38 +23,54 @@ export async function middleware(request: NextRequest) {
 
   const { data: { user } } = await supabase.auth.getUser()
 
-  const publicPaths = ['/auth/login', '/auth/register', '/auth/reset-password', '/auth/callback', '/auth/accept-invite', '/onboarding', '/api/cron/']
+  const publicPaths = [
+    '/auth/login', '/auth/register', '/auth/reset-password',
+    '/auth/callback', '/auth/accept-invite',
+    '/onboarding',
+    '/api/cron/', '/api/onboarding/',
+  ]
   const isPublicPath = publicPaths.some(p => request.nextUrl.pathname.startsWith(p))
 
+  // Non authentifié → login
   if (!user && !isPublicPath) {
     const url = request.nextUrl.clone()
     url.pathname = '/auth/login'
     return NextResponse.redirect(url)
   }
 
-  if (user && request.nextUrl.pathname === '/') {
-    const url = request.nextUrl.clone()
-    url.pathname = '/dashboard'
-    return NextResponse.redirect(url)
-  }
-
-  // Force password change at first login (compte créé via /api/admin/users)
-  // Le flag est posé dans user_metadata.force_password_change à la création
-  // et nettoyé après un updateUser({ password }) côté /parametres?force=1.
   if (user) {
+    // Redirection racine → dashboard
+    if (request.nextUrl.pathname === '/') {
+      const url = request.nextUrl.clone()
+      url.pathname = '/dashboard'
+      return NextResponse.redirect(url)
+    }
+
+    // Force password change
     const forceChange = user.user_metadata?.force_password_change === true
     const onParametres = request.nextUrl.pathname.startsWith('/parametres')
-    if (forceChange && !onParametres) {
+    if (forceChange && !onParametres && !request.nextUrl.pathname.startsWith('/api/')) {
       const url = request.nextUrl.clone()
       url.pathname = '/parametres'
       url.searchParams.set('force', '1')
+      return NextResponse.redirect(url)
+    }
+
+    // Onboarding obligatoire — sauf si déjà fait ou chemin public
+    // Le flag onboarding_completed est stocké dans user_metadata (pas de DB query)
+    const onboardingDone = user.user_metadata?.onboarding_completed === true
+    const onOnboarding = request.nextUrl.pathname.startsWith('/onboarding')
+    const isApiPath = request.nextUrl.pathname.startsWith('/api/')
+
+    if (!onboardingDone && !onOnboarding && !isApiPath && !forceChange) {
+      const url = request.nextUrl.clone()
+      url.pathname = '/onboarding'
       return NextResponse.redirect(url)
     }
   }
 
   return supabaseResponse
 }
-
 
 export const config = {
   matcher: ['/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)'],

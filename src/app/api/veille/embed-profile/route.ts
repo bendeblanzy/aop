@@ -18,7 +18,7 @@ export async function POST(request: NextRequest) {
 
   const { data: profile } = await adminClient
     .from('profiles')
-    .select('activite_metier, raison_sociale, domaines_competence, certifications, positionnement, atouts_differenciants, moyens_techniques')
+    .select('activite_metier, raison_sociale, domaines_competence, certifications, positionnement, atouts_differenciants, moyens_techniques, profile_methodology')
     .eq('organization_id', orgId)
     .maybeSingle()
 
@@ -33,6 +33,11 @@ export async function POST(request: NextRequest) {
     .eq('organization_id', orgId)
 
   let text = buildProfileText(profile)
+
+  // Ajouter la méthodologie si disponible
+  if ((profile as any).profile_methodology) {
+    text += `\nMéthodologie: ${(profile as any).profile_methodology}`
+  }
 
   // Ajouter un résumé des compétences de l'équipe au texte du profil
   if (collabs && collabs.length > 0) {
@@ -61,6 +66,13 @@ export async function POST(request: NextRequest) {
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
+
+  // Invalider le cache des scores — ils seront recalculés dynamiquement
+  // lors de la prochaine consultation (fix BUG-1 : cache jamais invalidé)
+  await adminClient
+    .from('tender_scores')
+    .delete()
+    .eq('organization_id', orgId)
 
   return NextResponse.json({ success: true, dimensions: embedding.length })
 }

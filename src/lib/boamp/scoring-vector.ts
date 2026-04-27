@@ -9,7 +9,32 @@ export interface VectorScoreResult {
   raison: string
 }
 
-// simToScore et cosineSimilarity sont importés depuis @/lib/ai/embeddings (shared)
+/**
+ * Construit le contexte profil enrichi pour le Tier 2 Claude.
+ * Utilise les 4 sections synthétisées par l'onboarding si disponibles,
+ * sinon les champs legacy du profil.
+ */
+function buildRichProfileContext(profile: {
+  raison_sociale?: string | null
+  activite_metier?: string | null
+  positionnement?: string | null
+  atouts_differenciants?: string | null
+  profile_methodology?: string | null
+  zone_intervention?: string | null
+  prestations_types?: string[] | null
+  clients_types?: string[] | null
+}): string {
+  const parts: string[] = []
+  if (profile.raison_sociale) parts.push(`Société : ${profile.raison_sociale}`)
+  if (profile.activite_metier) parts.push(`Cœur de métier : ${profile.activite_metier}`)
+  if (profile.atouts_differenciants) parts.push(`Atouts différenciants : ${profile.atouts_differenciants}`)
+  if (profile.positionnement) parts.push(`Philosophie & valeurs : ${profile.positionnement}`)
+  if (profile.profile_methodology) parts.push(`Méthodologie : ${profile.profile_methodology}`)
+  if (profile.prestations_types?.length) parts.push(`Types de prestations : ${profile.prestations_types.join(', ')}`)
+  if (profile.clients_types?.length) parts.push(`Clients habituels : ${profile.clients_types.join(', ')}`)
+  if (profile.zone_intervention) parts.push(`Zone d'intervention : ${profile.zone_intervention}`)
+  return parts.join('\n')
+}
 
 /**
  * Scoring hybride Tier 1 + Tier 2
@@ -18,9 +43,10 @@ export interface VectorScoreResult {
  *   Compare l'embedding du profil avec les embeddings des tenders.
  *   Retourne un score de similarité normalisé 0-100.
  *
- * Tier 2 (Claude Haiku, seulement pour les top résultats) :
+ * Tier 2 (Claude Sonnet 4.6, seulement pour les top résultats) :
  *   Pour les tenders avec un score vectoriel >= seuil,
- *   demande à Claude une raison textuelle détaillée.
+ *   Claude affine le score et génère une explication qualitative.
+ *   Utilise le profil synthétisé complet (4 sections onboarding).
  */
 export async function scoreWithVectors(
   orgId: string,
@@ -29,10 +55,10 @@ export async function scoreWithVectors(
 ): Promise<VectorScoreResult[]> {
   const claudeThreshold = options.claudeThreshold ?? 40
 
-  // 1. Récupérer le profil et son embedding
+  // 1. Récupérer le profil complet (toutes les sections synthétisées)
   const { data: profile } = await adminClient
     .from('profiles')
-    .select('embedding, activite_metier, raison_sociale, domaines_competence, certifications, positionnement, atouts_differenciants, moyens_techniques')
+    .select('embedding, activite_metier, raison_sociale, domaines_competence, certifications, positionnement, atouts_differenciants, moyens_techniques, profile_methodology, zone_intervention, prestations_types, clients_types')
     .eq('organization_id', orgId)
     .maybeSingle()
 
@@ -46,12 +72,11 @@ export async function scoreWithVectors(
   // 2. Obtenir ou calculer l'embedding du profil
   let profileEmbedding: number[]
   if (profile?.embedding) {
-    // Parsing du vector Supabase (format string "[0.1,0.2,...]")
     profileEmbedding = typeof profile.embedding === 'string'
       ? JSON.parse(profile.embedding)
       : profile.embedding
   } else {
-    // Calculer et persister l'embedding du profil
+    // Fallback : recalcul à partir du profil enrichi
     const profileText = buildProfileText(profile || { activite_metier: activiteMetier })
     profileEmbedding = await getEmbedding(profileText)
     if (profileEmbedding.length > 0) {
@@ -69,39 +94,34 @@ export async function scoreWithVectors(
     return idwebs.map(id => ({ idweb: id, score: 50, similarity: 0.5, raison: 'Erreur calcul embedding profil.' }))
   }
 
-  // 3. Tier 1 — Scoring vectoriel via la fonction SQL match_tenders_by_embedding
-  //    ou bien calcul côté JS si les tenders n'ont pas tous d'embedding
+  // 3. Tier 1 — Scoring vectoriel côté JS
   const { data: tenders } = await adminClient
     .from('tenders')
-    .select('idweb, objet, embedding, description_detail, short_summary, nomacheteur, descripteur_libelles')
+    .select('idweb, objet, embedding, description_detail, short_summary, nomacheteur, descripteur_libelles, valeur_estimee, duree_mois')
     .in('idweb', idwebs)
 
   if (!tenders || tenders.length === 0) {
     return idwebs.map(id => ({ idweb: id, score: 50, similarity: 0.5, raison: 'Tender introuvable.' }))
   }
 
-  // Calcul de similarité cosinus côté JS
   const results: VectorScoreResult[] = tenders.map(t => {
     if (!t.embedding) {
       return { idweb: t.idweb, score: 50, similarity: 0.5, raison: 'Embedding en cours de calcul.' }
     }
-
     const tenderEmb: number[] = typeof t.embedding === 'string'
       ? JSON.parse(t.embedding)
       : t.embedding
-
     const sim = cosineSimilarity(profileEmbedding, tenderEmb)
     const score = simToScore(sim)
-
     return {
       idweb: t.idweb,
       score,
       similarity: Math.round(sim * 1000) / 1000,
-      raison: '', // sera rempli par Tier 2 si score >= seuil
+      raison: '',
     }
   })
 
-  // Ajouter les tenders manquants (pas en DB)
+  // Ajouter les tenders manquants
   const foundIdwebs = new Set(results.map(r => r.idweb))
   for (const id of idwebs) {
     if (!foundIdwebs.has(id)) {
@@ -109,51 +129,76 @@ export async function scoreWithVectors(
     }
   }
 
-  // 4. Tier 2 — Claude Haiku pour les raisons des top résultats
-  const needsReason = results.filter(r => r.score >= claudeThreshold && !r.raison)
-  if (needsReason.length > 0 && activiteMetier.trim()) {
+  // 4. Tier 2 — Claude Sonnet 4.6 : score affiné + explication qualitative
+  //    Limité aux top 20 par appel pour maîtriser les coûts (~$0.06/appel max)
+  const TOP_TIER2 = 20
+  const needsReason = results
+    .filter(r => r.score >= claudeThreshold && !r.raison)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, TOP_TIER2)
+
+  if (needsReason.length > 0) {
+    const richContext = buildRichProfileContext(profile || { activite_metier: activiteMetier })
+
     const tendersForClaude = needsReason.map(r => {
       const t = tenders.find(x => x.idweb === r.idweb)
       return {
         idweb: r.idweb,
         score_vectoriel: r.score,
         objet: t?.objet ?? '',
-        description: (t?.description_detail || t?.short_summary || '').slice(0, 400),
+        description: (t?.description_detail || t?.short_summary || '').slice(0, 600),
         acheteur: t?.nomacheteur ?? '',
         descripteurs: (t?.descripteur_libelles || []).join(', '),
+        valeur: t?.valeur_estimee ? `${t.valeur_estimee.toLocaleString('fr-FR')} €` : '',
+        duree: t?.duree_mois ? `${t.duree_mois} mois` : '',
       }
     })
 
     try {
       const raw = await callClaude(
-        `Tu es un expert en marchés publics. Pour chaque annonce, rédige UNE phrase (max 120 caractères) expliquant pourquoi elle correspond (ou pas) au profil de l'entreprise. Le score vectoriel est déjà calculé, concentre-toi sur la raison qualitative.
-Réponds UNIQUEMENT en JSON valide : [{"idweb":"...", "raison": "..."}]`,
-        `Profil : ${activiteMetier}\n\nAnnonces :\n${JSON.stringify(tendersForClaude)}`,
-        'haiku'
+        `Tu es votre spécialiste Appels d'Offre, expert en marchés publics français.
+Ta mission : évaluer la pertinence de chaque appel d'offres pour cette société spécifique.
+
+Pour chaque annonce :
+- Affine le score vectoriel (0-100) en tenant compte du profil complet de la société
+- Rédige UNE phrase courte (max 130 caractères) expliquant concrètement pourquoi ça matche ou non
+
+Critères :
+- 80-100 : Cœur de métier, la société peut clairement répondre et gagner
+- 60-79  : Bonne correspondance, candidature pertinente
+- 40-59  : Correspondance partielle, à étudier
+- 20-39  : En dehors du périmètre habituel
+- 0-19   : Hors sujet
+
+Réponds UNIQUEMENT en JSON valide : [{"idweb":"...", "score": 75, "raison": "..."}]`,
+        `PROFIL DE LA SOCIÉTÉ :\n${richContext}\n\nAPPELS D'OFFRES À ÉVALUER :\n${JSON.stringify(tendersForClaude)}`,
+        'sonnet'
       )
 
       const cleaned = raw.replace(/^```[a-z]*\n?/i, '').replace(/\n?```$/i, '').trim()
-      const parsed = JSON.parse(cleaned) as { idweb: string; raison: string }[]
+      const parsed = JSON.parse(cleaned) as { idweb: string; score: number; raison: string }[]
 
       for (const p of parsed) {
         const r = results.find(x => x.idweb === p.idweb)
-        if (r) r.raison = String(p.raison || '').slice(0, 200)
+        if (r) {
+          // Le score Claude affine le score vectoriel
+          r.score = Math.max(0, Math.min(100, Math.round(Number(p.score) || r.score)))
+          r.raison = String(p.raison || '').slice(0, 200)
+        }
       }
     } catch (e) {
-      console.error('[scoring-vector] Tier 2 Claude error:', e)
+      console.error('[scoring-vector] Tier 2 Claude Sonnet error:', e)
     }
   }
 
-  // Raisons par défaut pour ceux qui n'en ont pas
+  // Raisons par défaut pour les tenders non traités par Tier 2
   for (const r of results) {
     if (!r.raison) {
       if (r.score >= 70) r.raison = 'Forte correspondance avec votre activité.'
-      else if (r.score >= 40) r.raison = 'Correspondance partielle.'
+      else if (r.score >= 40) r.raison = 'Correspondance partielle, à étudier.'
       else r.raison = 'Faible correspondance avec votre profil.'
     }
   }
 
   return results
 }
-
-// cosineSimilarity est importé depuis @/lib/ai/embeddings

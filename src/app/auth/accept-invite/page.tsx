@@ -23,6 +23,10 @@ function AcceptInviteContent() {
             setStatus('error')
             return
           }
+
+          // Pour les collaborateurs invités, l'onboarding de l'org est déjà fait
+          // On marque directement le flag pour ne pas leur afficher l'onboarding
+          await fetch('/api/onboarding/skip', { method: 'POST' })
         } catch (err) {
           const message = err instanceof Error ? err.message : 'Erreur inconnue'
           setErrorMessage(message)
