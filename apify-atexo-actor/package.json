@@ -1,0 +1,21 @@
+{
+  "name": "atexo-mpe-scraper",
+  "version": "0.1.0",
+  "description": "Scraper Apify pour les profils acheteurs Atexo MPE (PLACE, Maximilien)",
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/main.js",
+    "start:dev": "ts-node src/main.ts",
+    "test:place": "ts-node src/test-local.ts"
+  },
+  "dependencies": {
+    "apify": "^3.2.6",
+    "cheerio": "^1.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.4.5"
+  }
+}

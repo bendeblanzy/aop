@@ -1,0 +1,16 @@
+{
+  "actorSpecification": 1,
+  "name": "atexo-mpe-scraper",
+  "title": "Atexo MPE — Scraper PLACE & Maximilien",
+  "description": "Scrape les consultations en cours sur les profils acheteurs Atexo Local Trust MPE (PLACE, Maximilien). Gère le mécanisme PRADO_PAGESTATE et expose un dataset normalisé pour ingestion downstream.",
+  "version": "0.1",
+  "input": "./INPUT_SCHEMA.json",
+  "dockerfile": "./Dockerfile",
+  "storages": {
+    "dataset": {
+      "actorSpecification": 1,
+      "title": "Tenders Atexo MPE normalisés",
+      "fields": {}
+    }
+  }
+}

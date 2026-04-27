@@ -1,0 +1,6 @@
+node_modules/
+dist/
+.DS_Store
+storage/
+apify_storage/
+crawlee_storage/
