@@ -7,7 +7,7 @@ import {
   getNonCommunicationEmbedding,
   blendEmbeddings,
 } from '@/lib/boamp/communication-domain'
-import { getDepartementsForRegion } from '@/lib/boamp/regions'
+import { getDepartementsForRegion, normalizeZoneToRegion } from '@/lib/boamp/regions'
 import { buildProfileKeywords } from '@/lib/boamp/lot-matching'
 
 /**
@@ -42,14 +42,14 @@ export async function GET(request: NextRequest) {
   // Récupérer le profil complet pour embedding + filtres
   const { data: profile } = await adminClient
     .from('profiles')
-    .select('boamp_codes, activite_metier, types_marche_filtres, embedding, raison_sociale, domaines_competence, certifications, positionnement, atouts_differenciants, moyens_techniques, region, domaines_competences')
+    .select('boamp_codes, activite_metier, types_marche_filtres, embedding, raison_sociale, domaines_competence, certifications, positionnement, atouts_differenciants, moyens_techniques, profile_methodology, prestations_types, clients_types, zone_intervention, region')
     .eq('organization_id', orgId)
     .maybeSingle()
 
   // Construire les mots-clés profil pour le matching des lots (inclus dans la réponse)
   const profileKeywords = buildProfileKeywords({
     activite_metier: profile?.activite_metier,
-    domaines_competence: profile?.domaines_competence ?? profile?.domaines_competences,
+    domaines_competence: profile?.domaines_competence,
     positionnement: profile?.positionnement,
     atouts_differenciants: profile?.atouts_differenciants,
   })
@@ -76,8 +76,13 @@ export async function GET(request: NextRequest) {
   const procedureFilter = url.searchParams.get('procedure') ?? ''
   // Filtre région : si fourni, on restreint aux départements de cette région
   const regionParam = url.searchParams.get('region') ?? ''
-  // Si pas de param explicite, on utilise la région du profil comme valeur par défaut
-  const regionToApply = regionParam || (profile?.region ?? '')
+  // Si pas de param explicite : on utilise profile.region, sinon on tente de
+  // dériver une région depuis profile.zone_intervention ("idf", "paca"…).
+  // Cela évite que zone="idf" passe inaperçu quand region est NULL.
+  const profileRegionFallback = profile?.region
+    || normalizeZoneToRegion(profile?.zone_intervention)
+    || ''
+  const regionToApply = regionParam || profileRegionFallback
   const regionDepts = regionToApply ? getDepartementsForRegion(regionToApply) : null
 
   const hasActiviteMetier = !!profile?.activite_metier?.trim()
@@ -119,14 +124,18 @@ export async function GET(request: NextRequest) {
 
   // ── Construction de l'embedding de requête ────────────────────────────────
   //
-  // On utilise toujours un blend avec l'embedding "domaine communication" pour
-  // biaiser les résultats vers les prestations de communication/numérique/événementiel.
+  // Le blend "domaine communication" est désormais très LÉGER : il ne biaise
+  // plus le matching que marginalement, pour conserver un signal "services
+  // créatifs" sans écraser les profils non-com (formation, conseil, IT, etc.).
   //
   //  Mode Recherche IA (semantic_query renseigné) :
-  //    query_embedding = 70% requête utilisateur + 30% domaine communication
+  //    query_embedding = 92% requête utilisateur + 8% domaine communication
   //
   //  Mode Profil (défaut) :
-  //    query_embedding = 60% profil entreprise + 40% domaine communication
+  //    query_embedding = 90% profil entreprise + 10% domaine communication
+  //
+  // (Audit 2026-04-27 : un blend à 30% sabotait le matching pour les profils
+  //  formation/IA en tirant la requête vers événementiel/brochures.)
 
   let profileEmbedding: number[] | null = null
 
@@ -167,26 +176,34 @@ export async function GET(request: NextRequest) {
   let queryEmbedding: number[]
 
   if (isSemanticSearch) {
-    // Mode Recherche IA : embed la requête utilisateur, blend avec domaine comm
+    // Mode Recherche IA : embed la requête utilisateur, blend très léger avec comm
     try {
       const queryEmb = await getEmbedding(semanticQuery.trim())
       queryEmbedding = commEmbedding.length > 0
-        ? blendEmbeddings(queryEmb, commEmbedding, 0.80) // 80% requête + 20% comm (requête plus dominante)
+        ? blendEmbeddings(queryEmb, commEmbedding, 0.92) // 92% requête + 8% comm
         : queryEmb
     } catch (e) {
       console.error('[veille/tenders] semantic query embedding error:', e)
       return NextResponse.json({ error: 'Erreur calcul embedding requête' }, { status: 500 })
     }
   } else {
-    // Mode Profil : blend profil + domaine communication
+    // Mode Profil : blend très léger profil + comm (90/10)
     queryEmbedding = commEmbedding.length > 0 && profileEmbedding!.length > 0
-      ? blendEmbeddings(profileEmbedding!, commEmbedding, 0.70) // 70% profil + 30% comm (profil plus dominant)
+      ? blendEmbeddings(profileEmbedding!, commEmbedding, 0.90) // 90% profil + 10% comm
       : profileEmbedding!
   }
 
   // ── Matching vectoriel pgvector ───────────────────────────────────────────
-  // On garde un pool LARGE (volume attrayant pour l'utilisateur) mais le scoring
-  // aval est sévère : beaucoup d'AO remontent, peu scorent haut.
+  //
+  // IMPORTANT : on N'APPLIQUE PLUS le filtre boamp_codes en couperet à la RPC.
+  // Raison : le référentiel BOAMP côté UI (codes.ts) est imparfait et incohérent
+  // avec les codes réellement présents dans les annonces (ex. code "23 Formation
+  // professionnelle" sélectionné par les users mais 0 occurrence dans la base).
+  // Conséquence d'un filtre dur : pool effondré, top sémantique écarté.
+  //
+  // Approche : pool large (300) trié par similarité pure, puis BOOST côté JS
+  // sur le score final si descripteur_codes && boamp_codes (overlap). Voir
+  // calcul du score plus bas (CODE_BOOST = +15%).
   const MATCH_POOL = 300
   const SIMILARITY_THRESHOLD = 0.15
 
@@ -195,7 +212,7 @@ export async function GET(request: NextRequest) {
       query_embedding: JSON.stringify(queryEmbedding),
       match_threshold: SIMILARITY_THRESHOLD,
       match_count: MATCH_POOL,
-      filter_codes: boampCodes.length > 0 ? boampCodes : null,
+      filter_codes: null, // ← filtre désactivé (cf. doc ci-dessus)
     })
 
   if (matchError) {
@@ -296,9 +313,11 @@ export async function GET(request: NextRequest) {
   }
 
   // ── Conversion similarité → score 0-100 et enrichissement ────────────────
-  // Principe : score = simToScore(sim) × pénalité_anti_domaine.
-  // Pénalité = 1.0 si le tender est loin de l'anti-domaine, descend jusqu'à ~0.35
-  // si le tender ressemble fortement à des fournitures/travaux/infogérance.
+  // Principe : score = simToScore(sim) × pénalité_anti_domaine × boost_codes.
+  //  - pénalité anti-domaine : descend jusqu'à ~0.35 sur les fournitures/travaux/infogérance
+  //  - boost codes BOAMP : +15% si descripteur_codes && profile.boamp_codes (signal positif
+  //    plutôt qu'un filtre couperet — voir doc ci-dessus pour la raison)
+  const CODE_BOOST = 1.15  // +15% si overlap des codes BOAMP
   const tendersWithScores = filteredTenders.map(t => {
     const sim = similarityMap[t.idweb] ?? 0
     const antiSim = antiSimilarityMap[t.idweb] ?? 0
@@ -319,19 +338,27 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const vectorScore = Math.round(baseScore * penalty)
+    // Boost codes BOAMP : +15% si l'AO a au moins un code descripteur en commun
+    // avec ceux sélectionnés dans le profil. Booster au lieu de filtrer permet
+    // de remonter quand même les top sémantiques même quand les codes sont
+    // partiellement faux côté référentiel.
+    const tenderCodes: string[] = Array.isArray((t as any).descripteur_codes)
+      ? (t as any).descripteur_codes
+      : []
+    const codesOverlap = boampCodes.length > 0
+      && tenderCodes.some((c: string) => boampCodes.includes(c))
+    const boost = codesOverlap ? CODE_BOOST : 1.0
+
+    const vectorScore = Math.min(100, Math.round(baseScore * penalty * boost))
     const existingScore = scoreMap[t.idweb]
     return {
       ...t,
       score: existingScore?.score ?? vectorScore,
-      reason: existingScore?.reason ?? (
-        vectorScore >= 75 ? 'Forte correspondance sémantique avec votre profil.' :
-        vectorScore >= 50 ? 'Correspondance intéressante, à évaluer.' :
-        vectorScore >= 25 ? 'Correspondance partielle, probablement hors cœur de métier.' :
-        'Faible correspondance.'
-      ),
+      reason: existingScore?.reason ?? null,
+      scored_by_claude: !!existingScore,  // true = score Claude persisté, false = score vectoriel brut
       similarity: Math.round(sim * 1000) / 1000,
       antiSimilarity: Math.round(antiSim * 1000) / 1000,
+      codesOverlap,
     }
   })
 

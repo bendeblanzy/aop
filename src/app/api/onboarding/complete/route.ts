@@ -117,14 +117,21 @@ Génère ce JSON :
   }
 
   // 3. Générer l'embedding du profil enrichi
+  // IMPORTANT : on inclut TOUS les signaux structurés (prestations brutes,
+  // clients cibles, modes, zone) pour aligner l'embedding sur ce que voit
+  // le Tier 2 Claude. Sinon le matching vectoriel rate des mots-clés clés
+  // (ex. "formation", "vidéo", "workflows").
   const profileTextForEmbedding = [
     `Société : ${answers.raison_sociale}`,
     `Cœur de métier : ${synthesized.coeur_metier}`,
     `Atouts : ${synthesized.atouts_differenciants}`,
     `Philosophie : ${synthesized.philosophie_valeurs}`,
     `Méthodologie : ${synthesized.methodologie_type}`,
-    `Zone : ${answers.zone}`,
-  ].join('\n')
+    prestationsText ? `Prestations : ${prestationsText}` : '',
+    clientsText ? `Clients : ${clientsText}` : '',
+    modesText ? `Modes : ${modesText}` : '',
+    answers.zone ? `Zone : ${answers.zone}` : '',
+  ].filter(Boolean).join('\n')
 
   let embedding: number[] = []
   try {

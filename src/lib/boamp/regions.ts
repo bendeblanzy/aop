@@ -164,6 +164,49 @@ export function getDepartementsForRegion(region: string): string[] | null {
 }
 
 /**
+ * Mapping des codes/alias `zone_intervention` (issus de l'onboarding) vers
+ * les noms officiels de région utilisés par REGIONS_FR / DEPT_TO_REGION.
+ * Permet de filtrer correctement quand `profiles.region` est NULL mais que
+ * `profiles.zone_intervention` est renseigné.
+ */
+const ZONE_ALIAS_TO_REGION: Record<string, RegionFR> = {
+  idf: 'Île-de-France',
+  'ile-de-france': 'Île-de-France',
+  'île-de-france': 'Île-de-France',
+  ara: 'Auvergne-Rhône-Alpes',
+  'auvergne-rhone-alpes': 'Auvergne-Rhône-Alpes',
+  'auvergne-rhône-alpes': 'Auvergne-Rhône-Alpes',
+  'bfc': 'Bourgogne-Franche-Comté',
+  bretagne: 'Bretagne',
+  cvl: 'Centre-Val de Loire',
+  'centre-val-de-loire': 'Centre-Val de Loire',
+  corse: 'Corse',
+  'grand-est': 'Grand Est',
+  'hauts-de-france': 'Hauts-de-France',
+  hdf: 'Hauts-de-France',
+  normandie: 'Normandie',
+  'nouvelle-aquitaine': 'Nouvelle-Aquitaine',
+  occitanie: 'Occitanie',
+  'pays-de-la-loire': 'Pays de la Loire',
+  pdl: 'Pays de la Loire',
+  paca: 'Provence-Alpes-Côte d\'Azur',
+  'provence-alpes-cote-d-azur': 'Provence-Alpes-Côte d\'Azur',
+}
+
+/**
+ * Tente de mapper une valeur `zone_intervention` libre vers une région FR.
+ * Retourne null si non reconnue (ex: "France entière", "Europe").
+ */
+export function normalizeZoneToRegion(zone: string | null | undefined): RegionFR | null {
+  if (!zone) return null
+  const key = zone.trim().toLowerCase()
+  if (ZONE_ALIAS_TO_REGION[key]) return ZONE_ALIAS_TO_REGION[key]
+  // Si la valeur est déjà un nom de région valide, on la retourne telle quelle
+  if ((REGIONS_FR as readonly string[]).includes(zone)) return zone as RegionFR
+  return null
+}
+
+/**
  * Retourne la région pour un code département.
  */
 export function getRegionForDept(dept: string): RegionFR | null {

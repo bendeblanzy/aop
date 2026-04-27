@@ -18,7 +18,7 @@ export async function POST(request: NextRequest) {
 
   const { data: profile } = await adminClient
     .from('profiles')
-    .select('activite_metier, raison_sociale, domaines_competence, certifications, positionnement, atouts_differenciants, moyens_techniques, profile_methodology')
+    .select('activite_metier, raison_sociale, domaines_competence, certifications, positionnement, atouts_differenciants, moyens_techniques, profile_methodology, prestations_types, clients_types, zone_intervention')
     .eq('organization_id', orgId)
     .maybeSingle()
 
@@ -32,12 +32,8 @@ export async function POST(request: NextRequest) {
     .select('prenom, nom, poste, role_metier, bio, competences_cles, diplomes, certifications, experience_annees')
     .eq('organization_id', orgId)
 
+  // buildProfileText inclut maintenant prestations_types/clients_types/zone_intervention/profile_methodology
   let text = buildProfileText(profile)
-
-  // Ajouter la méthodologie si disponible
-  if ((profile as any).profile_methodology) {
-    text += `\nMéthodologie: ${(profile as any).profile_methodology}`
-  }
 
   // Ajouter un résumé des compétences de l'équipe au texte du profil
   if (collabs && collabs.length > 0) {

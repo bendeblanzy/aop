@@ -28,6 +28,7 @@ interface TenderItem {
   description_detail: string | null
   score: number | null
   reason: string | null
+  scored_by_claude?: boolean
   nature_libelle: string | null
   type_procedure: string | null
   procedure_libelle: string | null
@@ -149,7 +150,10 @@ function TenderCard({
     : null
 
   const summaryParts: string[] = []
-  if (tender.score !== null) summaryParts.push(`Similarité ${tender.score}%`)
+  if (tender.score !== null) {
+    // "Score IA" si Claude a affiné, "Pré-score" si seulement vectoriel brut
+    summaryParts.push(`${tender.scored_by_claude ? 'Score IA' : 'Pré-score'} ${tender.score}%`)
+  }
   const summaryLine = summaryParts.join(' — ')
 
   return (
@@ -425,7 +429,10 @@ export default function VeillePage() {
         setProfileKeywords(data.profileKeywords)
       }
 
-      const unscored = data.tenders.filter(t => t.score === null).map(t => t.idweb).slice(0, 20)
+      // Tier 2 Claude : déclenché pour les tenders sans score Claude persisté
+      // (scored_by_claude=false). Le Tier 1 vectoriel donne déjà un score
+      // numérique mais on veut affiner les top 20 via Claude pour les "raisons".
+      const unscored = data.tenders.filter(t => !t.scored_by_claude).map(t => t.idweb).slice(0, 20)
       if (unscored.length > 0 && data.hasActiviteMetier) autoScore(unscored)
     } catch {
       toast.error('Impossible de charger les annonces')
@@ -446,7 +453,7 @@ export default function VeillePage() {
       if (!Array.isArray(scores)) return
       setTenders(prev => prev.map(t => {
         const found = scores.find((s: { idweb: string; score: number; raison: string }) => s.idweb === t.idweb)
-        return found ? { ...t, score: found.score, reason: found.raison } : t
+        return found ? { ...t, score: found.score, reason: found.raison, scored_by_claude: true } : t
       }))
     } catch { /* silent */ }
   }

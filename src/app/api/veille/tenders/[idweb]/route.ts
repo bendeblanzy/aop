@@ -437,10 +437,11 @@ export async function GET(
     .eq('organization_id', orgId)
     .maybeSingle()
 
-  // Récupérer le profil pour le matching lots
+  // Récupérer le profil pour le matching lots (NB: la colonne est domaines_competence
+  // sans "s" — l'ancien nom "domaines_competences" provoquait une erreur SELECT).
   const { data: profile } = await adminClient
     .from('profiles')
-    .select('activite_metier, raison_sociale, domaines_competences, positionnement, atouts_differenciants')
+    .select('activite_metier, raison_sociale, domaines_competence, positionnement, atouts_differenciants')
     .eq('organization_id', orgId)
     .maybeSingle()
 
@@ -476,7 +477,9 @@ export async function GET(
     profile: profile ? {
       activite_metier: profile.activite_metier,
       raison_sociale: profile.raison_sociale,
-      domaines_competences: profile.domaines_competences,
+      // On expose en "domaines_competences" pour ne pas casser les composants
+      // existants côté UI ; mais la colonne réelle est domaines_competence.
+      domaines_competences: profile.domaines_competence,
       positionnement: profile.positionnement,
       atouts_differenciants: profile.atouts_differenciants,
     } : null,
