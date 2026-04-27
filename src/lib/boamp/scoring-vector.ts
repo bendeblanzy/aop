@@ -1,5 +1,5 @@
 import { adminClient } from '@/lib/supabase/admin'
-import { getEmbedding, buildProfileText, cosineSimilarity, simToScore } from '@/lib/ai/embeddings'
+import { getEmbedding, buildProfileText, cosineSimilarity, simToScore, type PrestationDetail } from '@/lib/ai/embeddings'
 import { callClaude } from '@/lib/ai/claude-client'
 
 export interface VectorScoreResult {
@@ -11,8 +11,8 @@ export interface VectorScoreResult {
 
 /**
  * Construit le contexte profil enrichi pour le Tier 2 Claude.
- * Utilise les 4 sections synthétisées par l'onboarding si disponibles,
- * sinon les champs legacy du profil.
+ * Utilise les sections synthétisées par l'onboarding + le détail
+ * spécificité/exclusions par prestation si disponible.
  */
 function buildRichProfileContext(profile: {
   raison_sociale?: string | null
@@ -22,6 +22,8 @@ function buildRichProfileContext(profile: {
   profile_methodology?: string | null
   zone_intervention?: string | null
   prestations_types?: string[] | null
+  prestations_detail?: PrestationDetail[] | null
+  exclusions_globales?: string[] | null
   clients_types?: string[] | null
 }): string {
   const parts: string[] = []
@@ -30,7 +32,28 @@ function buildRichProfileContext(profile: {
   if (profile.atouts_differenciants) parts.push(`Atouts différenciants : ${profile.atouts_differenciants}`)
   if (profile.positionnement) parts.push(`Philosophie & valeurs : ${profile.positionnement}`)
   if (profile.profile_methodology) parts.push(`Méthodologie : ${profile.profile_methodology}`)
-  if (profile.prestations_types?.length) parts.push(`Types de prestations : ${profile.prestations_types.join(', ')}`)
+
+  if (profile.prestations_detail?.length) {
+    const lines: string[] = []
+    for (const p of profile.prestations_detail) {
+      if (!p.type) continue
+      const positive = p.specificity?.trim()
+        ? `${p.type} (spécifiquement : ${p.specificity.trim()})`
+        : p.type
+      const negative = p.exclusions && p.exclusions.length > 0
+        ? ` — ne fait PAS : ${p.exclusions.join(', ')}`
+        : ''
+      lines.push(`  - ${positive}${negative}`)
+    }
+    if (lines.length > 0) parts.push(`Prestations détaillées :\n${lines.join('\n')}`)
+  } else if (profile.prestations_types?.length) {
+    parts.push(`Types de prestations : ${profile.prestations_types.join(', ')}`)
+  }
+
+  if (profile.exclusions_globales?.length) {
+    parts.push(`SECTEURS / SUJETS REFUSÉS : ${profile.exclusions_globales.join(', ')}`)
+  }
+
   if (profile.clients_types?.length) parts.push(`Clients habituels : ${profile.clients_types.join(', ')}`)
   if (profile.zone_intervention) parts.push(`Zone d'intervention : ${profile.zone_intervention}`)
   return parts.join('\n')
@@ -55,10 +78,10 @@ export async function scoreWithVectors(
 ): Promise<VectorScoreResult[]> {
   const claudeThreshold = options.claudeThreshold ?? 40
 
-  // 1. Récupérer le profil complet (toutes les sections synthétisées)
+  // 1. Récupérer le profil complet (toutes les sections synthétisées + détail prestations)
   const { data: profile } = await adminClient
     .from('profiles')
-    .select('embedding, activite_metier, raison_sociale, domaines_competence, certifications, positionnement, atouts_differenciants, moyens_techniques, profile_methodology, zone_intervention, prestations_types, clients_types')
+    .select('embedding, activite_metier, raison_sociale, domaines_competence, certifications, positionnement, atouts_differenciants, moyens_techniques, profile_methodology, zone_intervention, prestations_types, prestations_detail, exclusions_globales, clients_types')
     .eq('organization_id', orgId)
     .maybeSingle()
 
@@ -166,11 +189,18 @@ Pour chaque annonce :
 - Rédige UNE phrase courte (max 130 caractères) expliquant concrètement pourquoi ça matche ou non
 
 Critères :
-- 80-100 : Cœur de métier, la société peut clairement répondre et gagner
+- 80-100 : Cœur de métier exact (spécificité respectée), la société peut clairement gagner
 - 60-79  : Bonne correspondance, candidature pertinente
 - 40-59  : Correspondance partielle, à étudier
 - 20-39  : En dehors du périmètre habituel
-- 0-19   : Hors sujet
+- 0-19   : Hors sujet OU appartient aux EXCLUSIONS du profil (refus explicite)
+
+RÈGLES IMPÉRATIVES :
+- Si l'AO porte sur une "exclusion" déclarée du profil (ex: vidéo classique alors que la société fait
+  uniquement vidéo IA), le score MAX est 25, peu importe le score vectoriel.
+- Si l'AO porte sur un "secteur refusé" global (exclusions_globales), le score MAX est 15.
+- Si l'AO matche la SPÉCIFICITÉ exacte de la prestation (ex: vidéo IA alors que la société est sur
+  vidéo IA), boost minimum de +10 points par rapport au score vectoriel.
 
 Réponds UNIQUEMENT en JSON valide : [{"idweb":"...", "score": 75, "raison": "..."}]`,
         `PROFIL DE LA SOCIÉTÉ :\n${richContext}\n\nAPPELS D'OFFRES À ÉVALUER :\n${JSON.stringify(tendersForClaude)}`,

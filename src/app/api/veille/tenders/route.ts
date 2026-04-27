@@ -42,7 +42,7 @@ export async function GET(request: NextRequest) {
   // Récupérer le profil complet pour embedding + filtres
   const { data: profile } = await adminClient
     .from('profiles')
-    .select('boamp_codes, activite_metier, types_marche_filtres, embedding, raison_sociale, domaines_competence, certifications, positionnement, atouts_differenciants, moyens_techniques, profile_methodology, prestations_types, clients_types, zone_intervention, region')
+    .select('boamp_codes, activite_metier, types_marche_filtres, embedding, raison_sociale, domaines_competence, certifications, positionnement, atouts_differenciants, moyens_techniques, profile_methodology, prestations_types, prestations_detail, exclusions_globales, clients_types, zone_intervention, region')
     .eq('organization_id', orgId)
     .maybeSingle()
 

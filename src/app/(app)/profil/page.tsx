@@ -1,19 +1,22 @@
 'use client'
 import { useEffect, useState, useCallback, useRef } from 'react'
+import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { useOrganization } from '@/context/OrganizationContext'
 import { Profile, Reference } from '@/lib/types'
 import { calculateProfileCompletion, cn } from '@/lib/utils'
-import { Loader2, Save, Plus, Trash2, Building2, Radar, Award, Upload, FileText, X, ExternalLink, Search, Sparkles, CheckCircle2 } from 'lucide-react'
+import { Loader2, Save, Plus, Trash2, Building2, Radar, Award, Upload, FileText, X, ExternalLink, Search, Sparkles, CheckCircle2, RefreshCw, Target } from 'lucide-react'
 import { toast } from 'sonner'
 import { BOAMP_CODES, BOAMP_CATEGORIES } from '@/lib/boamp/codes'
 import { REGIONS_FR } from '@/lib/boamp/regions'
+import CalibrationStep from '@/components/profil/CalibrationStep'
 
 const FORMES_JURIDIQUES = ['SARL', 'SAS', 'SA', 'EURL', 'EI', 'SASU', 'SNC', 'Association', 'Autre']
 const DOMAINES = ['BTP', 'Informatique / IT', 'Conseil', 'Formation', 'Maintenance', 'Nettoyage', 'Sécurité', 'Transport', 'Restauration', 'Santé', 'Environnement', 'Communication', 'Juridique', 'Autre']
 
 export default function ProfilPage() {
   const { orgId, loading: orgLoading, refresh: refreshOrg } = useOrganization()
+  const [showCalibrationModal, setShowCalibrationModal] = useState(false)
   const [profile, setProfile] = useState<Partial<Profile>>({
     pays: 'France',
     declaration_non_interdiction: false,
@@ -327,6 +330,61 @@ export default function ProfilPage() {
         </div>
         {completion < 100 && <p className="text-xs text-text-secondary mt-2">Complétez votre profil pour générer des documents plus précis</p>}
       </div>
+
+      {/* Actions matching — Refaire onboarding + Calibration */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
+        <Link
+          href="/onboarding?edit=true"
+          className="flex items-start gap-3 bg-white border border-[#E0E0F0] hover:border-[#0000FF]/40 hover:bg-[#F5F5FF] rounded-xl p-4 transition-colors group"
+        >
+          <RefreshCw className="w-5 h-5 text-[#0000FF] shrink-0 mt-0.5" />
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-gray-900">Refaire mon onboarding</p>
+            <p className="text-xs text-gray-500 mt-0.5">
+              Modifier prestations, clients, spécificités, exclusions — Claude resynthétisera ton profil.
+            </p>
+          </div>
+        </Link>
+        <button
+          onClick={() => setShowCalibrationModal(true)}
+          className="flex items-start gap-3 bg-white border border-[#E0E0F0] hover:border-[#0000FF]/40 hover:bg-[#F5F5FF] rounded-xl p-4 transition-colors text-left group"
+        >
+          <Target className="w-5 h-5 text-[#0000FF] shrink-0 mt-0.5" />
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-gray-900">Affiner avec 5 AO réels</p>
+            <p className="text-xs text-gray-500 mt-0.5">
+              Note ✓/✗ sur 5 AO — Claude en déduit tes exclusions et améliore le matching.
+            </p>
+          </div>
+        </button>
+      </div>
+
+      {/* Modale calibration */}
+      {showCalibrationModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b border-[#E0E0F0] px-5 py-3 flex items-center justify-between">
+              <h2 className="font-bold text-gray-900">Affiner mon profil</h2>
+              <button onClick={() => setShowCalibrationModal(false)} className="p-1 text-gray-400 hover:text-gray-700">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-5">
+              <CalibrationStep
+                onComplete={({ saved, new_exclusions }) => {
+                  toast.success(
+                    `${saved} retours enregistrés${new_exclusions.length > 0 ? ` — ${new_exclusions.length} exclusions ajoutées` : ''}`
+                  )
+                  setShowCalibrationModal(false)
+                  // Recharger le profil pour refléter les nouvelles exclusions
+                  window.location.reload()
+                }}
+                finalLabel="Enregistrer mes retours"
+              />
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Tabs */}
       <div className="bg-white rounded-xl border border-border shadow-sm overflow-hidden">

@@ -18,7 +18,7 @@ export async function POST(request: NextRequest) {
 
   const { data: profile } = await adminClient
     .from('profiles')
-    .select('activite_metier, raison_sociale, domaines_competence, certifications, positionnement, atouts_differenciants, moyens_techniques, profile_methodology, prestations_types, clients_types, zone_intervention')
+    .select('activite_metier, raison_sociale, domaines_competence, certifications, positionnement, atouts_differenciants, moyens_techniques, profile_methodology, prestations_types, prestations_detail, exclusions_globales, clients_types, zone_intervention')
     .eq('organization_id', orgId)
     .maybeSingle()
 

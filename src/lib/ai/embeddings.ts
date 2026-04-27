@@ -127,11 +127,25 @@ export function buildTenderText(tender: {
 }
 
 /**
+ * Détail d'une prestation : spécificité (ce qui distingue) et exclusions
+ * (ce que l'entreprise refuse explicitement). Le contraste positif/négatif
+ * est ce qui permet au matching vectoriel de rapprocher les bons AO et
+ * d'éloigner les mauvais.
+ */
+export interface PrestationDetail {
+  type: string                  // ex: "video", "formation", "workflows"
+  specificity?: string | null   // ex: "vidéo générée par IA"
+  exclusions?: string[] | null  // ex: ["captation événementielle", "tournage classique"]
+}
+
+/**
  * Construit le texte à embedder pour un profil organisation.
  *
- * IMPORTANT : doit inclure tous les signaux qualitatifs ET les champs
- * structurés (prestations, clients, méthodologie, zone) pour que la
- * similarité vectorielle voie le MÊME profil que le contexte Tier 2 Claude.
+ * Si `prestations_detail` est renseigné, on génère un texte qui CONTRASTE
+ * explicitement les spécificités (positif) et les exclusions (négatif),
+ * ce qui guide l'embedding vers les bons AO.
+ *
+ * Si seul `prestations_types` (legacy) est dispo, on retombe sur une liste plate.
  */
 export function buildProfileText(profile: {
   activite_metier?: string | null
@@ -143,6 +157,8 @@ export function buildProfileText(profile: {
   moyens_techniques?: string | null
   profile_methodology?: string | null
   prestations_types?: string[] | null
+  prestations_detail?: PrestationDetail[] | null
+  exclusions_globales?: string[] | null
   clients_types?: string[] | null
   zone_intervention?: string | null
 }): string {
@@ -153,7 +169,30 @@ export function buildProfileText(profile: {
   if (profile.positionnement) parts.push(`Positionnement: ${profile.positionnement}`)
   if (profile.atouts_differenciants) parts.push(`Atouts: ${profile.atouts_differenciants}`)
   if (profile.profile_methodology) parts.push(`Méthodologie: ${profile.profile_methodology}`)
-  if (profile.prestations_types?.length) parts.push(`Prestations: ${profile.prestations_types.join(', ')}`)
+
+  // Prestations : on privilégie la version détaillée si dispo
+  if (profile.prestations_detail?.length) {
+    const lines: string[] = []
+    for (const p of profile.prestations_detail) {
+      if (!p.type) continue
+      const positive = p.specificity?.trim()
+        ? `${p.type} — ${p.specificity.trim()}`
+        : p.type
+      let line = `• Spécialiste de : ${positive}`
+      if (p.exclusions && p.exclusions.length > 0) {
+        line += `. Refuse : ${p.exclusions.join(', ')}`
+      }
+      lines.push(line)
+    }
+    if (lines.length > 0) parts.push(`Prestations détaillées :\n${lines.join('\n')}`)
+  } else if (profile.prestations_types?.length) {
+    parts.push(`Prestations: ${profile.prestations_types.join(', ')}`)
+  }
+
+  if (profile.exclusions_globales?.length) {
+    parts.push(`Hors-périmètre (refusé) : ${profile.exclusions_globales.join(', ')}`)
+  }
+
   if (profile.clients_types?.length) parts.push(`Clients: ${profile.clients_types.join(', ')}`)
   if (profile.zone_intervention) parts.push(`Zone: ${profile.zone_intervention}`)
   if (profile.domaines_competence?.length) parts.push(`Domaines: ${profile.domaines_competence.join(', ')}`)

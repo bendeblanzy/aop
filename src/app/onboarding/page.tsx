@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useEffect, Suspense } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { Loader2, CheckCircle2, ChevronRight } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 
@@ -18,6 +18,10 @@ interface Answers {
   zone: string
   differentiants: string
   valeurs: string
+  /** Précisions par prestation : "vidéo IA générative" / "formation IA et numérique"… */
+  prestations_specificites: string
+  /** Sujets/secteurs explicitement refusés (texte libre). */
+  exclusions_libres: string
 }
 
 const PRESTATIONS = [
@@ -57,21 +61,68 @@ const ZONES = [
   { id: 'international', label: 'International' },
 ]
 
-const TOTAL_STEPS = 6
+const TOTAL_STEPS = 7
 
 // ── Component ─────────────────────────────────────────────────────────────
+// Le contenu utilise `useSearchParams` → on doit l'envelopper dans <Suspense>,
+// sinon Next.js échoue le pré-rendering statique (prerender-error).
 export default function OnboardingPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+        <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+      </div>
+    }>
+      <OnboardingPageInner />
+    </Suspense>
+  )
+}
+
+function OnboardingPageInner() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const isEditMode = searchParams.get('edit') === 'true'
   const [step, setStep] = useState(1)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [synthesis, setSynthesis] = useState<Record<string, string> | null>(null)
 
-  // Utilisateurs existants (pré-onboarding) : si l'org existe déjà,
-  // on marque l'onboarding comme fait et on redirige sans afficher le formulaire.
+  // Mode normal : si l'org existe déjà, on skip et on redirige.
+  // Mode edit (?edit=true) : on charge les réponses précédentes et on autorise la modification.
   useEffect(() => {
-    async function checkExistingOrg() {
+    async function bootstrap() {
       try {
+        if (isEditMode) {
+          // Charger les réponses précédentes pour pré-remplir le wizard
+          const res = await fetch('/api/profil')
+          if (res.ok) {
+            const wrapped = await res.json()
+            const profileData = wrapped?.data ?? wrapped
+            const prev = profileData?.onboarding_answers
+            if (prev && typeof prev === 'object') {
+              setAnswers(a => ({
+                ...a,
+                org_name: prev.org_name ?? a.org_name,
+                raison_sociale: prev.raison_sociale ?? a.raison_sociale,
+                prestations: Array.isArray(prev.prestations) ? prev.prestations : a.prestations,
+                prestations_autre: prev.prestations_autre ?? '',
+                clients: Array.isArray(prev.clients) ? prev.clients : a.clients,
+                clients_autre: prev.clients_autre ?? '',
+                modes: Array.isArray(prev.modes) ? prev.modes : a.modes,
+                modes_autre: prev.modes_autre ?? '',
+                zone: prev.zone ?? a.zone,
+                differentiants: prev.differentiants ?? a.differentiants,
+                valeurs: prev.valeurs ?? a.valeurs,
+                prestations_specificites: prev.prestations_specificites ?? '',
+                exclusions_libres: prev.exclusions_libres ?? '',
+              }))
+            }
+          }
+          // Pas d'auto-redirect en mode edit
+          return
+        }
+
+        // Mode normal : auto-skip si l'org existe déjà
         const res = await fetch('/api/organizations/me')
         if (res.ok) {
           const data = await res.json()
@@ -82,8 +133,8 @@ export default function OnboardingPage() {
         }
       } catch { /* silencieux */ }
     }
-    checkExistingOrg()
-  }, [router])
+    bootstrap()
+  }, [router, isEditMode])
 
   const [answers, setAnswers] = useState<Answers>({
     org_name: '',
@@ -97,6 +148,8 @@ export default function OnboardingPage() {
     zone: '',
     differentiants: '',
     valeurs: '',
+    prestations_specificites: '',
+    exclusions_libres: '',
   })
 
   function toggle(field: 'prestations' | 'clients' | 'modes', id: string) {
@@ -114,6 +167,7 @@ export default function OnboardingPage() {
       case 4: return answers.modes.length > 0 && answers.zone.length > 0
       case 5: return answers.differentiants.trim().length > 0
       case 6: return answers.valeurs.trim().length > 0
+      case 7: return true // étape spécificités/exclusions optionnelle mais fortement recommandée
       default: return false
     }
   }
@@ -208,8 +262,15 @@ export default function OnboardingPage() {
         {/* Header */}
         <div className="text-center mb-6">
           <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-blue-600 text-white text-xl font-bold mb-3">A</div>
-          <p className="text-sm text-gray-500">Votre spécialiste Appels d&apos;Offre</p>
+          <p className="text-sm text-gray-500">
+            {isEditMode ? 'Modification de votre profil' : 'Votre spécialiste Appels d’Offre'}
+          </p>
           <p className="text-xs text-gray-400 mt-1">Étape {step} sur {TOTAL_STEPS}</p>
+          {!isEditMode && (
+            <p className="text-xs text-amber-600 mt-2 max-w-md mx-auto">
+              ⚠️ Étape obligatoire — la qualité de votre matching d&apos;AO dépend directement de la précision de ces réponses.
+            </p>
+          )}
         </div>
 
         {/* Progress bar */}
@@ -383,6 +444,55 @@ export default function OnboardingPage() {
                 placeholder="Ex : Réactif, à l'écoute, adaptable"
                 className="w-full px-3.5 py-2.5 text-sm border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
+            </div>
+          )}
+
+          {/* ÉTAPE 7 — Spécificités & exclusions (clé pour le matching) */}
+          {step === 7 && (
+            <div>
+              <h2 className="text-lg font-bold text-gray-900 mb-1">Précisions pour un matching pertinent</h2>
+              <p className="text-sm text-gray-500 mb-5">
+                C&apos;est ici qu&apos;on capture ce qui vous distingue d&apos;un concurrent générique — et ce qui vous écarte des AO qui ne sont pas pour vous.
+              </p>
+
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-5 text-xs text-amber-800">
+                💡 <strong>Exemple critique</strong> : si vous faites &quot;vidéo IA&quot; (pas de vidéo classique), dites-le ici.
+                Sans cette précision, le système vous proposera des AO de captation événementielle sans rapport avec votre métier.
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                    Vos spécificités par prestation <span className="text-gray-400">(recommandé)</span>
+                  </label>
+                  <textarea
+                    value={answers.prestations_specificites}
+                    onChange={e => setAnswers(a => ({ ...a, prestations_specificites: e.target.value }))}
+                    placeholder={"Ex :\n- Vidéo : uniquement vidéo générée par IA et motion design IA\n- Formation : IA générative et transformation numérique en entreprise\n- Workflows : automatisation IA via N8n / Make / agents"}
+                    rows={5}
+                    className="w-full px-3.5 py-2.5 text-sm border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                  />
+                  <p className="text-xs text-gray-400 mt-1">
+                    Plus vous êtes précis, mieux le matching écartera les AO génériques.
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                    Sujets / secteurs que vous refusez explicitement <span className="text-gray-400">(recommandé)</span>
+                  </label>
+                  <textarea
+                    value={answers.exclusions_libres}
+                    onChange={e => setAnswers(a => ({ ...a, exclusions_libres: e.target.value }))}
+                    placeholder={"Ex :\nBTP / gros œuvre\nCaptation événementielle ou tournage classique\nFormations BAFA, sécurité, réglementaire"}
+                    rows={4}
+                    className="w-full px-3.5 py-2.5 text-sm border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                  />
+                  <p className="text-xs text-gray-400 mt-1">
+                    Le système pénalisera fortement les AO qui correspondent à ces exclusions.
+                  </p>
+                </div>
+              </div>
             </div>
           )}
 
