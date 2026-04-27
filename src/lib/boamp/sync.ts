@@ -172,14 +172,25 @@ function sleep(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
 
-/** Construit les paramètres de requête BOAMP */
+/** Construit les paramètres de requête BOAMP.
+ *
+ * Filtres :
+ * - dateparution >= dateFrom : sur la fenêtre de N derniers jours
+ * - datelimitereponse >= dateTo : on jette les annonces déjà expirées
+ * - type_marche = SERVICES OR type_marche IS NULL : alignement avec
+ *   le positionnement services de L'ADN. On garde aussi les NULL car
+ *   l'API ne classifie pas systématiquement (~1.6% de NULL sur les
+ *   nouvelles annonces, et les NULL contiennent souvent de vrais
+ *   services). Si besoin clients BTP/distrib plus tard, retirer cette
+ *   clause ou paramétrer via env BOAMP_NATURES_FILTER.
+ */
 function buildBoampParams(offset: number, dateFrom: string, dateTo: string): URLSearchParams {
   const params = new URLSearchParams()
   params.set('limit', String(PAGE_SIZE))
   params.set('offset', String(offset))
   params.set(
     'where',
-    `dateparution >= "${dateFrom}" AND datelimitereponse >= "${dateTo}"`
+    `dateparution >= "${dateFrom}" AND datelimitereponse >= "${dateTo}" AND (type_marche = "SERVICES" OR type_marche IS NULL)`,
   )
   params.set(
     'select',
