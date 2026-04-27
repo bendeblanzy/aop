@@ -7,10 +7,6 @@
     {
       "path": "/api/cron/sync-ted",
       "schedule": "0 6 * * *"
-    },
-    {
-      "path": "/api/cron/sync-atexo",
-      "schedule": "0 7 * * *"
     }
   ],
   "functions": {
@@ -20,7 +16,6 @@
     "src/app/api/veille/embed-profile/route.ts": { "maxDuration": 60 },
     "src/app/api/veille/tenders/route.ts": { "maxDuration": 60 },
     "src/app/api/cron/sync-boamp/route.ts": { "maxDuration": 300 },
-    "src/app/api/cron/sync-ted/route.ts": { "maxDuration": 300 },
-    "src/app/api/cron/sync-atexo/route.ts": { "maxDuration": 600 }
+    "src/app/api/cron/sync-ted/route.ts": { "maxDuration": 300 }
   }
 }
