@@ -56,15 +56,15 @@ export const ATEXO_PROVIDERS: ReadonlyArray<AtexoProviderConfig> = [
     enabled: true,
     mode: 'keyword', // 500+ AO actifs : filtrage utile
   },
+
+  // ─── Plateformes actives — mode listing (petit volume, keyword trop lent) ─
   {
     id: 'bdr',
     name: 'Marchés du département des Bouches-du-Rhône (13)',
     baseUrl: 'https://marches.departement13.fr',
     enabled: true,
-    mode: 'keyword', // V2 confirmé fonctionnel en keyword
+    mode: 'listing', // V3 : keyword loop timeout sans push — listing mode plus pertinent
   },
-
-  // ─── Plateformes actives — mode listing (petit volume, keyword trop lent) ─
   {
     id: 'pdl',
     name: 'Marchés publics Pays de la Loire',
