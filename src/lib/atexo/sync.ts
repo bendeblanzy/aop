@@ -54,18 +54,23 @@ interface ProviderRunResult {
 }
 
 /**
- * Lance un run Apify dédié à un seul provider (avec tous les keywords) et
- * retourne les items scrapés. Capture les exceptions pour ne pas crasher
- * Promise.all si une plateforme casse — on retourne un résultat vide avec
- * une erreur explicite.
+ * Lance un run Apify dédié à un seul provider et retourne les items scrapés.
+ * Le `mode` détermine si on passe les keywords (mode 'keyword') ou un tableau
+ * vide (mode 'listing' = scraping global /AllCons sans filtre keyword).
  */
 async function runOneProvider(
   provider: { id: AtexoProviderId; baseUrl: string },
   baseInput: Omit<AtexoActorInput, 'providers'>,
+  mode: 'keyword' | 'listing',
 ): Promise<ProviderRunResult> {
   const input: AtexoActorInput = {
     providers: [provider],
-    filters: baseInput.filters,
+    filters: {
+      ...baseInput.filters,
+      // Mode listing : on vide le tableau de keywords pour basculer le scraper
+      // sur le path /AllCons (1 sub-run global au lieu de N sub-runs par mot-clé).
+      keywords: mode === 'listing' ? [] : baseInput.filters.keywords,
+    },
     maxPagesPerProvider: baseInput.maxPagesPerProvider,
   }
   try {
@@ -90,7 +95,10 @@ export async function syncAtexoTenders(
   opts: SyncOptions = {},
 ): Promise<AtexoSyncResult> {
   const categorie = opts.categorie === undefined ? 'services' : opts.categorie
-  const providers = opts.providers ?? activeProviders().map(p => ({ id: p.id, baseUrl: p.baseUrl }))
+  // On garde le mode/baseUrl du config provider — utile pour décider keyword vs listing
+  const providersWithMode = opts.providers
+    ? opts.providers.map(p => ({ id: p.id, baseUrl: p.baseUrl, mode: 'keyword' as const }))
+    : activeProviders().map(p => ({ id: p.id, baseUrl: p.baseUrl, mode: p.mode }))
   const keywords = opts.keywords ?? ATEXO_KEYWORDS_COMM
   // V3 (2026-04-28) : passé de 21j à 15j — sur BOAMP le filtre 21j élimine
   // 64% des AO actifs, c'est trop strict pour des agences qui peuvent
@@ -111,7 +119,7 @@ export async function syncAtexoTenders(
 
   console.log(
     `[sync-atexo] Démarrage parallèle : categorie=${categorie}, `
-    + `providers=[${providers.map(p => p.id).join(', ')}] (${providers.length} runs Apify), `
+    + `providers=[${providersWithMode.map(p => `${p.id}(${p.mode})`).join(', ')}] (${providersWithMode.length} runs Apify), `
     + `keywords=${keywords.length}, minDaysUntilDeadline=${minDaysUntilDeadline}`,
   )
 
@@ -119,7 +127,11 @@ export async function syncAtexoTenders(
 
   // 1 : trigger N runs Apify en parallèle (1 par provider)
   // Apify supporte largement la concurrence — pas de back-pressure ici.
-  const runResults = await Promise.all(providers.map(p => runOneProvider(p, baseInput)))
+  const runResults = await Promise.all(
+    providersWithMode.map(p =>
+      runOneProvider({ id: p.id, baseUrl: p.baseUrl }, baseInput, p.mode),
+    ),
+  )
 
   const wallMs = Date.now() - wallStart
 

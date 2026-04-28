@@ -15,6 +15,17 @@ export interface AtexoProviderConfig {
   baseUrl: string
   /** Activé par défaut dans le run quotidien */
   enabled: boolean
+  /**
+   * Mode de scraping :
+   *   - 'keyword' : 1 sub-run par mot-clé (ATEXO_KEYWORDS_COMM). Ciblé,
+   *     adapté aux plateformes à gros volume (PLACE = 2000+ AO actifs)
+   *     où on doit filtrer côté actor.
+   *   - 'listing' : 1 sub-run unique sur /AllCons (tous les services).
+   *     Adapté aux petites plateformes régionales où le keyword loop
+   *     prend trop de temps (~50s/keyword × 22 = 1100s) sans gain de
+   *     filtrage. Le scoring vectoriel filtre côté Next.js.
+   */
+  mode: 'keyword' | 'listing'
 }
 
 // V3 (Playwright, 2026-04-28) : grâce au scraper navigateur, le hard-cap
@@ -30,42 +41,50 @@ export interface AtexoProviderConfig {
 //   🪦 Domaine mort (ERR_NAME_NOT_RESOLVED, plateforme migrée ou retirée) :
 //      - Le Nord.
 export const ATEXO_PROVIDERS: ReadonlyArray<AtexoProviderConfig> = [
-  // ─── Plateformes actives ──────────────────────────────────────────────
+  // ─── Plateformes actives — mode keyword (gros volume, filtrage utile) ─
   {
     id: 'place',
     name: "PLACE — Plateforme des Achats de l'État",
     baseUrl: 'https://www.marches-publics.gouv.fr',
     enabled: true,
+    mode: 'keyword', // 2000+ AO actifs : filtrage par keyword obligatoire
   },
   {
     id: 'mxm',
     name: 'Maximilien — Marchés franciliens (Île-de-France)',
     baseUrl: 'https://marches.maximilien.fr',
     enabled: true,
+    mode: 'keyword', // 500+ AO actifs : filtrage utile
   },
   {
     id: 'bdr',
     name: 'Marchés du département des Bouches-du-Rhône (13)',
     baseUrl: 'https://marches.departement13.fr',
     enabled: true,
+    mode: 'keyword', // V2 confirmé fonctionnel en keyword
   },
+
+  // ─── Plateformes actives — mode listing (petit volume, keyword trop lent) ─
   {
     id: 'pdl',
     name: 'Marchés publics Pays de la Loire',
     baseUrl: 'https://marchespublics.paysdelaloire.fr',
-    enabled: true, // V3 : confirmé fonctionnel le 2026-04-28
+    enabled: true,
+    mode: 'listing', // ~50s/keyword × 22 = 1100s : trop, listing global plus rapide
   },
   {
     id: 'adullact',
     name: "Adullact — Centrale d'achat collectivités",
     baseUrl: 'https://webmarche.adullact.org',
-    enabled: true, // V3 : formulaire OK (peu d'AO communication, mais ingestion utile)
+    enabled: true,
+    mode: 'listing',
   },
   {
     id: 'mtp3m',
     name: 'Marchés Montpellier Méditerranée Métropole',
     baseUrl: 'https://marches.montpellier3m.fr',
-    enabled: true, // V3 : formulaire OK
+    enabled: true,
+    mode: 'listing',
   },
 
   // ─── Désactivées : formulaire avancé variant — V4 pour adapter sélecteurs ─
@@ -74,12 +93,14 @@ export const ATEXO_PROVIDERS: ReadonlyArray<AtexoProviderConfig> = [
     name: 'Marchés publics Grand Est',
     baseUrl: 'https://marchespublics.grandest.fr',
     enabled: false,
+    mode: 'keyword',
   },
   {
     id: 'alsace',
     name: 'Alsace Marchés Publics',
     baseUrl: 'https://alsacemarchespublics.eu',
     enabled: false,
+    mode: 'keyword',
   },
 
   // ─── Désactivée : domaine inaccessible (DNS) ─────────────────────────
@@ -88,6 +109,7 @@ export const ATEXO_PROVIDERS: ReadonlyArray<AtexoProviderConfig> = [
     name: 'Marchés publics Département du Nord (59) — DOMAINE MORT',
     baseUrl: 'https://marchespublics.lenord.fr',
     enabled: false,
+    mode: 'keyword',
   },
 ] as const
 
