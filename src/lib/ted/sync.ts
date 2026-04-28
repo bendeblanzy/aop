@@ -124,6 +124,40 @@ function cleanDate(v: unknown): string | null {
 }
 
 /**
+ * Construit le filtre CPV familles pertinentes pour la veille L'ADN.
+ *
+ * Familles retenues (niveau 2 chiffres) :
+ *   22* — Imprimés, édition, magazines, presse (ex: production éditoriale)
+ *   32* — Équipements radio/TV/audiovisuel/photo (ex: location matériel AV, broadcast)
+ *   79* — Services aux entreprises : communication, marketing, publicité, RP,
+ *          événementiel, organisation de manifestations, études de marché
+ *   92* — Services culturels, loisirs, sport : audiovisuel, production vidéo/film,
+ *          services culturels, événements culturels, musées, théâtres
+ *
+ * Logique : `classification-cpv >= 79000000 AND classification-cpv <= 79999999`
+ * couvre tous les codes de la famille 79 (TED stocke les CPV sans tiret-checksum).
+ * L'OR entre familles est enveloppé dans des parenthèses pour s'insérer
+ * correctement dans la chaîne AND principale de buildQuery().
+ *
+ * Note : les familles 22 et 32 sont techniquement "fournitures/équipements" mais
+ * des marchés de *services* (production imprimée, prestation AV) y tombent quand
+ * le pouvoir adjudicateur classe par objet du contrat plutôt que par nature.
+ * Le filtre `contract-nature = "services"` en amont réduit déjà le bruit.
+ */
+function buildCpvFilter(): string {
+  const families: [number, number][] = [
+    [22_000_000, 22_999_999], // Imprimés & édition
+    [32_000_000, 32_999_999], // Équipements radio/TV/AV
+    [79_000_000, 79_999_999], // Services aux entreprises (comm, mktg, pub, événementiel)
+    [92_000_000, 92_999_999], // Services culturels, loisirs, sport (AV, production, culture)
+  ]
+  const parts = families
+    .map(([lo, hi]) => `(classification-cpv >= ${lo} AND classification-cpv <= ${hi})`)
+    .join(' OR ')
+  return `(${parts})`
+}
+
+/**
  * Construit la query TED EQL.
  *
  * NB : TED v3 attend les dates au format YYYYMMDD (8 chiffres, sans tirets) ou
@@ -137,6 +171,9 @@ function cleanDate(v: unknown): string | null {
  * - `contract-nature = "services"` = uniquement les marchés de services
  *   (exclut travaux et fournitures, alignement avec le positionnement
  *   services de L'ADN). À élargir plus tard si besoin clients BTP/distrib.
+ * - `buildCpvFilter()` = restreint aux 4 familles CPV pertinentes (79, 92, 22, 32)
+ *   pour éliminer les marchés hors-périmètre (IT, BTP, santé, transport…)
+ *   et améliorer la densité signal/bruit avant scoring vectoriel.
  */
 function buildQuery(daysBack: number): string {
   return [
@@ -144,6 +181,7 @@ function buildQuery(daysBack: number): string {
     `notice-type IN (cn-standard cn-social cn-desg)`,
     `place-of-performance-country-lot = "FRA"`,
     `contract-nature = "services"`,
+    buildCpvFilter(),
   ].join(' AND ')
 }
 
