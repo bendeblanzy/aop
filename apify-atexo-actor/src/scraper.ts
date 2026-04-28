@@ -1,6 +1,7 @@
 import { Actor, log } from 'apify'
 import { chromium, type Browser, type BrowserContext, type Page } from 'playwright'
 import { parseListingPage } from './parse'
+import { enrichItemsWithDetails } from './fetchDetail'
 import type { AtexoApifyItem, AtexoProviderInput, AtexoProviderId } from './types'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -53,6 +54,18 @@ interface ScrapeOptions {
   keywords: string[]
   /** 0 = pas de filtre */
   minDaysUntilDeadline: number
+  /**
+   * P6 (2026-04-29) — Enrichissement via fiche de détail.
+   * Si true, après la collecte listing, on fetch en HTTP les pages
+   * /app.php/entreprise/consultation/… pour extraire CPV, valeur estimée, lots.
+   * Coût ≈ 2s pour 8 fetches parallèles (50 items → ~12s supplémentaires).
+   */
+  fetchDetails: boolean
+  /**
+   * Nombre max d'items à enrichir par provider (pour contrôler le temps total).
+   * Défaut 50 — couverture ~80% des items PLACE sans risquer le timeout 420s.
+   */
+  maxDetailFetches: number
 }
 
 interface FilterContext {
@@ -62,7 +75,8 @@ interface FilterContext {
 }
 
 interface SubRunResult {
-  pushed: number
+  /** Items collectés (non encore pushés — le push est différé à scrapeProvider). */
+  items: AtexoApifyItem[]
   pagesFetched: number
   truncated: boolean
 }
@@ -322,7 +336,7 @@ async function scrapeSubRun(
   const scopeLabel = keyword ? `${provider.id}:"${keyword}"` : `${provider.id}:listing`
 
   let context: BrowserContext | null = null
-  let pushed = 0
+  const collectedItems: AtexoApifyItem[] = []
   let pagesFetched = 0
   let truncated = false
 
@@ -348,7 +362,7 @@ async function scrapeSubRun(
     const formOk = await submitAdvancedSearch(page, provider.baseUrl, keyword, opts.categorie, scopeLabel)
     if (!formOk) {
       log.warning(`[${scopeLabel}] échec submit, sub-run abandonné`)
-      return { pushed: 0, pagesFetched: 0, truncated: false }
+      return { items: [], pagesFetched: 0, truncated: false }
     }
 
     // Boucle pagination — page actuelle déjà chargée
@@ -373,11 +387,10 @@ async function scrapeSubRun(
         break
       }
 
+      // Filtre + dédup — items bufferisés (le push est différé à scrapeProvider
+      // pour permettre l'enrichissement CPV/valeur via fetchDetail, P6).
       const filtered = filterAndDedupe(parsed.items, filterCtx)
-      if (filtered.length > 0) {
-        await Actor.pushData(filtered)
-        pushed += filtered.length
-      }
+      if (filtered.length > 0) collectedItems.push(...filtered)
 
       // Stop si on a atteint la dernière page connue
       if (parsed.totalPages !== null && pageNum >= parsed.totalPages) {
@@ -403,7 +416,7 @@ async function scrapeSubRun(
     if (context) await context.close().catch(() => {})
   }
 
-  return { pushed, pagesFetched, truncated }
+  return { items: collectedItems, pagesFetched, truncated }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -429,7 +442,7 @@ export async function scrapeProvider(
     minDaysUntilDeadline: opts.minDaysUntilDeadline,
   }
 
-  let totalPushed = 0
+  const allItems: AtexoApifyItem[] = []
   let totalPages = 0
   let anyTruncated = false
   let subRuns = 0
@@ -439,11 +452,11 @@ export async function scrapeProvider(
       for (const kw of opts.keywords) {
         try {
           const r = await scrapeSubRun(browser, provider, kw, opts, filterCtx)
-          totalPushed += r.pushed
+          allItems.push(...r.items)
           totalPages += r.pagesFetched
           anyTruncated ||= r.truncated
           subRuns++
-          log.info(`[${provider.id}:"${kw}"] ✓ ${r.pushed} items (cumul: ${totalPushed})`)
+          log.info(`[${provider.id}:"${kw}"] ✓ ${r.items.length} items (cumul: ${allItems.length})`)
         } catch (e) {
           log.warning(
             `[${provider.id}:"${kw}"] sub-run échec : ${e instanceof Error ? e.message : e}`,
@@ -455,16 +468,36 @@ export async function scrapeProvider(
       }
     } else {
       const r = await scrapeSubRun(browser, provider, null, opts, filterCtx)
-      totalPushed = r.pushed
+      allItems.push(...r.items)
       totalPages = r.pagesFetched
       anyTruncated = r.truncated
       subRuns = 1
+    }
+
+    // ── P6 : enrichissement fiche de détail (CPV, valeur estimée, lots) ──────
+    // Après la collecte listing (CPV=[]), on fetch les pages de détail en HTTP
+    // pour récupérer les codes CPV — clé pour améliorer l'embedding quality.
+    // maxDetailFetches (défaut 50) contrôle le budget temps (≈ 12s pour 50 items).
+    if (opts.fetchDetails && allItems.length > 0) {
+      const cap = Math.min(allItems.length, opts.maxDetailFetches)
+      log.info(`[${provider.id}] P6: fetch details pour ${cap}/${allItems.length} items...`)
+      try {
+        const { enriched, withCpv } = await enrichItemsWithDetails(allItems, cap)
+        log.info(`[${provider.id}] P6: ${enriched} enrichis, ${withCpv} avec CPV`)
+      } catch (e) {
+        log.warning(`[${provider.id}] P6: enrichissement échoué (non-fatal): ${e instanceof Error ? e.message : e}`)
+      }
+    }
+
+    // Push tout en une fois (après enrichissement éventuel)
+    if (allItems.length > 0) {
+      await Actor.pushData(allItems)
     }
   } finally {
     if (ownsBrowser) await browser.close().catch(() => {})
   }
 
-  return { pushed: totalPushed, pagesFetched: totalPages, truncated: anyTruncated, subRuns }
+  return { pushed: allItems.length, pagesFetched: totalPages, truncated: anyTruncated, subRuns }
 }
 
 /** Lance un Chromium headless avec les flags adaptés à un container Apify. */

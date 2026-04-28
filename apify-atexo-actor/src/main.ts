@@ -43,13 +43,19 @@ async function main(): Promise<void> {
     maxPagesPerProvider: Math.min(Math.max(1, input.maxPagesPerProvider ?? 50), 500),
     keywords: Array.isArray(input.filters?.keywords) ? input.filters!.keywords : [],
     minDaysUntilDeadline: Math.max(0, input.filters?.minDaysUntilDeadline ?? 21),
+    // P6 (2026-04-29) : enrichissement CPV/valeur/lots via fiche de détail.
+    // Activé par défaut — coût ~12s pour 50 items (8 fetches parallèles × 200-800ms).
+    // Budget total PLACE : ~294s listing + ~15s details = ~309s << timeout 420s.
+    fetchDetails: true,
+    maxDetailFetches: 50,
   }
 
   log.info(
     `[${SCRAPER_VERSION}] Démarrage Atexo MPE — `
     + `providers=[${input.providers.map((p) => p.id).join(', ')}], `
     + `categorie=${opts.categorie}, keywords=[${opts.keywords.join(', ')}], `
-    + `minDaysUntilDeadline=${opts.minDaysUntilDeadline}, maxPages=${opts.maxPagesPerProvider}`,
+    + `minDaysUntilDeadline=${opts.minDaysUntilDeadline}, maxPages=${opts.maxPagesPerProvider}, `
+    + `fetchDetails=${opts.fetchDetails} (max ${opts.maxDetailFetches})`,
   )
 
   let totalPushed = 0

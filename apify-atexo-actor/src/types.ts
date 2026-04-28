@@ -5,13 +5,13 @@
 export type AtexoProviderId =
   | 'place'      // marches-publics.gouv.fr (PLACE)
   | 'mxm'        // marches.maximilien.fr
-  | 'grandest'   // marchespublics.grandest.fr
+  | 'grandest'   // marchespublics.grandest.fr (disabled — moteur ColdFusion, ≠ PRADO)
   | 'pdl'        // marchespublics.paysdelaloire.fr
-  | 'alsace'     // alsacemarchespublics.eu
+  | 'alsace'     // plateforme.alsacemarchespublics.eu (PRADO — baseUrl corrigé P2)
   | 'adullact'   // webmarche.adullact.org (centrale collectivités)
   | 'bdr'        // marches.departement13.fr (Bouches-du-Rhône)
-  | 'lenord'     // marchespublics.lenord.fr (Nord)
-  | 'mtp3m'      // marches.montpellier3m.fr (Montpellier Métropole)
+  | 'mtp3m'      // marches.montpellier3m.fr (Montpellier Métropole, disabled — 0 AO)
+  // Note : 'lenord' retiré le 2026-04-28 — domaine mort (ERR_NAME_NOT_RESOLVED)
 
 export interface AtexoProviderInput {
   id: AtexoProviderId
