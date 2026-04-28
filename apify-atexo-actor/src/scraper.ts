@@ -180,23 +180,16 @@ async function submitAdvancedSearch(
     }
   }
 
-  // 3. rechercheFloue — case à cocher "recherche floue" pour matcher pluriels/variantes.
-  // Sur PLACE l'input HTML est `display:none` (le visuel est un span stylé), donc
-  // `check()` même avec force échoue. On force la valeur en DOM directement :
-  // c'est ce que la soumission du form envoie de toute façon.
-  const flou = page.locator('input[name$="$AdvancedSearch$rechercheFloue"]').first()
-  if ((await flou.count()) > 0) {
-    try {
-      await flou.evaluate((el) => {
-        const inp = el as HTMLInputElement
-        inp.checked = true
-        // Déclenche l'événement pour PRADO si script attaché
-        inp.dispatchEvent(new Event('change', { bubbles: true }))
-      })
-    } catch {
-      // Pas grave si JS échoue : la recherche stricte est déjà bonne.
-    }
-  }
+  // 3. rechercheFloue — désactivée (P5, 2026-04-28).
+  // La recherche floue PRADO matchait des AO hors-périmètre (ex: "film" →
+  // "film de protection pour véhicules" → prestations de motorisation UGAP).
+  // Nos keywords sont déjà larges (22 termes) et sans accents (stripAccents).
+  // Le scoring vectoriel pgvector côté Next.js absorbe les variantes sémantiques.
+  // → On laisse le checkbox dans son état par défaut (non coché = recherche stricte).
+  // Pour réactiver : replacer la valeur `inp.checked` par `true` ci-dessous.
+  //
+  // const flou = page.locator('input[name$="$AdvancedSearch$rechercheFloue"]').first()
+  // if ((await flou.count()) > 0) { await flou.evaluate(el => { (el as HTMLInputElement).checked = true }) }
 
   // 4. Cliquer "Lancer la recherche" — postback complet PRADO → on attend "load".
   // Sur PLACE/Maximilien le bouton est un <input type="submit"> ;
