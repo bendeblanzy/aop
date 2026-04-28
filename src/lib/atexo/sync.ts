@@ -65,9 +65,11 @@ export async function syncAtexoTenders(
       keywords: [...keywords],
       minDaysUntilDeadline,
     },
-    // V3 Playwright : hard-cap PRADO levé. 50 pages × 20 items = 1000 max
-    // par sub-run, largement assez pour couvrir le longtail des keywords.
-    maxPagesPerProvider: opts.maxPagesPerProvider ?? 50,
+    // V3 Playwright : hard-cap PRADO levé. 30 pages × 20 items = 600 max
+    // par sub-run, suffisant pour couvrir les keywords les plus volumineux
+    // (PLACE/communication = 32 résultats sur 4 pages typiquement).
+    // Plus haut serait inutile et coûterait des secondes au sync prod.
+    maxPagesPerProvider: opts.maxPagesPerProvider ?? 30,
   }
 
   console.log(

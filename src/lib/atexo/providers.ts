@@ -103,22 +103,20 @@ export function activeProviders(): ReadonlyArray<AtexoProviderConfig> {
  *
  * Chaque keyword génère un sub-run sur le formulaire de recherche avancée
  * Atexo. La déduplication par idweb absorbe les recouvrements entre keywords.
+ *
+ * V3 : on a réduit le set de 16 → 8 keywords essentiels pour tenir sous le
+ * timeout Apify de 480s (6 plateformes × 8 keywords × ~10-25s/sub-run).
+ * Les keywords retirés (graphisme, marketing, media, imprimerie, edition,
+ * seminaire, salon, campagne) sont largement absorbés par "communication",
+ * "publicite" et "evenementiel" via la recherche floue PRADO.
  */
 export const ATEXO_KEYWORDS_COMM: ReadonlyArray<string> = [
   'communication',
   'evenementiel',
   'audiovisuel',
   'video',
-  'graphisme',
   'design',
   'publicite',
-  'marketing',
-  'media',
-  'imprimerie',
-  'edition',
-  'seminaire',
-  'salon',
-  'campagne',
   'identite visuelle',
   'relations publiques',
 ] as const
