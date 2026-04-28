@@ -1,5 +1,5 @@
 import { runActorAndCollect } from './apify-client'
-import { activeProviders } from './providers'
+import { activeProviders, ATEXO_KEYWORDS_COMM } from './providers'
 import { transformAtexoItem } from './transform'
 import type { AtexoActorInput, AtexoSyncResult } from './types'
 
@@ -19,14 +19,22 @@ import type { AtexoActorInput, AtexoSyncResult } from './types'
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface SyncOptions {
-  /** Nombre de jours à remonter (défaut 7, max 30) */
+  /** [legacy] Nombre de jours à remonter — kept for compat avec l'ancien call signature */
   daysBack?: number
   /** Filtre type marché — 'services' pour ne récupérer que les services (défaut). null = tous */
   categorie?: 'services' | 'travaux' | 'fournitures' | null
-  /** Garde-fou : limite de pages scrapées par plateforme (défaut 50) */
+  /** Garde-fou : limite de pages scrapées par plateforme/keyword (défaut 3, hard-cap PRADO) */
   maxPagesPerProvider?: number
+  /**
+   * Override keywords. Si non fourni, on utilise ATEXO_KEYWORDS_COMM (16 keywords
+   * métier ciblant communication/événementiel/audiovisuel/design).
+   * Passer [] pour basculer en mode listing (tous AO non filtrés).
+   */
+  keywords?: ReadonlyArray<string>
+  /** Délai minimum avant date limite de remise pour ingérer (défaut 21j). */
+  minDaysUntilDeadline?: number
   /** Override providers (sinon : tous les providers `enabled: true` de providers.ts) */
-  providers?: ReadonlyArray<{ id: 'place' | 'mxm'; baseUrl: string }>
+  providers?: ReadonlyArray<{ id: import('./types').AtexoProviderId; baseUrl: string }>
 }
 
 /**
@@ -40,19 +48,26 @@ export async function syncAtexoTenders(
   supabaseAdmin: any,
   opts: SyncOptions = {},
 ): Promise<AtexoSyncResult> {
-  const daysBack = Math.min(Math.max(1, opts.daysBack ?? 7), 30)
   const categorie = opts.categorie === undefined ? 'services' : opts.categorie
   const providers = opts.providers ?? activeProviders().map(p => ({ id: p.id, baseUrl: p.baseUrl }))
+  const keywords = opts.keywords ?? ATEXO_KEYWORDS_COMM
+  const minDaysUntilDeadline = opts.minDaysUntilDeadline ?? 21
 
   const input: AtexoActorInput = {
     providers: [...providers],
-    filters: { categorie, maxAgeDays: daysBack },
-    maxPagesPerProvider: opts.maxPagesPerProvider ?? 50,
+    filters: {
+      categorie,
+      maxAgeDays: opts.daysBack ?? 7, // legacy field kept for actor compat
+      keywords: [...keywords],
+      minDaysUntilDeadline,
+    },
+    maxPagesPerProvider: opts.maxPagesPerProvider ?? 3,
   }
 
   console.log(
-    `[sync-atexo] Démarrage : daysBack=${daysBack}, categorie=${categorie}, `
-    + `providers=[${providers.map(p => p.id).join(', ')}]`,
+    `[sync-atexo] Démarrage : categorie=${categorie}, `
+    + `providers=[${providers.map(p => p.id).join(', ')}], `
+    + `keywords=${keywords.length}, minDaysUntilDeadline=${minDaysUntilDeadline}`,
   )
 
   // 1-3 : trigger + wait + fetch

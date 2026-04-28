@@ -10,24 +10,52 @@
       "editor": "json",
       "default": [
         { "id": "place", "baseUrl": "https://www.marches-publics.gouv.fr" },
-        { "id": "mxm", "baseUrl": "https://marches.maximilien.fr" }
+        { "id": "mxm", "baseUrl": "https://marches.maximilien.fr" },
+        { "id": "grandest", "baseUrl": "https://marchespublics.grandest.fr" },
+        { "id": "pdl", "baseUrl": "https://marchespublics.paysdelaloire.fr" },
+        { "id": "alsace", "baseUrl": "https://alsacemarchespublics.eu" },
+        { "id": "adullact", "baseUrl": "https://webmarche.adullact.org" },
+        { "id": "bdr", "baseUrl": "https://marches.departement13.fr" },
+        { "id": "lenord", "baseUrl": "https://marchespublics.lenord.fr" },
+        { "id": "mtp3m", "baseUrl": "https://marches.montpellier3m.fr" }
       ]
     },
     "filters": {
       "title": "Filtres",
       "type": "object",
-      "description": "Filtres appliqués au scraping (catégorie de marché, fraîcheur).",
+      "description": "categorie (services/travaux/fournitures/null), keywords[] (sub-runs sur formulaire avancé, sans accents), minDaysUntilDeadline (défaut 21j).",
       "editor": "json",
-      "default": { "categorie": "services", "maxAgeDays": 7 }
+      "default": {
+        "categorie": "services",
+        "keywords": [
+          "communication",
+          "evenementiel",
+          "audiovisuel",
+          "video",
+          "graphisme",
+          "design",
+          "publicite",
+          "marketing",
+          "media",
+          "imprimerie",
+          "edition",
+          "seminaire",
+          "salon",
+          "campagne",
+          "identite visuelle",
+          "relations publiques"
+        ],
+        "minDaysUntilDeadline": 21
+      }
     },
     "maxPagesPerProvider": {
-      "title": "Pages max par plateforme",
+      "title": "Pages max par sub-run",
       "type": "integer",
-      "description": "Garde-fou : nombre maximum de pages de listing à parcourir par plateforme.",
+      "description": "Garde-fou : nombre maximum de pages de listing à parcourir par plateforme/keyword. Hard-cap PRADO = 3.",
       "editor": "number",
-      "default": 50,
+      "default": 3,
       "minimum": 1,
-      "maximum": 500
+      "maximum": 3
     }
   },
   "required": ["providers"]

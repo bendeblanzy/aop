@@ -2,7 +2,16 @@
 // "local" pour que l'actor reste indépendant. Le contrat de sortie (AtexoApifyItem)
 // DOIT rester en miroir avec celui consommé côté Next.
 
-export type AtexoProviderId = 'place' | 'mxm'
+export type AtexoProviderId =
+  | 'place'      // marches-publics.gouv.fr (PLACE)
+  | 'mxm'        // marches.maximilien.fr
+  | 'grandest'   // marchespublics.grandest.fr
+  | 'pdl'        // marchespublics.paysdelaloire.fr
+  | 'alsace'     // alsacemarchespublics.eu
+  | 'adullact'   // webmarche.adullact.org (centrale collectivités)
+  | 'bdr'        // marches.departement13.fr (Bouches-du-Rhône)
+  | 'lenord'     // marchespublics.lenord.fr (Nord)
+  | 'mtp3m'      // marches.montpellier3m.fr (Montpellier Métropole)
 
 export interface AtexoProviderInput {
   id: AtexoProviderId
@@ -12,8 +21,23 @@ export interface AtexoProviderInput {
 export interface AtexoActorInput {
   providers: AtexoProviderInput[]
   filters?: {
+    /** Catégorie marché : 'services' (défaut) | 'travaux' | 'fournitures' | null = tous */
     categorie?: 'services' | 'travaux' | 'fournitures' | null
+    /** [Legacy, ignoré côté actor] */
     maxAgeDays?: number
+    /**
+     * Mots-clés à rechercher (recherche métier).
+     * Si présent : on POST sur le formulaire de recherche avancée Atexo
+     * (un sub-run par keyword), au lieu du listing /AllCons par défaut.
+     * Important : pas d'accents (PRADO ne supporte pas l'UTF-8 dans ce champ).
+     */
+    keywords?: string[]
+    /**
+     * Nombre minimum de jours avant date limite de remise pour qu'un AO soit
+     * pushé. Défaut 21j (= ne push que les AO laissant ≥ 3 semaines).
+     * Mettre 0 pour désactiver le filtre fraîcheur.
+     */
+    minDaysUntilDeadline?: number
   }
   maxPagesPerProvider?: number
 }

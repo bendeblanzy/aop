@@ -11,7 +11,16 @@
  * Identifiants des plateformes Atexo MPE supportées.
  * À étendre quand on couvre de nouvelles plateformes (PROvigueur, etc.).
  */
-export type AtexoProviderId = 'place' | 'mxm'
+export type AtexoProviderId =
+  | 'place'      // marches-publics.gouv.fr (PLACE)
+  | 'mxm'        // marches.maximilien.fr
+  | 'grandest'   // marchespublics.grandest.fr
+  | 'pdl'        // marchespublics.paysdelaloire.fr
+  | 'alsace'     // alsacemarchespublics.eu
+  | 'adullact'   // webmarche.adullact.org
+  | 'bdr'        // marches.departement13.fr
+  | 'lenord'     // marchespublics.lenord.fr
+  | 'mtp3m'      // marches.montpellier3m.fr
 
 /**
  * Item produit par l'actor Apify `atexo-mpe-scraper` dans son dataset.
@@ -104,11 +113,15 @@ export interface AtexoActorInput {
   }>
   filters: {
     /** 'services' | 'travaux' | 'fournitures' | null (= tous) */
-    categorie: string | null
-    /** Limite de fraîcheur — n'extraire que les AO publiés depuis ≤ N jours */
+    categorie: 'services' | 'travaux' | 'fournitures' | null
+    /** [legacy, ignoré côté actor] */
     maxAgeDays: number
+    /** Mots-clés métier à scraper (un sub-run par keyword). Sans accents. */
+    keywords?: string[]
+    /** Délai minimum avant date limite de remise pour push (défaut 21j). */
+    minDaysUntilDeadline?: number
   }
-  /** Limite la quantité de pages scrapées par plateforme (sécurité) */
+  /** Limite la quantité de pages scrapées par plateforme/keyword (sécurité) */
   maxPagesPerProvider?: number
 }
 

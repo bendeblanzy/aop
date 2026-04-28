@@ -13,7 +13,7 @@ import {
 import { parseListingPage } from './parse'
 import type { AtexoProviderId } from './types'
 
-const PROVIDERS: Record<AtexoProviderId, string> = {
+const PROVIDERS: Partial<Record<AtexoProviderId, string>> = {
   place: 'https://www.marches-publics.gouv.fr',
   mxm: 'https://marches.maximilien.fr',
 }
@@ -26,7 +26,11 @@ const TARGET_NEXT_BOT = 'ctl0$CONTENU_PAGE$resultSearch$PagerBottom$ctl2'
 
 async function main() {
   const id = (process.argv[2] as AtexoProviderId) || 'place'
-  const baseUrl = PROVIDERS[id]
+  const baseUrl = PROVIDERS[id as keyof typeof PROVIDERS]
+  if (!baseUrl) {
+    console.error(`Unknown provider: ${id}`)
+    process.exit(1)
+  }
   const url = baseUrl + '/index.php?page=Entreprise.EntrepriseAdvancedSearch&AllCons'
   console.log(`\n=== ${id.toUpperCase()} : ${NUM_PAGES} pages d'affilée ===\n`)
 

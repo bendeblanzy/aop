@@ -33,17 +33,20 @@ async function main(): Promise<void> {
 
   const opts = {
     categorie: input.filters?.categorie ?? 'services',
-    maxAgeDays: Math.min(Math.max(1, input.filters?.maxAgeDays ?? 7), 30),
-    maxPagesPerProvider: Math.min(Math.max(1, input.maxPagesPerProvider ?? 50), 500),
+    maxPagesPerProvider: Math.min(Math.max(1, input.maxPagesPerProvider ?? 3), 500),
+    keywords: Array.isArray(input.filters?.keywords) ? input.filters!.keywords : [],
+    minDaysUntilDeadline: Math.max(0, input.filters?.minDaysUntilDeadline ?? 21),
   }
 
   log.info(
-    `Démarrage scrape Atexo MPE — providers=[${input.providers.map(p => p.id).join(', ')}], `
-    + `categorie=${opts.categorie}, maxAgeDays=${opts.maxAgeDays}, maxPages=${opts.maxPagesPerProvider}`,
+    `Démarrage Atexo MPE — providers=[${input.providers.map(p => p.id).join(', ')}], `
+    + `categorie=${opts.categorie}, keywords=[${opts.keywords.join(', ')}], `
+    + `minDaysUntilDeadline=${opts.minDaysUntilDeadline}, maxPages=${opts.maxPagesPerProvider}`,
   )
 
   let totalPushed = 0
   let totalPages = 0
+  let totalSubRuns = 0
   const errors: Array<{ provider: string; error: string }> = []
 
   for (const provider of input.providers) {
@@ -51,9 +54,10 @@ async function main(): Promise<void> {
       const r = await scrapeProvider(provider, opts)
       totalPushed += r.pushed
       totalPages += r.pagesFetched
+      totalSubRuns += r.subRuns
       log.info(
-        `[${provider.id}] ✓ ${r.pushed} items poussés, ${r.pagesFetched} pages scrapées`
-        + (r.truncated ? ' (TRONQUÉ — augmenter maxPagesPerProvider)' : ''),
+        `[${provider.id}] ✓ ${r.pushed} items, ${r.pagesFetched} pages, ${r.subRuns} sub-runs`
+        + (r.truncated ? ' (TRONQUÉ)' : ''),
       )
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
@@ -62,11 +66,12 @@ async function main(): Promise<void> {
     }
   }
 
-  log.info(`Total : ${totalPushed} items poussés, ${totalPages} pages scrapées, ${errors.length} provider(s) en erreur`)
+  log.info(`Total : ${totalPushed} items, ${totalPages} pages, ${totalSubRuns} sub-runs, ${errors.length} provider(s) en erreur`)
 
   await Actor.setValue('SUMMARY', {
     totalPushed,
     totalPages,
+    totalSubRuns,
     errors,
     finishedAt: new Date().toISOString(),
   })

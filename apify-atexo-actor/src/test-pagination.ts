@@ -18,14 +18,14 @@ import {
 import { parseListingPage } from './parse'
 import type { AtexoProviderId } from './types'
 
-const PROVIDERS: Record<AtexoProviderId, string> = {
+const PROVIDERS: Partial<Record<AtexoProviderId, string>> = {
   place: 'https://www.marches-publics.gouv.fr',
   mxm: 'https://marches.maximilien.fr',
 }
 
 async function main() {
   const id = (process.argv[2] as AtexoProviderId) || 'place'
-  const baseUrl = PROVIDERS[id]
+  const baseUrl = PROVIDERS[id as keyof typeof PROVIDERS]
   if (!baseUrl) {
     console.error(`Unknown provider: ${id}. Use 'place' or 'mxm'.`)
     process.exit(1)
