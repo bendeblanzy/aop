@@ -1,21 +1,26 @@
 import { runActorAndCollect } from './apify-client'
 import { activeProviders, ATEXO_KEYWORDS_COMM } from './providers'
 import { transformAtexoItem } from './transform'
-import type { AtexoActorInput, AtexoSyncResult } from './types'
+import type { AtexoActorInput, AtexoApifyItem, AtexoSyncResult, ApifyRun, AtexoProviderId } from './types'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Sync principal Atexo MPE.
 //
-// Pattern aligné sur `src/lib/ted/sync.ts` :
-//   1. Trigger un run Apify de l'actor `atexo-mpe-scraper`
-//   2. Wait jusqu'à SUCCEEDED (max 8 min)
-//   3. Fetch tous les items du dataset Apify
-//   4. Transform → upsert batch 50 dans `tenders` (onConflict: idweb)
-//   5. Filtre type_marche='SERVICES' pour rester aligné avec le scope projet
+// V3 (2026-04-28, parallélisation) :
+//   1. Pour chaque provider actif, on lance UN run Apify dédié (input avec
+//      un seul provider, mais tous les keywords). Les runs partent en
+//      parallèle via Promise.allSettled — Apify supporte largement la
+//      concurrence (32+ runs simultanés sur free tier).
+//   2. Chaque run a 420s de timeout pour scraper sa plateforme avec les
+//      22 keywords métier. Si un run TIMED-OUT, on récupère les items
+//      partiels via runActorAndCollect (et on continue avec les autres).
+//   3. On agrège tous les items, transform → upsert batch 50 dans `tenders`.
+//   4. Filtre type_marche='SERVICES' pour rester aligné avec le scope projet.
 //
-// L'embedding des nouveaux tenders se fait dans la route cron en aval
-// (cf. src/app/api/cron/sync-atexo/route.ts), pour rester homogène avec
-// les patterns BOAMP et TED.
+// Bénéfice vs V2/V3-séquentiel : au lieu de séquencer 6 plateformes en un
+// seul run (et timeout à PLACE+mxm), on couvre les 6 simultanément en ~7 min
+// max wall-clock. L'embedding des nouveaux tenders se fait dans la route
+// cron en aval (cf. src/app/api/cron/sync-atexo/route.ts).
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface SyncOptions {
@@ -26,23 +31,55 @@ interface SyncOptions {
   /**
    * Garde-fou : limite de pages scrapées par plateforme/keyword.
    * V2 (HTTP fetch) : hard-cap 3 (PRADO state corruption au-delà).
-   * V3 (Playwright, 2026-04-28) : plus de hard-cap, défaut bumped à 50.
+   * V3 (Playwright, 2026-04-28) : plus de hard-cap, défaut bumped à 30.
    */
   maxPagesPerProvider?: number
   /**
-   * Override keywords. Si non fourni, on utilise ATEXO_KEYWORDS_COMM (16 keywords
+   * Override keywords. Si non fourni, on utilise ATEXO_KEYWORDS_COMM (22 keywords
    * métier ciblant communication/événementiel/audiovisuel/design).
    * Passer [] pour basculer en mode listing (tous AO non filtrés).
    */
   keywords?: ReadonlyArray<string>
-  /** Délai minimum avant date limite de remise pour ingérer (défaut 21j). */
+  /** Délai minimum avant date limite de remise pour ingérer (défaut 15j). */
   minDaysUntilDeadline?: number
   /** Override providers (sinon : tous les providers `enabled: true` de providers.ts) */
-  providers?: ReadonlyArray<{ id: import('./types').AtexoProviderId; baseUrl: string }>
+  providers?: ReadonlyArray<{ id: AtexoProviderId; baseUrl: string }>
+}
+
+interface ProviderRunResult {
+  providerId: AtexoProviderId
+  items: AtexoApifyItem[]
+  run: ApifyRun | null
+  error: string | null
 }
 
 /**
- * Sync Atexo MPE — délègue le scraping à l'actor Apify, puis upsert dans Supabase.
+ * Lance un run Apify dédié à un seul provider (avec tous les keywords) et
+ * retourne les items scrapés. Capture les exceptions pour ne pas crasher
+ * Promise.all si une plateforme casse — on retourne un résultat vide avec
+ * une erreur explicite.
+ */
+async function runOneProvider(
+  provider: { id: AtexoProviderId; baseUrl: string },
+  baseInput: Omit<AtexoActorInput, 'providers'>,
+): Promise<ProviderRunResult> {
+  const input: AtexoActorInput = {
+    providers: [provider],
+    filters: baseInput.filters,
+    maxPagesPerProvider: baseInput.maxPagesPerProvider,
+  }
+  try {
+    const { items, run } = await runActorAndCollect(input)
+    return { providerId: provider.id, items, run, error: null }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    console.error(`[sync-atexo] Provider ${provider.id} run échoué : ${msg}`)
+    return { providerId: provider.id, items: [], run: null, error: msg }
+  }
+}
+
+/**
+ * Sync Atexo MPE — 1 run Apify par provider en parallèle, puis upsert dans Supabase.
  *
  * @param supabaseAdmin - client Supabase service_role
  * @param opts - options de sync
@@ -55,10 +92,12 @@ export async function syncAtexoTenders(
   const categorie = opts.categorie === undefined ? 'services' : opts.categorie
   const providers = opts.providers ?? activeProviders().map(p => ({ id: p.id, baseUrl: p.baseUrl }))
   const keywords = opts.keywords ?? ATEXO_KEYWORDS_COMM
-  const minDaysUntilDeadline = opts.minDaysUntilDeadline ?? 21
+  // V3 (2026-04-28) : passé de 21j à 15j — sur BOAMP le filtre 21j élimine
+  // 64% des AO actifs, c'est trop strict pour des agences qui peuvent
+  // répondre vite. 15j laisse une fenêtre raisonnable de réponse.
+  const minDaysUntilDeadline = opts.minDaysUntilDeadline ?? 15
 
-  const input: AtexoActorInput = {
-    providers: [...providers],
+  const baseInput = {
     filters: {
       categorie,
       maxAgeDays: opts.daysBack ?? 7, // legacy field kept for actor compat
@@ -66,23 +105,47 @@ export async function syncAtexoTenders(
       minDaysUntilDeadline,
     },
     // V3 Playwright : hard-cap PRADO levé. 30 pages × 20 items = 600 max
-    // par sub-run, suffisant pour couvrir les keywords les plus volumineux
-    // (PLACE/communication = 32 résultats sur 4 pages typiquement).
-    // Plus haut serait inutile et coûterait des secondes au sync prod.
+    // par sub-run, suffisant pour couvrir les keywords les plus volumineux.
     maxPagesPerProvider: opts.maxPagesPerProvider ?? 30,
   }
 
   console.log(
-    `[sync-atexo] Démarrage : categorie=${categorie}, `
-    + `providers=[${providers.map(p => p.id).join(', ')}], `
+    `[sync-atexo] Démarrage parallèle : categorie=${categorie}, `
+    + `providers=[${providers.map(p => p.id).join(', ')}] (${providers.length} runs Apify), `
     + `keywords=${keywords.length}, minDaysUntilDeadline=${minDaysUntilDeadline}`,
   )
 
-  // 1-3 : trigger + wait + fetch
-  const { items, run } = await runActorAndCollect(input)
+  const wallStart = Date.now()
 
-  // 4 : transform
-  const records = items
+  // 1 : trigger N runs Apify en parallèle (1 par provider)
+  // Apify supporte largement la concurrence — pas de back-pressure ici.
+  const runResults = await Promise.all(providers.map(p => runOneProvider(p, baseInput)))
+
+  const wallMs = Date.now() - wallStart
+
+  // 2 : agrégation des items + log par-provider
+  const allItems: AtexoApifyItem[] = []
+  const perProviderStats: Array<{ provider: string; items: number; status: string; runId: string | null }> = []
+  let firstRunId: string | null = null
+
+  for (const r of runResults) {
+    allItems.push(...r.items)
+    if (r.run && !firstRunId) firstRunId = r.run.id
+    perProviderStats.push({
+      provider: r.providerId,
+      items: r.items.length,
+      status: r.error ? 'ERROR' : (r.run?.status ?? 'NORUN'),
+      runId: r.run?.id ?? null,
+    })
+  }
+
+  console.log(
+    `[sync-atexo] Wall ${(wallMs / 1000).toFixed(1)}s — `
+    + perProviderStats.map(p => `${p.provider}:${p.items}(${p.status})`).join(', '),
+  )
+
+  // 3 : transform
+  const records = allItems
     .map(transformAtexoItem)
     .filter((r): r is NonNullable<ReturnType<typeof transformAtexoItem>> => r !== null)
 
@@ -93,9 +156,9 @@ export async function syncAtexoTenders(
     ? records.filter(r => r.type_marche === 'SERVICES' || r.type_marche === null)
     : records
 
-  const skipped = items.length - filtered.length
+  const skipped = allItems.length - filtered.length
 
-  // 5 : upsert par batch de 50, onConflict: idweb
+  // 4 : upsert par batch de 50, onConflict: idweb
   let inserted = 0
   let errors = 0
   const BATCH = 50
@@ -113,13 +176,17 @@ export async function syncAtexoTenders(
     }
   }
 
+  // Compute aggregate runtime: sum of per-provider runtimes (sequential equivalent),
+  // wall-clock = max (parallel reality)
+  const totalRunSecs = runResults.reduce((acc, r) => acc + (r.run?.stats?.runTimeSecs ?? 0), 0)
+
   const result: AtexoSyncResult = {
-    apifyRunId: run.id,
-    fetched: items.length,
+    apifyRunId: firstRunId ?? 'no-run',
+    fetched: allItems.length,
     inserted,
     skipped,
     errors,
-    apifyRunDurationSecs: run.stats?.runTimeSecs ?? null,
+    apifyRunDurationSecs: Math.round(totalRunSecs),
   }
 
   console.log('[sync-atexo] Résultat:', result)

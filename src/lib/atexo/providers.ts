@@ -104,19 +104,44 @@ export function activeProviders(): ReadonlyArray<AtexoProviderConfig> {
  * Chaque keyword génère un sub-run sur le formulaire de recherche avancée
  * Atexo. La déduplication par idweb absorbe les recouvrements entre keywords.
  *
- * V3 : on a réduit le set de 16 → 8 keywords essentiels pour tenir sous le
- * timeout Apify de 480s (6 plateformes × 8 keywords × ~10-25s/sub-run).
- * Les keywords retirés (graphisme, marketing, media, imprimerie, edition,
- * seminaire, salon, campagne) sont largement absorbés par "communication",
- * "publicite" et "evenementiel" via la recherche floue PRADO.
+ * Le champ keywordSearch Atexo cherche dans : référence + intitulé + objet
+ * de la consultation (placeholder du formulaire le confirme). On capture donc
+ * les AO qui mentionnent ces termes dans leur description courte aussi, pas
+ * seulement le titre.
+ *
+ * V3 (2026-04-28) : 22 keywords élargis couvrant les 8 axes métier :
+ * communication/marketing, événementiel, audiovisuel, design, identité
+ * visuelle, scénographie, édition, web/RS. Couverture pertinente vs noise
+ * absorbé par scoring vectoriel pgvector côté Next.js.
  */
 export const ATEXO_KEYWORDS_COMM: ReadonlyArray<string> = [
+  // ─── Communication & marketing ───────────────────────────────────────
   'communication',
+  'publicite',
+  'marketing',
+  'relations publiques',
+  // ─── Événementiel ────────────────────────────────────────────────────
   'evenementiel',
+  'salon',
+  'seminaire',
+  'festival',
+  'exposition',
+  // ─── Audiovisuel & vidéo ─────────────────────────────────────────────
   'audiovisuel',
   'video',
+  'film',
+  'podcast',
+  // ─── Design & graphisme ──────────────────────────────────────────────
   'design',
-  'publicite',
+  'graphisme',
   'identite visuelle',
-  'relations publiques',
+  'signaletique',
+  // ─── Scénographie ────────────────────────────────────────────────────
+  'scenographie',
+  // ─── Édition / Print ─────────────────────────────────────────────────
+  'edition',
+  'magazine',
+  // ─── Web / Réseaux sociaux ───────────────────────────────────────────
+  'site internet',
+  'reseaux sociaux',
 ] as const
