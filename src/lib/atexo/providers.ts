@@ -17,8 +17,14 @@ export interface AtexoProviderConfig {
   enabled: boolean
 }
 
+// Note V2 : sur les plateformes Atexo "régionales" (Grand Est, PdL, Alsace,
+// Adullact, Le Nord, Mtp3m), le formulaire de recherche avancée a des
+// variants mineurs de PRADO controls qui font que notre POST keyword
+// retourne 0 résultat. Ces 6 providers sont gardés `enabled: false` jusqu'à
+// reverse-engineering plateforme par plateforme. PLACE, Maximilien et
+// Bouches-du-Rhône fonctionnent avec le pattern actuel.
 export const ATEXO_PROVIDERS: ReadonlyArray<AtexoProviderConfig> = [
-  // ─── Plateformes nationales ────────────────────────────────────────────
+  // ─── Plateformes actives ──────────────────────────────────────────────
   {
     id: 'place',
     name: "PLACE — Plateforme des Achats de l'État",
@@ -26,58 +32,54 @@ export const ATEXO_PROVIDERS: ReadonlyArray<AtexoProviderConfig> = [
     enabled: true,
   },
   {
-    id: 'adullact',
-    name: 'Adullact — Centrale d\'achat collectivités',
-    baseUrl: 'https://webmarche.adullact.org',
-    enabled: true,
-  },
-
-  // ─── Régionales ────────────────────────────────────────────────────────
-  {
     id: 'mxm',
     name: 'Maximilien — Marchés franciliens (Île-de-France)',
     baseUrl: 'https://marches.maximilien.fr',
     enabled: true,
   },
   {
-    id: 'grandest',
-    name: 'Marchés publics Grand Est',
-    baseUrl: 'https://marchespublics.grandest.fr',
-    enabled: true,
-  },
-  {
-    id: 'pdl',
-    name: 'Marchés publics Pays de la Loire',
-    baseUrl: 'https://marchespublics.paysdelaloire.fr',
-    enabled: true,
-  },
-  {
-    id: 'alsace',
-    name: 'Alsace Marchés Publics',
-    baseUrl: 'https://alsacemarchespublics.eu',
-    enabled: true,
-  },
-
-  // ─── Départementales ───────────────────────────────────────────────────
-  {
     id: 'bdr',
     name: 'Marchés du département des Bouches-du-Rhône (13)',
     baseUrl: 'https://marches.departement13.fr',
     enabled: true,
   },
+
+  // ─── Plateformes en attente d'adaptation V3 (formulaire avancé variant) ─
+  {
+    id: 'adullact',
+    name: 'Adullact — Centrale d\'achat collectivités',
+    baseUrl: 'https://webmarche.adullact.org',
+    enabled: false,
+  },
+  {
+    id: 'grandest',
+    name: 'Marchés publics Grand Est',
+    baseUrl: 'https://marchespublics.grandest.fr',
+    enabled: false,
+  },
+  {
+    id: 'pdl',
+    name: 'Marchés publics Pays de la Loire',
+    baseUrl: 'https://marchespublics.paysdelaloire.fr',
+    enabled: false,
+  },
+  {
+    id: 'alsace',
+    name: 'Alsace Marchés Publics',
+    baseUrl: 'https://alsacemarchespublics.eu',
+    enabled: false,
+  },
   {
     id: 'lenord',
     name: 'Marchés publics Département du Nord (59)',
     baseUrl: 'https://marchespublics.lenord.fr',
-    enabled: true,
+    enabled: false,
   },
-
-  // ─── Métropoles ────────────────────────────────────────────────────────
   {
     id: 'mtp3m',
     name: 'Marchés Montpellier Méditerranée Métropole',
     baseUrl: 'https://marches.montpellier3m.fr',
-    enabled: true,
+    enabled: false,
   },
 ] as const
 
