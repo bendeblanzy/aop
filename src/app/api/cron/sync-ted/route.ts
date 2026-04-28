@@ -77,7 +77,23 @@ export async function POST(request: NextRequest) {
       console.error('[cron/sync-ted] Embedding error (non-fatal):', embedErr)
     }
 
-    return NextResponse.json({ success: true, result, embedded })
+    // Étape 3 : Purge des AO TED clos depuis plus de 7 jours
+    let purged = 0
+    try {
+      const { data: purgeData, error: purgeErr } = await adminClient
+        .from('tenders')
+        .delete()
+        .eq('source', 'ted')
+        .lt('datelimitereponse', new Date(Date.now() - 7 * 86400 * 1000).toISOString())
+        .select('idweb')
+      if (purgeErr) console.error('[cron/sync-ted] Purge error:', purgeErr.message)
+      else purged = purgeData?.length ?? 0
+      if (purged > 0) console.log(`[cron/sync-ted] Purgé ${purged} AO TED clos`)
+    } catch (purgeErr) {
+      console.error('[cron/sync-ted] Purge exception (non-fatal):', purgeErr)
+    }
+
+    return NextResponse.json({ success: true, result, embedded, purged })
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     console.error('[cron/sync-ted] Erreur:', message)

@@ -14,13 +14,12 @@
 export type AtexoProviderId =
   | 'place'      // marches-publics.gouv.fr (PLACE)
   | 'mxm'        // marches.maximilien.fr
-  | 'grandest'   // marchespublics.grandest.fr
+  | 'grandest'   // marchespublics.grandest.fr (désactivé — formulaire variant V4)
   | 'pdl'        // marchespublics.paysdelaloire.fr
-  | 'alsace'     // alsacemarchespublics.eu
+  | 'alsace'     // alsacemarchespublics.eu (désactivé — formulaire variant V4)
   | 'adullact'   // webmarche.adullact.org
   | 'bdr'        // marches.departement13.fr
-  | 'lenord'     // marchespublics.lenord.fr
-  | 'mtp3m'      // marches.montpellier3m.fr
+  | 'mtp3m'      // marches.montpellier3m.fr (désactivé — 0 AO services actifs)
 
 /**
  * Item produit par l'actor Apify `atexo-mpe-scraper` dans son dataset.

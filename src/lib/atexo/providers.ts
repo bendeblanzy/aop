@@ -83,7 +83,11 @@ export const ATEXO_PROVIDERS: ReadonlyArray<AtexoProviderConfig> = [
     id: 'mtp3m',
     name: 'Marchés Montpellier Méditerranée Métropole',
     baseUrl: 'https://marches.montpellier3m.fr',
-    enabled: true,
+    // Désactivé : 0 AO de services actifs trouvés en listing (vérifié 2026-04-28).
+    // La plateforme répond et le formulaire fonctionne, mais le filtre
+    // categorie='services' ne remonte aucun résultat. À réactiver si la
+    // situation change ou si on teste sans filtre catégorie.
+    enabled: false,
     mode: 'listing',
   },
 
@@ -103,14 +107,8 @@ export const ATEXO_PROVIDERS: ReadonlyArray<AtexoProviderConfig> = [
     mode: 'keyword',
   },
 
-  // ─── Désactivée : domaine inaccessible (DNS) ─────────────────────────
-  {
-    id: 'lenord',
-    name: 'Marchés publics Département du Nord (59) — DOMAINE MORT',
-    baseUrl: 'https://marchespublics.lenord.fr',
-    enabled: false,
-    mode: 'keyword',
-  },
+  // Note : lenord (marchespublics.lenord.fr) retiré le 2026-04-28 — domaine mort
+  // (ERR_NAME_NOT_RESOLVED). La plateforme du département du Nord a migré.
 ] as const
 
 /** Helper : retourne uniquement les providers actifs. */
