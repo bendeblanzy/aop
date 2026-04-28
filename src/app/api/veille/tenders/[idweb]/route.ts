@@ -445,27 +445,31 @@ export async function GET(
     .eq('organization_id', orgId)
     .maybeSingle()
 
-  // Fetch live BOAMP data for extra eForms info (non-blocking)
+  // Fetch live BOAMP data for extra eForms info (non-blocking).
+  // UNIQUEMENT pour les tenders source='boamp' — l'API BOAMP ne contient
+  // pas les AO Atexo ni TED, ça génèrerait des erreurs inutiles.
   let extraEforms: Record<string, unknown> = {}
-  try {
-    const boampParams = new URLSearchParams({
-      where: `idweb="${idweb}"`,
-      select: 'donnees',
-      limit: '1',
-    })
-    const boampRes = await fetch(`${BOAMP_BASE_URL}?${boampParams}`, {
-      headers: { 'User-Agent': 'AOP-App/1.0' },
-      signal: AbortSignal.timeout(8000),
-    })
-    if (boampRes.ok) {
-      const boampData = await boampRes.json()
-      const record = boampData?.results?.[0]
-      if (record?.donnees) {
-        extraEforms = parseBOAMPExtra(record.donnees)
+  if (tender.source === 'boamp') {
+    try {
+      const boampParams = new URLSearchParams({
+        where: `idweb="${idweb}"`,
+        select: 'donnees',
+        limit: '1',
+      })
+      const boampRes = await fetch(`${BOAMP_BASE_URL}?${boampParams}`, {
+        headers: { 'User-Agent': 'AOP-App/1.0' },
+        signal: AbortSignal.timeout(8000),
+      })
+      if (boampRes.ok) {
+        const boampData = await boampRes.json()
+        const record = boampData?.results?.[0]
+        if (record?.donnees) {
+          extraEforms = parseBOAMPExtra(record.donnees)
+        }
       }
+    } catch {
+      // Non-blocking: si l'API BOAMP est lente ou down, on continue sans
     }
-  } catch {
-    // Non-blocking: si l'API BOAMP est lente ou down, on continue sans
   }
 
   return NextResponse.json({

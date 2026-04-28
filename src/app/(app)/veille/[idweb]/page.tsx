@@ -17,6 +17,7 @@ import { buildProfileKeywords, getMatchingLots } from '@/lib/boamp/lot-matching'
 interface TenderDetail {
   id: string
   idweb: string
+  source: 'boamp' | 'ted' | 'atexo' | null
   objet: string | null
   nomacheteur: string | null
   famille: string | null
@@ -46,6 +47,37 @@ interface TenderDetail {
   reason: string | null
   created_at: string
   updated_at: string
+}
+
+// ─── Helpers source/plateforme ───────────────────────────────────────────────
+
+/**
+ * Label court d'une plateforme (pour les chips de référence).
+ * Décode les préfixes Atexo (atx-place-..., atx-mxm-..., etc.) en nom lisible.
+ */
+function sourceLabel(source: string | null | undefined, idweb: string | null | undefined): string {
+  if (source === 'ted') return 'TED'
+  if (source === 'boamp') return 'BOAMP'
+  if (source === 'atexo' && idweb) {
+    if (idweb.startsWith('atx-place-')) return 'PLACE'
+    if (idweb.startsWith('atx-mxm-')) return 'Maximilien'
+    if (idweb.startsWith('atx-bdr-')) return 'Marchés 13'
+    if (idweb.startsWith('atx-pdl-')) return 'PdL'
+    if (idweb.startsWith('atx-adullact-')) return 'Adullact'
+    if (idweb.startsWith('atx-mtp3m-')) return 'Montpellier 3M'
+    if (idweb.startsWith('atx-grandest-')) return 'Grand Est'
+    if (idweb.startsWith('atx-alsace-')) return 'Alsace'
+    return 'Atexo'
+  }
+  return 'Source'
+}
+
+/** Nom long pour la phrase descriptive ("plateforme XXX"). */
+function platformDescription(source: string | null | undefined, idweb: string | null | undefined): string {
+  if (source === 'ted') return 'TED (Tenders Electronic Daily — Journal officiel UE)'
+  if (source === 'boamp') return 'BOAMP'
+  if (source === 'atexo') return `${sourceLabel(source, idweb)} (Atexo Local Trust MPE)`
+  return 'la plateforme acheteur'
 }
 
 interface ProfileInfo {
@@ -213,7 +245,7 @@ export default function TenderDetailPage() {
   const depts = Array.isArray(tender.code_departement) ? tender.code_departement : []
   const descripteurs = Array.isArray(tender.descripteur_libelles) ? tender.descripteur_libelles : []
   const lots = Array.isArray(tender.lots_titres) ? tender.lots_titres : []
-  const boampRef = tender.idweb ? `BOAMP : ${tender.idweb}` : null
+  const sourceRef = tender.idweb ? `${sourceLabel(tender.source, tender.idweb)} : ${tender.idweb}` : null
 
   // Matching lots ↔ profil
   const profileKeywords = buildProfileKeywords(profile ? {
@@ -275,8 +307,8 @@ export default function TenderDetailPage() {
 
       {/* Reference + Meta line */}
       <div className="flex flex-wrap items-center gap-4 text-sm text-gray-500">
-        {boampRef && (
-          <span className="font-mono text-xs bg-gray-100 px-2 py-0.5 rounded">{boampRef}</span>
+        {sourceRef && (
+          <span className="font-mono text-xs bg-gray-100 px-2 py-0.5 rounded">{sourceRef}</span>
         )}
         {tender.nomacheteur && (
           <span className="flex items-center gap-1.5">
@@ -304,7 +336,7 @@ export default function TenderDetailPage() {
         <div className="bg-[#F5F5FF] rounded-xl border border-[#E0E0F0] p-5 flex items-center justify-between">
           <div>
             <h3 className="font-semibold text-gray-900 text-sm">Candidater à cet appel d&apos;offres</h3>
-            <p className="text-xs text-gray-500 mt-0.5">Accédez à l&apos;annonce officielle sur la plateforme BOAMP</p>
+            <p className="text-xs text-gray-500 mt-0.5">Accédez à l&apos;annonce officielle sur {platformDescription(tender.source, tender.idweb)}</p>
           </div>
           {tender.url_avis ? (
             <a
@@ -662,7 +694,7 @@ export default function TenderDetailPage() {
               className="inline-flex items-center gap-1.5 text-sm text-[#0000FF] hover:underline font-medium"
             >
               <ExternalLink className="w-3.5 h-3.5" />
-              Voir sur le BOAMP
+              Voir sur {sourceLabel(tender.source, tender.idweb)}
             </a>
           )}
           {tender.url_profil_acheteur && (
