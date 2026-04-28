@@ -52,6 +52,17 @@ This version has breaking changes — APIs, conventions, and file structure may 
   PostgreSQL interdit de fournir une valeur explicite sur une colonne générée → 400.
   Pattern : `const { created_at, updated_at, siren, ...payload } = data`
 
+### Réflexe "ne pas réinventer la roue"
+
+Avant de proposer ou d'écrire du code pour une fonctionnalité, toujours vérifier si une brique existante la couvre déjà.
+
+- **Auth / users** → Supabase Auth est en place. 2FA, magic link, social login, RBAC sont natifs — configurer, ne pas coder.
+- **Appels AI** → Préférer Vercel AI SDK (`ai` package) aux appels Anthropic raw. Gère streaming, function calling, multi-provider.
+- **Billing** → Stripe Billing pour plans fixes. Si usage-based (tokens, AO analysés) → regarder Lago avant de coder custom.
+- **Composants UI** → Chercher dans shadcn/ui ou Radix avant de créer from scratch.
+- **Toute feature transverse** (notifications, onboarding, webhooks, invitations...) → poser la question "existe-t-il un package ?" avant de coder.
+- **Boilerplate de référence** pour cherry-picker du code : MakerKit (https://makerkit.dev) et Supastarter (https://supastarter.dev).
+
 ### Stack technique du projet
 
 - Next.js App Router (version récente — voir `node_modules/next/dist/docs/`)

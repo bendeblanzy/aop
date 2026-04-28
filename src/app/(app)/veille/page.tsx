@@ -16,6 +16,7 @@ import { countMatchingLots } from '@/lib/boamp/lot-matching'
 interface TenderItem {
   id: string
   idweb: string
+  source: string | null
   objet: string | null
   nomacheteur: string | null
   dateparution: string | null
@@ -94,6 +95,26 @@ function getScoreBadgeStyle(score: number) {
   if (score >= 80) return 'bg-green-100 text-green-700 border-green-200'
   if (score >= 60) return 'bg-[#E6E6FF] text-[#0000FF] border-[#ccccff]'
   if (score >= 40) return 'bg-amber-100 text-amber-700 border-amber-200'
+  return 'bg-gray-100 text-gray-600 border-gray-200'
+}
+
+/** Retourne le label court de la source pour l'affichage badge */
+function getSourceLabel(idweb: string | null, source: string | null): string | null {
+  if (source === 'ted') return 'TED EU'
+  if (source === 'atexo') {
+    if (idweb?.startsWith('atx-place-')) return 'PLACE'
+    if (idweb?.startsWith('atx-mxm-')) return 'Maximilien'
+    if (idweb?.startsWith('atx-bdr-')) return 'BDR'
+    if (idweb?.startsWith('atx-pdl-')) return 'PDL'
+    if (idweb?.startsWith('atx-adullact-')) return 'Adullact'
+    return 'Atexo'
+  }
+  return null // BOAMP = pas de badge (source par défaut)
+}
+
+function getSourceBadgeStyle(source: string | null): string {
+  if (source === 'ted') return 'bg-blue-50 text-blue-700 border-blue-200'
+  if (source === 'atexo') return 'bg-purple-50 text-purple-700 border-purple-200'
   return 'bg-gray-100 text-gray-600 border-gray-200'
 }
 
@@ -187,6 +208,16 @@ function TenderCard({
                 Expiré
               </span>
             )}
+            {/* Badge source — uniquement pour TED et Atexo */}
+            {(() => {
+              const srcLabel = getSourceLabel(tender.idweb, tender.source)
+              const srcStyle = getSourceBadgeStyle(tender.source)
+              return srcLabel ? (
+                <span className={cn('text-xs font-semibold px-2 py-0.5 rounded-full border shrink-0', srcStyle)}>
+                  {srcLabel}
+                </span>
+              ) : null
+            })()}
           </div>
           <button
             onClick={e => { e.preventDefault(); e.stopPropagation(); onToggleFav() }}
@@ -340,6 +371,7 @@ export default function VeillePage() {
   const [sortBy, setSortBy] = useState<SortKey>('score')
   const [regionFilter, setRegionFilter] = useState<string>('')
   const [procedureFilter, setProcedureFilter] = useState<'' | 'ouvert' | 'restreint'>('')
+  const [sourceFilter, setSourceFilter] = useState<'' | 'boamp' | 'ted' | 'atexo'>('')
   const [tab, setTab] = useState<TabKey>(() =>
     searchParams.get('tab') === 'favorites' ? 'favorites' : 'all'
   )
@@ -416,6 +448,8 @@ export default function VeillePage() {
         ...(regionFilter ? { region: regionFilter } : {}),
         // Filtre procédure
         ...(procedureFilter ? { procedure: procedureFilter } : {}),
+        // Filtre source (BOAMP / TED / Atexo)
+        ...(sourceFilter ? { source: sourceFilter } : {}),
       })
       const res = await fetch(`/api/veille/tenders?${params}`)
       if (!res.ok) throw new Error()
@@ -439,7 +473,7 @@ export default function VeillePage() {
     } finally {
       setLoading(false)
     }
-  }, [search, activeOnly, minScore, searchMode, regionFilter, procedureFilter]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [search, activeOnly, minScore, searchMode, regionFilter, procedureFilter, sourceFilter]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function autoScore(idwebs: string[]) {
     try {
@@ -466,7 +500,7 @@ export default function VeillePage() {
     searchTimeoutRef.current = setTimeout(() => setSearch(value), delay)
   }
 
-  useEffect(() => { fetchTenders(0, search) }, [search, activeOnly, minScore, searchMode, regionFilter, procedureFilter]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { fetchTenders(0, search) }, [search, activeOnly, minScore, searchMode, regionFilter, procedureFilter, sourceFilter]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const sortedTenders = sortTenders(tenders, sortBy)
   const displayedTenders = tab === 'favorites'
@@ -584,6 +618,31 @@ export default function VeillePage() {
                   procedureFilter === val
                     ? val === 'ouvert' ? 'bg-green-600 text-white'
                     : val === 'restreint' ? 'bg-amber-600 text-white'
+                    : 'bg-[#0000FF] text-white'
+                    : 'hover:bg-gray-50 text-gray-500',
+                )}
+              >{label}</button>
+            ))}
+          </div>
+
+          <span className="text-gray-300">|</span>
+
+          {/* Filtre source */}
+          <div className="flex rounded-lg border border-[#E0E0F0] overflow-hidden text-xs">
+            {([
+              ['', 'Toutes sources'],
+              ['boamp', 'BOAMP'],
+              ['ted', 'TED EU'],
+              ['atexo', 'Atexo'],
+            ] as ['' | 'boamp' | 'ted' | 'atexo', string][]).map(([val, label]) => (
+              <button
+                key={val || 'all-src'}
+                onClick={() => setSourceFilter(val)}
+                className={cn(
+                  'px-3 py-1.5 transition-colors font-medium',
+                  sourceFilter === val
+                    ? val === 'ted' ? 'bg-blue-600 text-white'
+                    : val === 'atexo' ? 'bg-purple-600 text-white'
                     : 'bg-[#0000FF] text-white'
                     : 'hover:bg-gray-50 text-gray-500',
                 )}

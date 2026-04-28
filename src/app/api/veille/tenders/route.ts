@@ -65,7 +65,7 @@ export async function GET(request: NextRequest) {
 
   // Paramètres de requête
   const url = new URL(request.url)
-  const page    = Math.max(0, parseInt(url.searchParams.get('page')  ?? '0'))
+  const page    = Math.max(0, parseInt(url.searchParams.get('page') ?? '0'))
   const limit   = Math.min(50, Math.max(1, parseInt(url.searchParams.get('limit') ?? '30')))
   const search  = url.searchParams.get('search')       ?? ''
   const semanticQuery = url.searchParams.get('semantic_query') ?? ''
@@ -86,6 +86,11 @@ export async function GET(request: NextRequest) {
   const regionDepts = regionToApply ? getDepartementsForRegion(regionToApply) : null
 
   const hasActiviteMetier = !!profile?.activite_metier?.trim()
+
+  // Filtre source explicite (UI toggle : '' | 'boamp' | 'ted' | 'atexo')
+  const sourceFilter = url.searchParams.get('source') ?? ''
+  const validSources = ['boamp', 'ted', 'atexo']
+  const appliedSourceFilter = validSources.includes(sourceFilter) ? sourceFilter : ''
 
   // ── Favoris : chemin dédié ────────────────────────────────────────────────
   if (favoritesOnly) {
@@ -193,35 +198,98 @@ export async function GET(request: NextRequest) {
       : profileEmbedding!
   }
 
-  // ── Matching vectoriel pgvector ───────────────────────────────────────────
+  // ── Matching vectoriel pgvector — pool diversifié par source ─────────────
   //
-  // IMPORTANT : on N'APPLIQUE PLUS le filtre boamp_codes en couperet à la RPC.
-  // Raison : le référentiel BOAMP côté UI (codes.ts) est imparfait et incohérent
-  // avec les codes réellement présents dans les annonces (ex. code "23 Formation
-  // professionnelle" sélectionné par les users mais 0 occurrence dans la base).
-  // Conséquence d'un filtre dur : pool effondré, top sémantique écarté.
+  // PROBLÈME HISTORIQUE : un seul appel RPC avec pool=300 sur ~4147 tenders
+  // embeddés (3765 BOAMP + 284 TED + 98 Atexo) → les AO non-BOAMP étaient
+  // statistiquement évincés du top 300 (ratio 39:1 en faveur de BOAMP).
   //
-  // Approche : pool large (300) trié par similarité pure, puis BOOST côté JS
-  // sur le score final si descripteur_codes && boamp_codes (overlap). Voir
-  // calcul du score plus bas (CODE_BOOST = +15%).
-  const MATCH_POOL = 300
+  // SOLUTION (2026-04-28) : 3 appels parallèles dédiés par source, avec un
+  // quota par source. Les résultats sont mergés par idweb (meilleure sim gardée).
+  // Si l'utilisateur choisit un filtre source explicite (ex. "Atexo"), on fait
+  // un appel ciblé sur cette source avec un pool plus large.
+  //
+  // Quota default : BOAMP=200 + TED=60 + Atexo=40 = 300 au total.
+  // Quota source unique : 150 pour la source sélectionnée.
   const SIMILARITY_THRESHOLD = 0.15
 
-  const { data: matchedRaw, error: matchError } = await adminClient
-    .rpc('match_tenders_by_embedding', {
-      query_embedding: JSON.stringify(queryEmbedding),
-      match_threshold: SIMILARITY_THRESHOLD,
-      match_count: MATCH_POOL,
-      filter_codes: null, // ← filtre désactivé (cf. doc ci-dessus)
+  let matchedIdwebs: string[]
+  let similarityMap: Record<string, number>
+
+  if (appliedSourceFilter) {
+    // Mode source unique : pool ciblé sur cette source seulement
+    const MATCH_POOL_SINGLE = 150
+    const { data: matchedRaw, error: matchError } = await adminClient
+      .rpc('match_tenders_by_embedding', {
+        query_embedding: JSON.stringify(queryEmbedding),
+        match_threshold: SIMILARITY_THRESHOLD,
+        match_count: MATCH_POOL_SINGLE,
+        filter_codes: null,
+        filter_source: appliedSourceFilter,
+      })
+
+    if (matchError) {
+      console.error('[veille/tenders] vector match error (single source):', matchError.message)
+      return fallbackCodeBased(orgId, profile, boampCodes, typesMarche, { page, limit, search, minScore, activeOnly, regionDepts, procedureFilter }, hasActiviteMetier, profileKeywords)
+    }
+
+    matchedIdwebs = (matchedRaw ?? []).map((m: any) => m.idweb)
+    similarityMap = Object.fromEntries((matchedRaw ?? []).map((m: any) => [m.idweb, m.similarity]))
+  } else {
+    // Mode diversifié : 3 appels parallèles → quota garanti par source
+    // BOAMP=200, TED=60, Atexo=40 — résultats mergés par idweb (meilleure sim)
+    const [boampResult, tedResult, atexoResult] = await Promise.all([
+      adminClient.rpc('match_tenders_by_embedding', {
+        query_embedding: JSON.stringify(queryEmbedding),
+        match_threshold: SIMILARITY_THRESHOLD,
+        match_count: 200,
+        filter_codes: null,
+        filter_source: 'boamp',
+      }),
+      adminClient.rpc('match_tenders_by_embedding', {
+        query_embedding: JSON.stringify(queryEmbedding),
+        match_threshold: SIMILARITY_THRESHOLD,
+        match_count: 60,
+        filter_codes: null,
+        filter_source: 'ted',
+      }),
+      adminClient.rpc('match_tenders_by_embedding', {
+        query_embedding: JSON.stringify(queryEmbedding),
+        match_threshold: SIMILARITY_THRESHOLD,
+        match_count: 40,
+        filter_codes: null,
+        filter_source: 'atexo',
+      }),
+    ])
+
+    if (boampResult.error && tedResult.error && atexoResult.error) {
+      // Toutes les 3 sources en erreur → fallback
+      console.error('[veille/tenders] all 3 source pools failed, falling back')
+      return fallbackCodeBased(orgId, profile, boampCodes, typesMarche, { page, limit, search, minScore, activeOnly, regionDepts, procedureFilter }, hasActiviteMetier, profileKeywords)
+    }
+
+    if (boampResult.error) console.error('[veille/tenders] BOAMP pool error:', boampResult.error.message)
+    if (tedResult.error) console.error('[veille/tenders] TED pool error:', tedResult.error.message)
+    if (atexoResult.error) console.error('[veille/tenders] Atexo pool error:', atexoResult.error.message)
+
+    // Merge + dedup par idweb (similarité la plus haute gagnante en cas de doublon)
+    const allRaw = [
+      ...(boampResult.data ?? []),
+      ...(tedResult.data ?? []),
+      ...(atexoResult.data ?? []),
+    ] as Array<{ idweb: string; objet: string; similarity: number }>
+
+    allRaw.sort((a, b) => b.similarity - a.similarity)
+    const seen = new Set<string>()
+    const dedupedRaw = allRaw.filter(m => {
+      if (seen.has(m.idweb)) return false
+      seen.add(m.idweb)
+      return true
     })
 
-  if (matchError) {
-    console.error('[veille/tenders] vector match error:', matchError.message)
-    return fallbackCodeBased(orgId, profile, boampCodes, typesMarche, { page, limit, search, minScore, activeOnly, regionDepts, procedureFilter }, hasActiviteMetier, profileKeywords)
+    matchedIdwebs = dedupedRaw.map(m => m.idweb)
+    similarityMap = Object.fromEntries(dedupedRaw.map(m => [m.idweb, m.similarity]))
   }
-
-  const matchedIdwebs = (matchedRaw ?? []).map((m: any) => m.idweb)
-  const similarityMap = Object.fromEntries((matchedRaw ?? []).map((m: any) => [m.idweb, m.similarity]))
 
   // ── Pénalité anti-domaine ────────────────────────────────────────────────
   // Pour chaque tender matché, on calcule sa similarité avec l'anti-domaine
@@ -384,6 +452,7 @@ export async function GET(request: NextRequest) {
     hasActiviteMetier,
     searchMode: isSemanticSearch ? 'semantic' : 'profile',
     profileKeywords,
+    sourceFilter: appliedSourceFilter || null,
   })
 }
 
