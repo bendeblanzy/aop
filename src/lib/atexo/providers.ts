@@ -28,18 +28,21 @@ export interface AtexoProviderConfig {
   mode: 'keyword' | 'listing'
 }
 
-// V3 (Playwright, 2026-04-28) : grâce au scraper navigateur, le hard-cap
+// V3/V4 (Playwright, 2026-04-28/29) : grâce au scraper navigateur, le hard-cap
 // PRADO 3 pages est levé et on peut couvrir toute la résultset. Bilan des
 // plateformes Atexo testées :
 //
-//   ✅ Actives (formulaire avancé OK + résultats) :
-//      - PLACE, Maximilien, Bouches-du-Rhône, Pays de la Loire (PdL),
-//        Adullact, Montpellier Métropole (mtp3m).
-//   ⛔ Désactivées (formulaire variant — champ keywordSearch absent du DOM,
-//      à reverse-engineer en V4 pour adapter les sélecteurs) :
-//      - Grand Est, Alsace.
+//   ✅ Actives PRADO standard (mêmes sélecteurs) :
+//      - PLACE, Maximilien, Bouches-du-Rhône, Pays de la Loire (PdL), Adullact.
+//   ✅ Alsace réactivée (P2, 2026-04-29) : baseUrl corrigé vers le sous-domaine
+//      plateforme.alsacemarchespublics.eu (le site vitrine ≠ moteur PRADO).
+//   ⛔ Désactivée — moteur incompatible :
+//      - Grand Est : ColdFusion (/avis/index.cfm) + AWSolutions (≠ PRADO).
+//        Nécessite un scraper dédié, hors scope actuel.
+//   ⛔ Désactivée — 0 AO services actifs :
+//      - Montpellier Métropole (mtp3m) : peut réactiver si situation change.
 //   🪦 Domaine mort (ERR_NAME_NOT_RESOLVED, plateforme migrée ou retirée) :
-//      - Le Nord.
+//      - Le Nord (retiré le 2026-04-28).
 export const ATEXO_PROVIDERS: ReadonlyArray<AtexoProviderConfig> = [
   // ─── Plateformes actives — mode keyword (gros volume, filtrage utile) ─
   {
@@ -91,19 +94,32 @@ export const ATEXO_PROVIDERS: ReadonlyArray<AtexoProviderConfig> = [
     mode: 'listing',
   },
 
-  // ─── Désactivées : formulaire avancé variant — V4 pour adapter sélecteurs ─
+  // ─── Alsace — PRADO standard sur sous-domaine plateforme.* ──────────────────
+  // Diagnostic P2 (2026-04-29) : alsacemarchespublics.eu est un site CMS vitrine.
+  // Le vrai moteur PRADO est sur plateforme.alsacemarchespublics.eu — le formulaire
+  // AdvancedSearch y est identique à PLACE/Maximilien (mêmes sélecteurs $name).
+  // Fix : corriger baseUrl de alsacemarchespublics.eu → plateforme.alsacemarchespublics.eu.
+  {
+    id: 'alsace',
+    name: 'Alsace Marchés Publics',
+    baseUrl: 'https://plateforme.alsacemarchespublics.eu', // ← sous-domaine PRADO (vitrine ≠ PRADO)
+    enabled: true,
+    mode: 'keyword',
+  },
+
+  // ─── Grand Est — moteur incompatible (ColdFusion + AWSolutions) ─────────────
+  // Diagnostic P2 (2026-04-29) :
+  //   - marchespublics.grandest.fr/avis/index.cfm → moteur ColdFusion custom
+  //     avec des champs `txtLibre`, `IDN` (radio) — incompatible Atexo PRADO.
+  //   - L'espace fournisseurs redirige vers awsolutions.fr (OpenID Connect),
+  //     anciennement marches-publics.info — plateforme AWSolutions ≠ PRADO.
+  // → Nécessite un scraper ColdFusion dédié — hors scope session V4.
+  //   À réactiver uniquement après implémentation d'un adapter spécifique.
   {
     id: 'grandest',
     name: 'Marchés publics Grand Est',
     baseUrl: 'https://marchespublics.grandest.fr',
-    enabled: false,
-    mode: 'keyword',
-  },
-  {
-    id: 'alsace',
-    name: 'Alsace Marchés Publics',
-    baseUrl: 'https://alsacemarchespublics.eu',
-    enabled: false,
+    enabled: false, // moteur ColdFusion — incompatible scraper PRADO, voir diagnostic P2
     mode: 'keyword',
   },
 
