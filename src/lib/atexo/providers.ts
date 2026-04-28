@@ -121,47 +121,28 @@ export function activeProviders(): ReadonlyArray<AtexoProviderConfig> {
  * audiovisuel / design. Sans accents (PRADO Atexo ne supporte pas UTF-8 dans
  * le champ keywordSearch).
  *
- * Chaque keyword génère un sub-run sur le formulaire de recherche avancée
- * Atexo. La déduplication par idweb absorbe les recouvrements entre keywords.
+ * Chaque entrée génère UN sub-run sur le formulaire de recherche avancée Atexo.
+ * PRADO fait de l'OR implicite sur les mots séparés par des espaces : envoyer
+ * "communication evenementiel publicite" retourne les AO qui contiennent AU
+ * MOINS UN de ces mots (validé empiriquement le 2026-04-28 avec 30 items/66s).
  *
- * Le champ keywordSearch Atexo cherche dans : référence + intitulé + objet
- * de la consultation (placeholder du formulaire le confirme). On capture donc
- * les AO qui mentionnent ces termes dans leur description courte aussi, pas
- * seulement le titre.
+ * STRATÉGIE V4 (2026-04-28) — keyword OR groupé :
+ * On réduit de 22 sub-runs individuels à 5 groupes thématiques. Bénéfice :
+ *   - Avant : 22 sub-runs × ~67s/run = 1474s théoriques → PLACE timeout à ~7 keywords
+ *   - Après : 5 sub-runs × ~65s/run = ~325s << 420s → couverture COMPLÈTE des 22 termes
  *
- * V3 (2026-04-28) : 22 keywords élargis couvrant les 8 axes métier :
- * communication/marketing, événementiel, audiovisuel, design, identité
- * visuelle, scénographie, édition, web/RS. Couverture pertinente vs noise
- * absorbé par scoring vectoriel pgvector côté Next.js.
+ * La déduplication par idweb dans sync.ts absorbe les recouvrements entre groupes.
+ * Le scoring vectoriel pgvector filtre le noise côté Next.js.
  */
 export const ATEXO_KEYWORDS_COMM: ReadonlyArray<string> = [
-  // ─── Communication & marketing ───────────────────────────────────────
-  'communication',
-  'publicite',
-  'marketing',
-  'relations publiques',
-  // ─── Événementiel ────────────────────────────────────────────────────
-  'evenementiel',
-  'salon',
-  'seminaire',
-  'festival',
-  'exposition',
-  // ─── Audiovisuel & vidéo ─────────────────────────────────────────────
-  'audiovisuel',
-  'video',
-  'film',
-  'podcast',
-  // ─── Design & graphisme ──────────────────────────────────────────────
-  'design',
-  'graphisme',
-  'identite visuelle',
-  'signaletique',
-  // ─── Scénographie ────────────────────────────────────────────────────
-  'scenographie',
-  // ─── Édition / Print ─────────────────────────────────────────────────
-  'edition',
-  'magazine',
-  // ─── Web / Réseaux sociaux ───────────────────────────────────────────
-  'site internet',
-  'reseaux sociaux',
+  // Groupe 1 — Communication & marketing (large)
+  'communication publicite marketing relations publiques',
+  // Groupe 2 — Événementiel (manifestations, congrès, cérémonies)
+  'evenementiel salon seminaire festival exposition',
+  // Groupe 3 — Audiovisuel & vidéo (production, captation, podcast)
+  'audiovisuel video film podcast',
+  // Groupe 4 — Design & identité visuelle (graphisme, signalétique)
+  'design graphisme identite visuelle signaletique',
+  // Groupe 5 — Édition, web & réseaux sociaux
+  'scenographie edition magazine site internet reseaux sociaux',
 ] as const
