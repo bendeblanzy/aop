@@ -1,125 +1,58 @@
 import { Actor, log } from 'apify'
-import {
-  buildPradoPostbackBody,
-  extractPradoPageState,
-  extractSessionCookie,
-  pradoHeaders,
-} from './prado'
+import { chromium, type Browser, type BrowserContext, type Page } from 'playwright'
 import { parseListingPage } from './parse'
-import type { AtexoApifyItem, AtexoProviderInput } from './types'
+import type { AtexoApifyItem, AtexoProviderInput, AtexoProviderId } from './types'
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Scraper haut niveau d'une plateforme Atexo MPE.
+// V3 — Scraper Playwright pour Atexo Local Trust MPE.
 //
-// Deux modes de recherche :
+// Pourquoi un vrai navigateur :
+//   - Le moteur PRADO (PHP) renvoie HTTP 400 ("Page state is corrupted") au-delà
+//     de 3 pages quand on attaque en POST HTTP brut, parce qu'il s'attend à des
+//     événements client (clics) avec des sequence numbers cohérents que seul un
+//     vrai DOM produit. Avec Playwright, on clique le lien "page suivante" et
+//     PRADO suit son propre flow → pas de hard-cap.
+//   - Les variantes mineures de formulaire entre plateformes régionales
+//     (Grand Est, PdL, Alsace, ...) sont absorbées par les selectors Playwright
+//     robustes (`[name$="..."]`) au lieu de POST encodés à la main.
+//   - Pas de race PHP entre sub-runs : chaque keyword a son propre
+//     BrowserContext (cookies isolés).
 //
-//   1. Mode LISTING (par défaut, sans keywords) :
-//        URL = /index.php?page=Entreprise.EntrepriseAdvancedSearch&AllCons
-//        → liste tous les AO publics actifs, paginés.
+// Stratégie globale :
+//   - 1 Browser Chromium partagé pour tous les providers (économie mémoire).
+//   - 1 BrowserContext frais par sub-run = (provider × keyword) → cookies
+//     isolés, état PRADO clean, pas de pollution entre sub-runs.
+//   - Pour chaque sub-run :
+//       1. goto /?page=Entreprise.EntrepriseAdvancedSearch
+//       2. Remplir le formulaire (keywordSearch + categorie + rechercheFloue)
+//       3. Cliquer "Lancer la recherche"
+//       4. Boucle pagination : page.content() → parseListingPage → push,
+//          puis cliquer "Aller à la page suivante", waitForLoadState
+//       5. Stop à totalPages OU maxPagesPerProvider OU 0 items
 //
-//   2. Mode KEYWORD SEARCH (si opts.keywords est fourni) :
-//        URL = /?page=Entreprise.EntrepriseAdvancedSearch (sans &AllCons)
-//        On fait 1 sub-run par keyword. Chaque sub-run :
-//          - GET du formulaire de recherche avancée
-//          - POST avec keyword + categorie=3 (Services) + lancerRecherche
-//          - Pagination identique au mode listing
-//        Les keywords sont rechargés sans accents — PRADO Atexo plante en
-//        UTF-8 sur les keyword search ("Page state is corrupted").
-//
-// Stratégie de pagination (commune aux 2 modes) :
-//   - Pattern "jump direct" via numPageTop=N + DefaultButtonTop submit.
-//   - Hard-cap 3 pages : au-delà, PRADO renvoie 400 ("page state corrupted").
-//
-// Filtres appliqués au push :
-//   - categorie : SERVICES/TRAVAUX/FOURNITURES (lit type_marche)
-//   - minDaysUntilDeadline : on exclut les AO clos OU expirant trop vite
-//   - dédup : un seul (provider, reference) par run global
+// Filtres conservés (identique V2) :
+//   - categorie (services / travaux / fournitures / null)
+//   - minDaysUntilDeadline (exclut AO clos ou expirant trop tôt)
+//   - dédup (provider, reference) global au run
 // ─────────────────────────────────────────────────────────────────────────────
 
-const ALLCONS_PATH = '/index.php?page=Entreprise.EntrepriseAdvancedSearch&AllCons'
 const ADVSEARCH_PATH = '/?page=Entreprise.EntrepriseAdvancedSearch'
-const PAGE_DELAY_MS = 1000
-const FETCH_TIMEOUT_MS = 45_000
-const HARD_CAP_PAGES = 3
+const ALLCONS_PATH = '/index.php?page=Entreprise.EntrepriseAdvancedSearch&AllCons'
+const NAV_TIMEOUT_MS = 45_000
+const PAGE_DELAY_MS = 600
+
+const USER_AGENT =
+  'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) '
+  + 'Chrome/120.0.0.0 Safari/537.36 LADNDataAtexoScraper/2.0'
 
 interface ScrapeOptions {
   maxPagesPerProvider: number
-  /** Filtre catégorie ('services' | 'travaux' | 'fournitures' | null = tous) */
+  /** 'services' | 'travaux' | 'fournitures' | null */
   categorie: string | null
-  /** Mots-clés (sub-runs séparés). Si vide ou non fourni → mode listing. */
+  /** Mots-clés (sub-runs séparés). Vide → mode listing global. */
   keywords: string[]
-  /** Nombre de jours minimum avant date limite pour push (0 = pas de filtre). */
+  /** 0 = pas de filtre */
   minDaysUntilDeadline: number
-}
-
-interface FetchResult {
-  status: number
-  html: string
-  setCookie: string[]
-}
-
-async function fetchWithRetry(
-  url: string,
-  init: RequestInit,
-  attempts = 2,
-): Promise<FetchResult> {
-  let lastErr: unknown = null
-  for (let i = 0; i < attempts; i++) {
-    try {
-      const res = await fetch(url, {
-        ...init,
-        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-      })
-      const setCookie: string[] = []
-      try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const getSet = (res.headers as any).getSetCookie
-        if (typeof getSet === 'function') {
-          const arr = (res.headers as unknown as { getSetCookie(): string[] }).getSetCookie()
-          if (Array.isArray(arr)) setCookie.push(...arr)
-        } else {
-          const sc = res.headers.get('set-cookie')
-          if (sc) setCookie.push(sc)
-        }
-      } catch {
-        const sc = res.headers.get('set-cookie')
-        if (sc) setCookie.push(sc)
-      }
-      const html = await res.text()
-      return { status: res.status, html, setCookie }
-    } catch (e) {
-      lastErr = e
-      if (i < attempts - 1) {
-        await new Promise(r => setTimeout(r, 1500))
-        continue
-      }
-    }
-  }
-  throw new Error(`fetch failed: ${lastErr instanceof Error ? lastErr.message : String(lastErr)}`)
-}
-
-/** True si l'AO ferme dans moins de `minDaysUntilDeadline` jours (ou est déjà clos). */
-function expiresTooSoon(dateLimiteIso: string | null, minDays: number): boolean {
-  if (!dateLimiteIso) return false // pas de date → on garde
-  const t = Date.parse(dateLimiteIso)
-  if (!Number.isFinite(t)) return false
-  const cutoff = Date.now() + minDays * 86_400_000
-  return t < cutoff
-}
-
-/** "événementiel" → "evenementiel" — PRADO Atexo n'accepte pas l'UTF-8 en keyword. */
-function stripAccents(s: string): string {
-  return s.normalize('NFD').replace(/[̀-ͯ]/g, '')
-}
-
-/** Code de catégorie PRADO Atexo (formulaire avancé). */
-function categorieCode(c: string | null): string {
-  if (!c) return '0' // Toutes
-  const t = c.toLowerCase()
-  if (t.startsWith('trav')) return '1'
-  if (t.startsWith('fourn')) return '2'
-  if (t.startsWith('serv')) return '3'
-  return '0'
 }
 
 interface FilterContext {
@@ -128,11 +61,42 @@ interface FilterContext {
   minDaysUntilDeadline: number
 }
 
-/** Filtre items par catégorie + fraîcheur + dédup. */
-function filterAndDedupe(
-  items: AtexoApifyItem[],
-  ctx: FilterContext,
-): AtexoApifyItem[] {
+interface SubRunResult {
+  pushed: number
+  pagesFetched: number
+  truncated: boolean
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Utilitaires (filtrage, normalisation)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** True si l'AO ferme dans moins de `minDays` jours (ou est déjà clos). */
+function expiresTooSoon(dateLimiteIso: string | null, minDays: number): boolean {
+  if (!dateLimiteIso) return false
+  const t = Date.parse(dateLimiteIso)
+  if (!Number.isFinite(t)) return false
+  const cutoff = Date.now() + minDays * 86_400_000
+  return t < cutoff
+}
+
+/** "événementiel" → "evenementiel" — PRADO Atexo refuse l'UTF-8 dans keywordSearch. */
+function stripAccents(s: string): string {
+  return s.normalize('NFD').replace(/[̀-ͯ]/g, '')
+}
+
+/** Valeur du <select name="...categorie"> Atexo : 0=Toutes, 1=Travaux, 2=Fournitures, 3=Services. */
+function categorieCode(c: string | null): string {
+  if (!c) return '0'
+  const t = c.toLowerCase()
+  if (t.startsWith('trav')) return '1'
+  if (t.startsWith('fourn')) return '2'
+  if (t.startsWith('serv')) return '3'
+  return '0'
+}
+
+/** Filtre items par catégorie + fraîcheur + dédup. Mutate ctx.seenRefs. */
+function filterAndDedupe(items: AtexoApifyItem[], ctx: FilterContext): AtexoApifyItem[] {
   const out: AtexoApifyItem[] = []
   for (const it of items) {
     if (!it.reference) continue
@@ -155,243 +119,317 @@ function filterAndDedupe(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Pagination — extrait pour réutilisation entre les 2 modes (listing & search).
-// On part d'un HTML déjà récupéré (page 1) avec son PRADO_PAGESTATE et son
-// cookie. La fonction collecte les items des pages 2..N et les push au dataset.
+// Étape 1 — submit du formulaire de recherche avancée
 // ─────────────────────────────────────────────────────────────────────────────
-interface PaginateInput {
-  /** Identifiant logique pour les logs */
-  scopeLabel: string
-  /** Provider technique (pour parseListingPage) */
-  providerId: import('./types').AtexoProviderId
-  /** Base URL utilisée dans les liens de fiche */
-  baseUrl: string
-  /** URL POST cible (formulaire de pagination) */
-  postUrl: string
-  /** PRADO_PAGESTATE et cookie issus du dernier fetch */
-  initialPradoState: string
-  cookie: string | null
-  /** HTML page 1 déjà parsé */
-  page1Html: string
-  totalPages: number
-  /** Items page 1 (déjà parsés, à push après filtre) */
-  page1Items: AtexoApifyItem[]
-  /** maxPages effectif pour ce sub-run */
-  maxPages: number
-  /** Contexte de filtrage partagé (seenRefs persistant entre sub-runs) */
-  filterCtx: FilterContext
-}
 
-interface PaginateOutput {
-  pushed: number
-  pagesFetched: number
-  truncated: boolean
-}
+/**
+ * Ouvre la page formulaire avancé, le remplit et le soumet.
+ * Retourne true si on est arrivé sur une page de résultats (parseable).
+ */
+async function submitAdvancedSearch(
+  page: Page,
+  baseUrl: string,
+  keyword: string | null,
+  categorie: string | null,
+  scopeLabel: string,
+): Promise<boolean> {
+  // Mode listing global (sans keyword) : on attaque /AllCons directement
+  const targetPath = keyword ? ADVSEARCH_PATH : ALLCONS_PATH
+  const url = baseUrl + targetPath
 
-async function paginateAndCollect(input: PaginateInput): Promise<PaginateOutput> {
-  let pushed = 0
-  let pagesFetched = 1 // page 1 déjà fetched par l'appelant
-  let truncated = false
-
-  // Push items page 1
-  const p1Items = filterAndDedupe(input.page1Items, input.filterCtx)
-  if (p1Items.length > 0) {
-    await Actor.pushData(p1Items)
-    pushed += p1Items.length
+  log.info(`[${scopeLabel}] goto ${url}`)
+  try {
+    await page.goto(url, { waitUntil: 'load', timeout: NAV_TIMEOUT_MS })
+  } catch (e) {
+    log.warning(`[${scopeLabel}] goto failed: ${e instanceof Error ? e.message : e}`)
+    return false
   }
 
-  let pradoState = input.initialPradoState
-  const lastPage = Math.min(input.totalPages, input.maxPages, HARD_CAP_PAGES)
+  // En mode listing, /AllCons donne directement les résultats
+  if (!keyword) return true
 
-  for (let page = 2; page <= lastPage; page++) {
-    await new Promise(r => setTimeout(r, PAGE_DELAY_MS))
+  // Sinon : remplir le formulaire et cliquer "Lancer la recherche"
+  const safeKw = stripAccents(keyword)
 
-    const body = buildPradoPostbackBody(pradoState, '', {
-      'ctl0$CONTENU_PAGE$resultSearch$numPageTop': String(page),
-      'ctl0$CONTENU_PAGE$resultSearch$DefaultButtonTop': '',
-      'ctl0$CONTENU_PAGE$resultSearch$listePageSizeTop': '20',
+  // Timeout court pour les interactions formulaire — si un input est exotique
+  // ou caché derrière un wrapper PRADO, on n'attend pas 30s.
+  const FIELD_TIMEOUT = 5_000
+
+  // 1. keywordSearch — l'input texte du formulaire
+  const kwInput = page.locator('input[name$="$AdvancedSearch$keywordSearch"]').first()
+  if ((await kwInput.count()) === 0) {
+    log.warning(`[${scopeLabel}] champ keywordSearch introuvable`)
+    return false
+  }
+  try {
+    await kwInput.fill(safeKw, { timeout: FIELD_TIMEOUT })
+  } catch (e) {
+    log.warning(`[${scopeLabel}] fill keywordSearch échoué: ${e instanceof Error ? e.message : e}`)
+    return false
+  }
+
+  // 2. categorie — un <select> PRADO. Optionnel : si absent ou code inexistant, on laisse.
+  const catSelect = page.locator('select[name$="$AdvancedSearch$categorie"]').first()
+  if ((await catSelect.count()) > 0) {
+    try {
+      await catSelect.selectOption({ value: categorieCode(categorie) }, { timeout: FIELD_TIMEOUT })
+    } catch {
+      // Variante de plateforme : pas grave, on accepte tous les marchés et le
+      // filtrage se fera en aval sur type_marche.
+      log.info(`[${scopeLabel}] catégorie non sélectionnable (variant) — laisse défaut`)
+    }
+  }
+
+  // 3. rechercheFloue — case à cocher "recherche floue" pour matcher pluriels/variantes.
+  // Sur PLACE l'input HTML est `display:none` (le visuel est un span stylé), donc
+  // `check()` même avec force échoue. On force la valeur en DOM directement :
+  // c'est ce que la soumission du form envoie de toute façon.
+  const flou = page.locator('input[name$="$AdvancedSearch$rechercheFloue"]').first()
+  if ((await flou.count()) > 0) {
+    try {
+      await flou.evaluate((el) => {
+        const inp = el as HTMLInputElement
+        inp.checked = true
+        // Déclenche l'événement pour PRADO si script attaché
+        inp.dispatchEvent(new Event('change', { bubbles: true }))
+      })
+    } catch {
+      // Pas grave si JS échoue : la recherche stricte est déjà bonne.
+    }
+  }
+
+  // 4. Cliquer "Lancer la recherche" — postback complet PRADO → on attend "load".
+  // Sur PLACE/Maximilien le bouton est un <input type="submit"> ;
+  // sur certaines variantes plus anciennes c'est un <a>. On accepte les deux.
+  const submitLink = page
+    .locator(
+      [
+        'input[id$="_lancerRecherche"]',
+        'input[id$="lancerRecherche"]',
+        'a[id$="_lancerRecherche"]',
+        'a[id$="lancerRecherche"]',
+        'a[id$="$lancerRecherche"]',
+      ].join(', '),
+    )
+    .first()
+  if ((await submitLink.count()) === 0) {
+    log.warning(`[${scopeLabel}] bouton lancerRecherche introuvable`)
+    return false
+  }
+
+  // PRADO postback complet : on lance le click puis on attend que la page de
+  // résultats apparaisse (présence de #...nombreElement OU disparition du
+  // formulaire). PLACE peut chaîner 2 POST (submit puis redirect interne) et
+  // `waitForResponse` seul ne suffit pas → on attend une preuve DOM.
+  try {
+    await submitLink.click({ timeout: FIELD_TIMEOUT, noWaitAfter: true })
+    await page
+      .waitForSelector('#ctl0_CONTENU_PAGE_resultSearch_nombreElement', {
+        state: 'attached',
+        timeout: NAV_TIMEOUT_MS,
+      })
+      .catch(() => {
+        /* fallback — la page a peut-être 0 résultat sans afficher nombreElement */
+      })
+    await page.waitForLoadState('domcontentloaded', { timeout: NAV_TIMEOUT_MS }).catch(() => {})
+    // Petit délai pour laisser PRADO finir d'injecter ses scripts/inputs cachés
+    await page.waitForTimeout(500)
+  } catch (e) {
+    log.warning(`[${scopeLabel}] submit timeout: ${e instanceof Error ? e.message : e}`)
+    return false
+  }
+
+  return true
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Étape 2 — pagination via clic sur "Aller à la page suivante"
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Cherche le lien "page suivante" et clique. Retourne false si pas de lien
+ * (dernière page) ou si la navigation a échoué.
+ *
+ * Marqueur stable du DOM Atexo : un <span data-original-title="Aller à la
+ * page suivante"> (depuis migration Bootstrap), avec fallback sur title="..."
+ * pour les anciennes versions.
+ */
+async function gotoNextPage(page: Page, scopeLabel: string): Promise<boolean> {
+  // Sélecteur tolérant aux deux variantes (Bootstrap tooltip vs title natif)
+  const NEXT_SELECTOR =
+    'a:has(span[data-original-title="Aller à la page suivante"]),'
+    + ' a:has(span[title="Aller à la page suivante"])'
+  const parentA = page.locator(NEXT_SELECTOR).first()
+  if ((await parentA.count()) === 0) return false
+
+  const disabled = await parentA
+    .evaluate((a) => {
+      const el = a as HTMLAnchorElement
+      if (el.classList.contains('disabled') || el.getAttribute('aria-disabled') === 'true') return true
+      // Atexo désactive parfois en supprimant le href "#" et l'onclick
+      const href = el.getAttribute('href')
+      const onclick = el.getAttribute('onclick')
+      if ((!href || href === '#') && !onclick) return true
+      return false
+    })
+    .catch(() => false)
+  if (disabled) return false
+
+  // Même pattern que submitAdvancedSearch : on clique puis on attend une preuve
+  // DOM stable (le numéro de page courant change ou les items se rerendent).
+  // On capture le numéro de page actuel pour pouvoir détecter le changement.
+  let beforePage: string | null = null
+  try {
+    beforePage = await page
+      .locator('input[id$="_resultSearch_numPageTop"]')
+      .first()
+      .inputValue({ timeout: 2_000 })
+      .catch(() => null)
+  } catch {
+    /* pas grave */
+  }
+
+  try {
+    await parentA.click({ noWaitAfter: true, timeout: 10_000 })
+    await page
+      .waitForFunction(
+        (prev) => {
+          const inp = document.querySelector('input[id$="_resultSearch_numPageTop"]') as HTMLInputElement | null
+          if (!inp) return false
+          // si on n'avait pas de valeur avant, attendre seulement que l'input existe
+          if (!prev) return true
+          return inp.value !== prev
+        },
+        beforePage,
+        { timeout: NAV_TIMEOUT_MS },
+      )
+      .catch(() => {})
+    await page.waitForLoadState('domcontentloaded', { timeout: NAV_TIMEOUT_MS }).catch(() => {})
+  } catch (e) {
+    log.warning(`[${scopeLabel}] click next page failed: ${e instanceof Error ? e.message : e}`)
+    return false
+  }
+
+  // Petit délai courtois — laisse le serveur consolider sa réponse
+  await page.waitForTimeout(PAGE_DELAY_MS)
+  return true
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Étape 3 — sub-run complet (1 keyword × 1 provider, ou 1 listing)
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function scrapeSubRun(
+  browser: Browser,
+  provider: AtexoProviderInput,
+  keyword: string | null,
+  opts: ScrapeOptions,
+  filterCtx: FilterContext,
+): Promise<SubRunResult> {
+  const scopeLabel = keyword ? `${provider.id}:"${keyword}"` : `${provider.id}:listing`
+
+  let context: BrowserContext | null = null
+  let pushed = 0
+  let pagesFetched = 0
+  let truncated = false
+
+  try {
+    context = await browser.newContext({
+      userAgent: USER_AGENT,
+      locale: 'fr-FR',
+      timezoneId: 'Europe/Paris',
+      viewport: { width: 1280, height: 800 },
+      ignoreHTTPSErrors: true,
     })
 
-    let rN: FetchResult
-    try {
-      rN = await fetchWithRetry(input.postUrl, {
-        method: 'POST',
-        headers: pradoHeaders(input.cookie, true),
-        body,
-      })
-    } catch (e) {
-      log.warning(`[${input.scopeLabel}] Page ${page} fetch error: ${e instanceof Error ? e.message : e}`)
-      break
-    }
-    pagesFetched++
-    if (rN.status >= 500 || rN.status === 400) {
-      log.info(`[${input.scopeLabel}] HTTP ${rN.status} sur page ${page} — fin pagination`)
-      break
-    }
-    if (rN.status !== 200) {
-      log.warning(`[${input.scopeLabel}] HTTP ${rN.status} sur page ${page} — stop`)
-      break
+    // Bloquer les ressources lourdes (images, fonts, media) — gain X3-5 en vitesse
+    await context.route('**/*', (route) => {
+      const t = route.request().resourceType()
+      if (t === 'image' || t === 'font' || t === 'media') return route.abort()
+      return route.continue()
+    })
+
+    const page = await context.newPage()
+    page.setDefaultTimeout(NAV_TIMEOUT_MS)
+
+    const formOk = await submitAdvancedSearch(page, provider.baseUrl, keyword, opts.categorie, scopeLabel)
+    if (!formOk) {
+      log.warning(`[${scopeLabel}] échec submit, sub-run abandonné`)
+      return { pushed: 0, pagesFetched: 0, truncated: false }
     }
 
-    const newState = extractPradoPageState(rN.html)
-    if (newState) pradoState = newState
+    // Boucle pagination — page actuelle déjà chargée
+    let totalPages: number | null = null
+    for (let pageNum = 1; pageNum <= opts.maxPagesPerProvider; pageNum++) {
+      const html = await page.content()
+      const parsed = parseListingPage(html, provider.baseUrl, provider.id)
+      pagesFetched++
+      if (totalPages === null) totalPages = parsed.totalPages
 
-    const parsed = parseListingPage(rN.html, input.baseUrl, input.providerId)
-    if (parsed.items.length === 0) {
-      log.info(`[${input.scopeLabel}] Page ${page} : aucun item — fin`)
-      break
-    }
-    log.info(`[${input.scopeLabel}] Page ${page}/${input.totalPages} — ${parsed.items.length} items`)
+      if (pageNum === 1) {
+        log.info(
+          `[${scopeLabel}] Page 1/${parsed.totalPages ?? '?'} — `
+          + `${parsed.items.length} items, totalResults=${parsed.totalResults ?? '?'}`,
+        )
+      } else {
+        log.info(`[${scopeLabel}] Page ${pageNum}/${parsed.totalPages ?? '?'} — ${parsed.items.length} items`)
+      }
 
-    const pageItems = filterAndDedupe(parsed.items, input.filterCtx)
-    if (pageItems.length > 0) {
-      await Actor.pushData(pageItems)
-      pushed += pageItems.length
-    }
+      if (parsed.items.length === 0) {
+        log.info(`[${scopeLabel}] page ${pageNum} : aucun item — fin pagination`)
+        break
+      }
 
-    if (page === lastPage && page < input.totalPages) {
-      truncated = true
+      const filtered = filterAndDedupe(parsed.items, filterCtx)
+      if (filtered.length > 0) {
+        await Actor.pushData(filtered)
+        pushed += filtered.length
+      }
+
+      // Stop si on a atteint la dernière page connue
+      if (parsed.totalPages !== null && pageNum >= parsed.totalPages) {
+        break
+      }
+
+      // Stop si on a atteint le cap maxPagesPerProvider sans avoir tout couvert
+      if (pageNum >= opts.maxPagesPerProvider) {
+        if (parsed.totalPages !== null && pageNum < parsed.totalPages) truncated = true
+        break
+      }
+
+      // Aller à la page suivante
+      const ok = await gotoNextPage(page, scopeLabel)
+      if (!ok) {
+        log.info(`[${scopeLabel}] pas de page suivante après page ${pageNum}`)
+        break
+      }
     }
+  } catch (e) {
+    log.warning(`[${scopeLabel}] sub-run exception: ${e instanceof Error ? e.message : e}`)
+  } finally {
+    if (context) await context.close().catch(() => {})
   }
 
   return { pushed, pagesFetched, truncated }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Mode 1 — Listing /AllCons (mode par défaut, sans keywords).
+// Entry point — itère sur (keywords × 1 provider)
 // ─────────────────────────────────────────────────────────────────────────────
-async function scrapeListing(
-  provider: AtexoProviderInput,
-  opts: ScrapeOptions,
-  filterCtx: FilterContext,
-): Promise<PaginateOutput> {
-  const { id, baseUrl } = provider
-  const url = baseUrl + ALLCONS_PATH
-  const scopeLabel = id
 
-  log.info(`[${scopeLabel}] Listing ${url}`)
-
-  const r0 = await fetchWithRetry(url, { method: 'GET', headers: pradoHeaders(null, false) })
-  if (r0.status !== 200) {
-    throw new Error(`[${scopeLabel}] GET initial failed: HTTP ${r0.status}`)
-  }
-  const cookie = extractSessionCookie(r0.setCookie)
-  const pradoState = extractPradoPageState(r0.html)
-  if (!pradoState) {
-    throw new Error(`[${scopeLabel}] PRADO_PAGESTATE introuvable`)
-  }
-  const parsed = parseListingPage(r0.html, baseUrl, id)
-  const totalPages = parsed.totalPages ?? 1
-  log.info(`[${scopeLabel}] Page 1/${totalPages} — ${parsed.items.length} items, totalResults=${parsed.totalResults ?? '?'}`)
-
-  return paginateAndCollect({
-    scopeLabel, providerId: id, baseUrl, postUrl: url,
-    initialPradoState: pradoState, cookie,
-    page1Html: r0.html, totalPages, page1Items: parsed.items,
-    maxPages: opts.maxPagesPerProvider,
-    filterCtx,
-  })
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Mode 2 — Recherche par mot-clé (sub-run par keyword).
-// ─────────────────────────────────────────────────────────────────────────────
-/** Une tentative complète : GET + POST search. Retourne null si la séquence
- * a échoué (PRADO "Page state corrupted" — bug aléatoire d'Atexo sur sub-runs
- * successifs). Caller fait du retry. */
-async function tryKeywordSearch(
-  baseUrl: string,
-  url: string,
-  providerId: import('./types').AtexoProviderId,
-  keyword: string,
-  categorie: string | null,
-): Promise<null | { html: string; pradoState: string; cookie: string | null; parsed: ReturnType<typeof parseListingPage> }> {
-  const r0 = await fetchWithRetry(url, { method: 'GET', headers: pradoHeaders(null, false) })
-  if (r0.status !== 200) return null
-  const cookie = extractSessionCookie(r0.setCookie)
-  const pradoState0 = extractPradoPageState(r0.html)
-  if (!pradoState0) return null
-
-  // Petit délai pour laisser le serveur consolider le pagestate
-  await new Promise(r => setTimeout(r, 500))
-
-  const safeKeyword = stripAccents(keyword)
-  const params = new URLSearchParams()
-  params.set('PRADO_PAGESTATE', pradoState0)
-  params.set('PRADO_POSTBACK_TARGET', 'ctl0$CONTENU_PAGE$AdvancedSearch$lancerRecherche')
-  params.set('PRADO_POSTBACK_PARAMETER', '')
-  params.set('ctl0$CONTENU_PAGE$AdvancedSearch$keywordSearch', safeKeyword)
-  params.set('ctl0$CONTENU_PAGE$AdvancedSearch$categorie', categorieCode(categorie))
-  params.set('ctl0$CONTENU_PAGE$AdvancedSearch$rechercheFloue', '1')
-
-  const r1 = await fetchWithRetry(url, {
-    method: 'POST',
-    headers: pradoHeaders(cookie, true),
-    body: params.toString(),
-  })
-  if (r1.status !== 200) return null
-  const pradoState = extractPradoPageState(r1.html) ?? pradoState0
-  const parsed = parseListingPage(r1.html, baseUrl, providerId)
-  return { html: r1.html, pradoState, cookie, parsed }
-}
-
-async function scrapeKeyword(
-  provider: AtexoProviderInput,
-  keyword: string,
-  opts: ScrapeOptions,
-  filterCtx: FilterContext,
-): Promise<PaginateOutput> {
-  const { id, baseUrl } = provider
-  const url = baseUrl + ADVSEARCH_PATH
-  const scopeLabel = `${id}:"${keyword}"`
-
-  log.info(`[${scopeLabel}] Recherche avancée`)
-
-  // Retry 3x avec back-off : Atexo PRADO échoue aléatoirement avec
-  // "Page state is corrupted" sur les sub-runs (~25% de fail rate).
-  let result = null
-  for (let attempt = 1; attempt <= 3; attempt++) {
-    try {
-      result = await tryKeywordSearch(baseUrl, url, id, keyword, opts.categorie)
-      if (result) break
-    } catch (e) {
-      log.warning(`[${scopeLabel}] attempt ${attempt} : ${e instanceof Error ? e.message : e}`)
-    }
-    if (attempt < 3) {
-      const backoff = 2000 * attempt
-      log.info(`[${scopeLabel}] retry après ${backoff}ms...`)
-      await new Promise(r => setTimeout(r, backoff))
-    }
-  }
-
-  if (!result) {
-    log.warning(`[${scopeLabel}] échec après 3 tentatives`)
-    return { pushed: 0, pagesFetched: 2, truncated: false }
-  }
-
-  const totalPages = result.parsed.totalPages ?? 1
-  log.info(`[${scopeLabel}] ${result.parsed.totalResults ?? '?'} résultats, ${totalPages} pages, items page1=${result.parsed.items.length}`)
-
-  if (result.parsed.items.length === 0) {
-    return { pushed: 0, pagesFetched: 2, truncated: false }
-  }
-
-  return paginateAndCollect({
-    scopeLabel, providerId: id, baseUrl, postUrl: url,
-    initialPradoState: result.pradoState, cookie: result.cookie,
-    page1Html: result.html, totalPages, page1Items: result.parsed.items,
-    maxPages: opts.maxPagesPerProvider,
-    filterCtx,
-  })
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Entry point — itère sur les modes et accumule les résultats.
-// ─────────────────────────────────────────────────────────────────────────────
+/**
+ * Scrape une plateforme Atexo. Si un Browser partagé est fourni, on le réutilise
+ * (économie mémoire pour main.ts qui scrape plusieurs providers d'affilée).
+ * Sinon, on en lance un et on le ferme à la fin.
+ */
 export async function scrapeProvider(
   provider: AtexoProviderInput,
   opts: ScrapeOptions,
+  sharedBrowser?: Browser,
 ): Promise<{ pushed: number; pagesFetched: number; truncated: boolean; subRuns: number }> {
+  const ownsBrowser = !sharedBrowser
+  const browser = sharedBrowser ?? (await launchSharedBrowser())
+
   const filterCtx: FilterContext = {
     seenRefs: new Set<string>(),
     categorie: opts.categorie,
@@ -403,31 +441,56 @@ export async function scrapeProvider(
   let anyTruncated = false
   let subRuns = 0
 
-  // Si keywords fournis : on fait 1 sub-run par keyword.
-  // Sinon : on fait 1 run en mode listing global.
-  if (opts.keywords && opts.keywords.length > 0) {
-    for (const kw of opts.keywords) {
-      try {
-        const r = await scrapeKeyword(provider, kw, opts, filterCtx)
-        totalPushed += r.pushed
-        totalPages += r.pagesFetched
-        anyTruncated ||= r.truncated
-        subRuns++
-        log.info(`[${provider.id}:"${kw}"] ✓ ${r.pushed} items (cumul: ${totalPushed})`)
-      } catch (e) {
-        log.warning(`[${provider.id}:"${kw}"] sub-run échec : ${e instanceof Error ? e.message : e}`)
+  try {
+    if (opts.keywords && opts.keywords.length > 0) {
+      for (const kw of opts.keywords) {
+        try {
+          const r = await scrapeSubRun(browser, provider, kw, opts, filterCtx)
+          totalPushed += r.pushed
+          totalPages += r.pagesFetched
+          anyTruncated ||= r.truncated
+          subRuns++
+          log.info(`[${provider.id}:"${kw}"] ✓ ${r.pushed} items (cumul: ${totalPushed})`)
+        } catch (e) {
+          log.warning(
+            `[${provider.id}:"${kw}"] sub-run échec : ${e instanceof Error ? e.message : e}`,
+          )
+        }
+        // Petit délai courtois entre sub-runs (cookies isolés mais évitons un
+        // burst sur l'IP côté Atexo)
+        await new Promise((r) => setTimeout(r, 500))
       }
-      // Délai entre keywords : 3s — au-dessous, Atexo retourne souvent
-      // "Page state is corrupted" sur les sub-runs successifs (race PHP).
-      await new Promise(r => setTimeout(r, 3000))
+    } else {
+      const r = await scrapeSubRun(browser, provider, null, opts, filterCtx)
+      totalPushed = r.pushed
+      totalPages = r.pagesFetched
+      anyTruncated = r.truncated
+      subRuns = 1
     }
-  } else {
-    const r = await scrapeListing(provider, opts, filterCtx)
-    totalPushed = r.pushed
-    totalPages = r.pagesFetched
-    anyTruncated = r.truncated
-    subRuns = 1
+  } finally {
+    if (ownsBrowser) await browser.close().catch(() => {})
   }
 
   return { pushed: totalPushed, pagesFetched: totalPages, truncated: anyTruncated, subRuns }
 }
+
+/** Lance un Chromium headless avec les flags adaptés à un container Apify. */
+export async function launchSharedBrowser(): Promise<Browser> {
+  return chromium.launch({
+    headless: true,
+    args: [
+      '--disable-blink-features=AutomationControlled',
+      '--no-sandbox',
+      '--disable-dev-shm-usage',
+    ],
+  })
+}
+
+// Expose les helpers pour les tests
+export { stripAccents, categorieCode, expiresTooSoon, filterAndDedupe }
+export type { ScrapeOptions, FilterContext }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Tag pour reconnaître facilement la version dans les logs Apify
+// ─────────────────────────────────────────────────────────────────────────────
+export const SCRAPER_VERSION = 'V3-Playwright-2026-04-28'

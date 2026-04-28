@@ -51,11 +51,11 @@
     "maxPagesPerProvider": {
       "title": "Pages max par sub-run",
       "type": "integer",
-      "description": "Garde-fou : nombre maximum de pages de listing à parcourir par plateforme/keyword. Hard-cap PRADO = 3.",
+      "description": "Garde-fou : nombre maximum de pages de listing à parcourir par plateforme/keyword. V3 Playwright : plus de hard-cap PRADO, on peut monter jusqu'à 500 pages (typiquement 50 suffit).",
       "editor": "number",
-      "default": 3,
+      "default": 50,
       "minimum": 1,
-      "maximum": 3
+      "maximum": 500
     }
   },
   "required": ["providers"]

@@ -1,22 +1,26 @@
 /**
- * Acteur Apify — Atexo MPE Scraper
+ * Acteur Apify — Atexo MPE Scraper (V3 Playwright)
  *
  * Scrape les consultations en cours sur les profils acheteurs Atexo Local
  * Trust MPE (PLACE, Maximilien, ...) et expose un dataset normalisé.
  *
  * Input :
- *   { providers: [{ id, baseUrl }], filters: { categorie, maxAgeDays }, maxPagesPerProvider }
+ *   { providers: [{ id, baseUrl }],
+ *     filters: { categorie, keywords[], minDaysUntilDeadline },
+ *     maxPagesPerProvider }
  *
  * Output (dataset items) :
- *   AtexoApifyItem (cf. src/types.ts)
+ *   AtexoApifyItem (cf. src/types.ts) — contrat IMMUTABLE depuis V1.
  *
- * Particularité Atexo : moteur PHP PRADO avec viewstate ~100 KB dans
- *   `PRADO_PAGESTATE` qui doit être renvoyé dans chaque POST. Détails dans
- *   `src/prado.ts` et `src/scraper.ts`.
+ * V3 (2026-04-28) :
+ *   - Bascule vers Playwright headless (vs fetch HTTP brut en V2).
+ *   - Plus de hard-cap PRADO 3 pages (le navigateur exécute le JS PRADO).
+ *   - Plus de race PHP entre sub-runs (BrowserContext frais par sub-run).
+ *   - 1 Chromium partagé pour tous les providers (économie mémoire).
  */
 
 import { Actor, log } from 'apify'
-import { scrapeProvider } from './scraper'
+import { scrapeProvider, launchSharedBrowser, SCRAPER_VERSION } from './scraper'
 import type { AtexoActorInput } from './types'
 
 async function main(): Promise<void> {
@@ -33,13 +37,17 @@ async function main(): Promise<void> {
 
   const opts = {
     categorie: input.filters?.categorie ?? 'services',
-    maxPagesPerProvider: Math.min(Math.max(1, input.maxPagesPerProvider ?? 3), 500),
+    // V3 : on relâche le cap (V2 était à 3 à cause de PRADO).
+    // 50 pages × 20 items = 1000 items max par sub-run, suffisant pour
+    // la couverture quasi-totale des keywords métier.
+    maxPagesPerProvider: Math.min(Math.max(1, input.maxPagesPerProvider ?? 50), 500),
     keywords: Array.isArray(input.filters?.keywords) ? input.filters!.keywords : [],
     minDaysUntilDeadline: Math.max(0, input.filters?.minDaysUntilDeadline ?? 21),
   }
 
   log.info(
-    `Démarrage Atexo MPE — providers=[${input.providers.map(p => p.id).join(', ')}], `
+    `[${SCRAPER_VERSION}] Démarrage Atexo MPE — `
+    + `providers=[${input.providers.map((p) => p.id).join(', ')}], `
     + `categorie=${opts.categorie}, keywords=[${opts.keywords.join(', ')}], `
     + `minDaysUntilDeadline=${opts.minDaysUntilDeadline}, maxPages=${opts.maxPagesPerProvider}`,
   )
@@ -49,26 +57,38 @@ async function main(): Promise<void> {
   let totalSubRuns = 0
   const errors: Array<{ provider: string; error: string }> = []
 
-  for (const provider of input.providers) {
-    try {
-      const r = await scrapeProvider(provider, opts)
-      totalPushed += r.pushed
-      totalPages += r.pagesFetched
-      totalSubRuns += r.subRuns
-      log.info(
-        `[${provider.id}] ✓ ${r.pushed} items, ${r.pagesFetched} pages, ${r.subRuns} sub-runs`
-        + (r.truncated ? ' (TRONQUÉ)' : ''),
-      )
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e)
-      log.error(`[${provider.id}] ✗ ${msg}`)
-      errors.push({ provider: provider.id, error: msg })
+  // 1 Chromium partagé pour tous les providers — gain mémoire & démarrage
+  const browser = await launchSharedBrowser()
+  log.info('Chromium headless lancé')
+
+  try {
+    for (const provider of input.providers) {
+      try {
+        const r = await scrapeProvider(provider, opts, browser)
+        totalPushed += r.pushed
+        totalPages += r.pagesFetched
+        totalSubRuns += r.subRuns
+        log.info(
+          `[${provider.id}] ✓ ${r.pushed} items, ${r.pagesFetched} pages, ${r.subRuns} sub-runs`
+          + (r.truncated ? ' (TRONQUÉ)' : ''),
+        )
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e)
+        log.error(`[${provider.id}] ✗ ${msg}`)
+        errors.push({ provider: provider.id, error: msg })
+      }
     }
+  } finally {
+    await browser.close().catch(() => {})
   }
 
-  log.info(`Total : ${totalPushed} items, ${totalPages} pages, ${totalSubRuns} sub-runs, ${errors.length} provider(s) en erreur`)
+  log.info(
+    `Total : ${totalPushed} items, ${totalPages} pages, ${totalSubRuns} sub-runs, `
+    + `${errors.length} provider(s) en erreur`,
+  )
 
   await Actor.setValue('SUMMARY', {
+    scraperVersion: SCRAPER_VERSION,
     totalPushed,
     totalPages,
     totalSubRuns,

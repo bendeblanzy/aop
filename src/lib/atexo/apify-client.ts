@@ -40,9 +40,21 @@ interface ApifyEnvelope<T> {
   data: T
 }
 
-/** Trigger un run de l'actor Atexo et retourne le run object initial. */
-export async function triggerActor(input: AtexoActorInput): Promise<ApifyRun> {
-  const url = `${APIFY_BASE}/acts/${encodeURIComponent(actorId())}/runs?token=${encodeURIComponent(token())}`
+/**
+ * Trigger un run de l'actor Atexo et retourne le run object initial.
+ *
+ * V3 (Playwright) : 6 plateformes × 16 keywords = jusqu'à 96 sub-runs.
+ * Chaque sub-run met 10-30s. On force `timeout=480s` (8 min) côté Apify
+ * pour laisser le temps de finir, tout en restant sous le maxDuration
+ * Vercel de 600s.
+ */
+const DEFAULT_RUN_TIMEOUT_SECS = 480
+
+export async function triggerActor(input: AtexoActorInput, timeoutSecs = DEFAULT_RUN_TIMEOUT_SECS): Promise<ApifyRun> {
+  const url =
+    `${APIFY_BASE}/acts/${encodeURIComponent(actorId())}/runs`
+    + `?token=${encodeURIComponent(token())}`
+    + `&timeout=${encodeURIComponent(String(timeoutSecs))}`
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

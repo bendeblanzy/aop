@@ -23,7 +23,11 @@ interface SyncOptions {
   daysBack?: number
   /** Filtre type marché — 'services' pour ne récupérer que les services (défaut). null = tous */
   categorie?: 'services' | 'travaux' | 'fournitures' | null
-  /** Garde-fou : limite de pages scrapées par plateforme/keyword (défaut 3, hard-cap PRADO) */
+  /**
+   * Garde-fou : limite de pages scrapées par plateforme/keyword.
+   * V2 (HTTP fetch) : hard-cap 3 (PRADO state corruption au-delà).
+   * V3 (Playwright, 2026-04-28) : plus de hard-cap, défaut bumped à 50.
+   */
   maxPagesPerProvider?: number
   /**
    * Override keywords. Si non fourni, on utilise ATEXO_KEYWORDS_COMM (16 keywords
@@ -61,7 +65,9 @@ export async function syncAtexoTenders(
       keywords: [...keywords],
       minDaysUntilDeadline,
     },
-    maxPagesPerProvider: opts.maxPagesPerProvider ?? 3,
+    // V3 Playwright : hard-cap PRADO levé. 50 pages × 20 items = 1000 max
+    // par sub-run, largement assez pour couvrir le longtail des keywords.
+    maxPagesPerProvider: opts.maxPagesPerProvider ?? 50,
   }
 
   console.log(

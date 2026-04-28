@@ -14,7 +14,16 @@ if (!TOKEN) { console.error('APIFY_API_TOKEN manquant'); process.exit(1) }
 const ROOT = __dirname
 const EXCLUDE_DIRS = new Set(['node_modules', 'dist', '.git', 'apify_storage', 'storage', 'crawlee_storage'])
 const EXCLUDE_FILES = new Set(['.DS_Store', 'deploy.ts', 'deploy-only.ts', 'package-lock.json'])
-const EXCLUDE_BY_PATH = new Set(['src/test-parse.ts', 'src/test-pagination.ts'])
+// V3 : on exclut tous les fichiers de test (legacy V2 + nouveaux tests Playwright).
+// Les tests sont uniquement utiles en local — pas besoin de les pousser sur Apify.
+const EXCLUDE_BY_PATH = new Set([
+  'src/test-parse.ts',
+  'src/test-pagination.ts',
+  'src/test-keyword.ts',
+  'src/test-multi-keyword.ts',
+  'src/test-multi-pagination.ts',
+  'src/test-playwright.ts',
+])
 const BINARY_EXTS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.ico', '.zip', '.tar', '.gz'])
 
 function walk(dir: string, prefix = ''): Array<{ name: string; format: 'TEXT' | 'BASE64'; content: string }> {
@@ -48,7 +57,9 @@ async function main() {
     body: JSON.stringify({
       versionNumber: VERSION_NUMBER,
       sourceType: 'SOURCE_FILES',
-      baseDockerImage: 'apify/actor-node:20',
+      // V3 : image avec Playwright Chromium pré-installé. Le Dockerfile dans
+      // les sourceFiles override en pratique, mais on aligne la metadata.
+      baseDockerImage: 'apify/actor-node-playwright-chrome:20',
       buildTag: 'latest',
       sourceFiles: files,
     }),

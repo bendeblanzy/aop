@@ -90,13 +90,22 @@ export interface ListingPageResult {
  * suivante", puis on cherche dans les bindings JS PRADO la ligne
  * correspondante : `new Prado.WebUI.TLinkButton({'ID':"<id>", 'EventTarget':"<target>", ...})`.
  *
- * On NE convertit PAS naïvement `_` → `$` : les noms de contrôles peuvent
- * contenir des underscores (ex `CONTENU_PAGE`) qu'il faut conserver.
+ * Note 2026-04-28 : depuis la migration Bootstrap, le label "Aller à la page
+ * suivante" est désormais dans `data-original-title` (tooltip Bootstrap),
+ * et `title` est vide. On accepte les deux variantes pour compat ascendante.
  */
 export function findNextPageTarget(html: string): string | null {
-  // 1. Extraire l'id DOM du <a> "Aller à la page suivante"
-  const aRe = /<a\s+id="([^"]*PagerTop[^"]*?ctl\d+)"[^>]*>\s*<span[^>]*title=["']Aller à la page suivante["'][^>]*>/i
-  const aMatch = html.match(aRe)
+  // 1. Extraire l'id DOM du <a> "Aller à la page suivante" — on cherche
+  //    le span enfant qui porte le label, peu importe l'attribut.
+  const aRe1 =
+    /<a\s+id="([^"]*Pager(?:Top|Bottom)[^"]*?ctl\d+)"[^>]*>\s*<span[^>]*?(?:title=["']Aller à la page suivante["']|data-original-title=["']Aller à la page suivante["'])[^>]*>/i
+  let aMatch = html.match(aRe1)
+  if (!aMatch) {
+    // Variante : span d'abord, attribut data-original-title quelque part dans la balise
+    const aRe2 =
+      /<a\s+id="([^"]*Pager(?:Top|Bottom)[^"]*?ctl\d+)"[^>]*>[\s\S]{0,200}?Aller à la page suivante/i
+    aMatch = html.match(aRe2)
+  }
   if (!aMatch) return null
   const linkId = aMatch[1]
 
@@ -114,6 +123,21 @@ export function findNextPageTarget(html: string): string | null {
   // 3. Fallback : conversion naïve (peut échouer sur les noms multi-mot
   // contenant des _ comme CONTENU_PAGE) — mais mieux que rien.
   return linkId.replace(/_/g, '$')
+}
+
+/**
+ * Lit "title" puis "data-original-title" (Bootstrap tooltip pattern), puis le
+ * text node lui-même en dernier recours. Retourne null si rien.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function attrOrText($el: any): string | null {
+  if (!$el || $el.length === 0) return null
+  const t1 = ($el.attr('title') ?? '').trim()
+  if (t1) return t1
+  const t2 = ($el.attr('data-original-title') ?? '').trim()
+  if (t2) return t2
+  const t3 = ($el.text() ?? '').trim()
+  return t3 || null
 }
 
 /**
@@ -156,17 +180,21 @@ export function parseListingPage(
       .text()
       .trim() || null
 
-    // Intitulé : truncate text, on prend le title pour la version complète
-    const $intituleEl = $row.find('div[id$="_panelBlocIntitule"] div.truncate span[title]').first()
-    const intitule = ($intituleEl.attr('title') ?? $intituleEl.text() ?? '').trim() || null
+    // Intitulé : truncate text, on prend le title (ou data-original-title — Bootstrap)
+    // pour la version complète. Tolérant aux deux structures (avec span[title] ou span avec data-toggle).
+    let $intituleEl = $row.find('div[id$="_panelBlocIntitule"] div.truncate span[title]').first()
+    if ($intituleEl.length === 0) {
+      $intituleEl = $row.find('div[id$="_panelBlocIntitule"] div.truncate span').first()
+    }
+    const intitule = attrOrText($intituleEl)
 
-    // Objet : .truncate-700 a un title avec la version complète
-    const $objetEl = $row.find('div[id$="_panelBlocObjet"] div.truncate-700').first()
-    const objet = ($objetEl.attr('title') ?? $objetEl.find('span.small span').first().text() ?? '').trim() || null
+    // Objet : .truncate-700 a un title (ou data-original-title) avec la version complète
+    const $objetEl = $row.find('div[id$="_panelBlocObjet"] .truncate-700').first()
+    const objet = attrOrText($objetEl)
 
     // Organisme
-    const $orgEl = $row.find('div[id$="_panelBlocDenomination"] div.truncate-700').first()
-    const organisme = ($orgEl.attr('title') ?? $orgEl.find('span.small').first().text() ?? '').trim() || null
+    const $orgEl = $row.find('div[id$="_panelBlocDenomination"] .truncate-700').first()
+    const organisme = attrOrText($orgEl)
 
     // Lieu d'exécution
     const lieu = $row.find('div[id$="_panelBlocLieuxExec"] span span').first().text().trim() || null

@@ -17,12 +17,18 @@ export interface AtexoProviderConfig {
   enabled: boolean
 }
 
-// Note V2 : sur les plateformes Atexo "régionales" (Grand Est, PdL, Alsace,
-// Adullact, Le Nord, Mtp3m), le formulaire de recherche avancée a des
-// variants mineurs de PRADO controls qui font que notre POST keyword
-// retourne 0 résultat. Ces 6 providers sont gardés `enabled: false` jusqu'à
-// reverse-engineering plateforme par plateforme. PLACE, Maximilien et
-// Bouches-du-Rhône fonctionnent avec le pattern actuel.
+// V3 (Playwright, 2026-04-28) : grâce au scraper navigateur, le hard-cap
+// PRADO 3 pages est levé et on peut couvrir toute la résultset. Bilan des
+// plateformes Atexo testées :
+//
+//   ✅ Actives (formulaire avancé OK + résultats) :
+//      - PLACE, Maximilien, Bouches-du-Rhône, Pays de la Loire (PdL),
+//        Adullact, Montpellier Métropole (mtp3m).
+//   ⛔ Désactivées (formulaire variant — champ keywordSearch absent du DOM,
+//      à reverse-engineer en V4 pour adapter les sélecteurs) :
+//      - Grand Est, Alsace.
+//   🪦 Domaine mort (ERR_NAME_NOT_RESOLVED, plateforme migrée ou retirée) :
+//      - Le Nord.
 export const ATEXO_PROVIDERS: ReadonlyArray<AtexoProviderConfig> = [
   // ─── Plateformes actives ──────────────────────────────────────────────
   {
@@ -43,24 +49,30 @@ export const ATEXO_PROVIDERS: ReadonlyArray<AtexoProviderConfig> = [
     baseUrl: 'https://marches.departement13.fr',
     enabled: true,
   },
-
-  // ─── Plateformes en attente d'adaptation V3 (formulaire avancé variant) ─
-  {
-    id: 'adullact',
-    name: 'Adullact — Centrale d\'achat collectivités',
-    baseUrl: 'https://webmarche.adullact.org',
-    enabled: false,
-  },
-  {
-    id: 'grandest',
-    name: 'Marchés publics Grand Est',
-    baseUrl: 'https://marchespublics.grandest.fr',
-    enabled: false,
-  },
   {
     id: 'pdl',
     name: 'Marchés publics Pays de la Loire',
     baseUrl: 'https://marchespublics.paysdelaloire.fr',
+    enabled: true, // V3 : confirmé fonctionnel le 2026-04-28
+  },
+  {
+    id: 'adullact',
+    name: "Adullact — Centrale d'achat collectivités",
+    baseUrl: 'https://webmarche.adullact.org',
+    enabled: true, // V3 : formulaire OK (peu d'AO communication, mais ingestion utile)
+  },
+  {
+    id: 'mtp3m',
+    name: 'Marchés Montpellier Méditerranée Métropole',
+    baseUrl: 'https://marches.montpellier3m.fr',
+    enabled: true, // V3 : formulaire OK
+  },
+
+  // ─── Désactivées : formulaire avancé variant — V4 pour adapter sélecteurs ─
+  {
+    id: 'grandest',
+    name: 'Marchés publics Grand Est',
+    baseUrl: 'https://marchespublics.grandest.fr',
     enabled: false,
   },
   {
@@ -69,16 +81,12 @@ export const ATEXO_PROVIDERS: ReadonlyArray<AtexoProviderConfig> = [
     baseUrl: 'https://alsacemarchespublics.eu',
     enabled: false,
   },
+
+  // ─── Désactivée : domaine inaccessible (DNS) ─────────────────────────
   {
     id: 'lenord',
-    name: 'Marchés publics Département du Nord (59)',
+    name: 'Marchés publics Département du Nord (59) — DOMAINE MORT',
     baseUrl: 'https://marchespublics.lenord.fr',
-    enabled: false,
-  },
-  {
-    id: 'mtp3m',
-    name: 'Marchés Montpellier Méditerranée Métropole',
-    baseUrl: 'https://marches.montpellier3m.fr',
     enabled: false,
   },
 ] as const
