@@ -47,7 +47,58 @@ export default function ProfilPage() {
   const [deepResearchLoading, setDeepResearchLoading] = useState(false)
   // SIRET auto-fill
   const [sirenLoading, setSirenLoading] = useState(false)
+  // Suggestion IA (BOAMP codes + domaines)
+  const [suggestLoading, setSuggestLoading] = useState(false)
   const supabase = createClient()
+
+  // ── Suggestion IA : codes BOAMP + types marchés + domaines de compétence ──
+  async function suggestFromPositionnement() {
+    const hasPositionnement = profile.activite_metier || profile.positionnement || profile.atouts_differenciants
+    if (!hasPositionnement) {
+      toast.error('Renseignez d\'abord l\'onglet Positionnement pour activer la suggestion IA.')
+      return
+    }
+    setSuggestLoading(true)
+    try {
+      const res = await fetch('/api/profil/suggest-profile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          activite_metier: profile.activite_metier,
+          positionnement: profile.positionnement,
+          atouts_differenciants: profile.atouts_differenciants,
+          methodologie_type: profile.methodologie_type,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        toast.error(data.error || 'Erreur lors de la suggestion IA')
+        return
+      }
+      setProfile(p => ({
+        ...p,
+        boamp_codes: Array.isArray(data.boamp_codes) && data.boamp_codes.length > 0
+          ? data.boamp_codes
+          : p.boamp_codes,
+        types_marche_filtres: Array.isArray(data.types_marche_filtres) && data.types_marche_filtres.length > 0
+          ? data.types_marche_filtres
+          : p.types_marche_filtres,
+        domaines_competence: Array.isArray(data.domaines_competence) && data.domaines_competence.length > 0
+          ? data.domaines_competence
+          : p.domaines_competence,
+      }))
+      const counts = [
+        data.boamp_codes?.length ? `${data.boamp_codes.length} code${data.boamp_codes.length > 1 ? 's' : ''} BOAMP` : null,
+        data.types_marche_filtres?.length ? `${data.types_marche_filtres.length} type${data.types_marche_filtres.length > 1 ? 's' : ''} de marché` : null,
+        data.domaines_competence?.length ? `${data.domaines_competence.length} domaine${data.domaines_competence.length > 1 ? 's' : ''}` : null,
+      ].filter(Boolean)
+      toast.success(`✅ Suggestion IA appliquée : ${counts.join(', ')}. Vérifiez et sauvegardez.`)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erreur réseau')
+    } finally {
+      setSuggestLoading(false)
+    }
+  }
 
   // ── Auto-remplissage depuis l'API Annuaire des Entreprises (data.gouv.fr) ──
   async function autoFillFromSiret() {
@@ -71,8 +122,17 @@ export default function ProfilPage() {
         return
       }
 
+      // Mapping civilité depuis le titre/qualité du dirigeant
+      const detectCivilite = (qualite: string | null): 'M.' | 'Mme' | undefined => {
+        if (!qualite) return undefined
+        const q = qualite.toLowerCase()
+        if (q.includes('présidente') || q.includes('directrice') || q.includes('gérante')) return 'Mme'
+        return 'M.'
+      }
+
       setProfile(p => ({
         ...p,
+        // ── Identité ────────────────────────────────────────────────────
         raison_sociale: data.nom_complet ?? p.raison_sociale,
         forme_juridique: data.forme_juridique ?? p.forme_juridique,
         code_naf: data.code_naf ?? p.code_naf,
@@ -81,9 +141,26 @@ export default function ProfilPage() {
         ville: data.ville ?? p.ville,
         numero_tva: p.numero_tva || data.numero_tva,
         date_creation_entreprise: data.date_creation ?? p.date_creation_entreprise,
+        // ── Données financières ─────────────────────────────────────────
+        capital_social: p.capital_social ?? data.capital_social ?? undefined,
+        effectif_moyen: p.effectif_moyen ?? data.effectif_estime ?? undefined,
+        // ── Représentant légal (depuis dirigeants[0]) ───────────────────
+        nom_representant: p.nom_representant || data.dirigeant_nom || '',
+        prenom_representant: p.prenom_representant || data.dirigeant_prenom || '',
+        qualite_representant: p.qualite_representant || data.dirigeant_qualite || '',
+        civilite_representant: p.civilite_representant || detectCivilite(data.dirigeant_qualite) || undefined,
       }))
 
-      toast.success(`✅ ${data.nom_complet} — données pré-remplies ! Vérifiez et sauvegardez.`)
+      const filledFields = [
+        data.forme_juridique && data.forme_juridique !== 'Autre' ? 'forme juridique' : null,
+        data.capital_social ? 'capital' : null,
+        data.effectif_estime != null ? `effectif (~${data.effectif_estime} pers.)` : null,
+        data.dirigeant_nom ? `dirigeant : ${data.dirigeant_prenom ?? ''} ${data.dirigeant_nom}`.trim() : null,
+      ].filter(Boolean)
+
+      toast.success(
+        `✅ ${data.nom_complet} — données pré-remplies !${filledFields.length > 0 ? ` (${filledFields.join(', ')})` : ''} Vérifiez et sauvegardez.`
+      )
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Erreur lors de la recherche')
     } finally {
@@ -532,7 +609,17 @@ export default function ProfilPage() {
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-text-primary mb-3">Domaines de compétence</label>
+                <div className="flex items-center gap-2 mb-3">
+                  <label className="block text-sm font-medium text-text-primary">Domaines de compétence</label>
+                  <button
+                    onClick={suggestFromPositionnement}
+                    disabled={suggestLoading}
+                    className="ml-auto flex items-center gap-1.5 bg-[#0000FF] hover:bg-[#0000CC] text-white rounded-lg px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-40"
+                  >
+                    {suggestLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+                    Suggérer via IA
+                  </button>
+                </div>
                 <div className="grid grid-cols-3 gap-2">
                   {DOMAINES.map(d => (
                     <label key={d} className="flex items-center gap-2 cursor-pointer">
@@ -974,10 +1061,19 @@ export default function ProfilPage() {
                       {(profile.boamp_codes || []).length} sélectionné{(profile.boamp_codes || []).length > 1 ? 's' : ''}
                     </span>
                   )}
+                  <button
+                    onClick={suggestFromPositionnement}
+                    disabled={suggestLoading}
+                    className="ml-auto flex items-center gap-1.5 bg-[#0000FF] hover:bg-[#0000CC] text-white rounded-lg px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-40"
+                  >
+                    {suggestLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+                    Suggérer via IA
+                  </button>
                 </div>
                 <p className="text-xs text-text-secondary mb-4">
                   Sélectionnez les codes thématiques correspondant à vos domaines d'activité.
                   Seules les annonces portant au moins un de ces codes seront affichées dans la Veille BOAMP.
+                  <span className="text-[#0000FF]"> Le bouton "Suggérer via IA" pré-coche automatiquement depuis votre Positionnement.</span>
                 </p>
                 <div className="space-y-5">
                   {BOAMP_CATEGORIES.map(categorie => {
