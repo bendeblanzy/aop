@@ -17,16 +17,40 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'SIREN/SIRET invalide (minimum 9 chiffres)' }, { status: 400 })
   }
 
+  // Retry helper with exponential backoff (handles 429 rate-limiting)
+  async function fetchWithRetry(url: string, maxAttempts = 3): Promise<Response> {
+    let lastRes: Response | null = null
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      if (attempt > 0) {
+        // Exponential backoff: 500ms, 1000ms
+        await new Promise(resolve => setTimeout(resolve, 500 * attempt))
+      }
+      const res = await fetch(url, {
+        headers: { 'User-Agent': 'AOP-App/1.0' },
+        signal: AbortSignal.timeout(8000),
+      })
+      if (res.status !== 429) return res
+      lastRes = res
+    }
+    return lastRes!
+  }
+
   try {
-    const res = await fetch(
-      `https://recherche-entreprises.api.gouv.fr/search?q=${encodeURIComponent(q)}&page=1&per_page=1`,
-      { headers: { 'User-Agent': 'AOP-App/1.0' }, signal: AbortSignal.timeout(8000) }
+    const res = await fetchWithRetry(
+      `https://recherche-entreprises.api.gouv.fr/search?q=${encodeURIComponent(q)}&page=1&per_page=1`
     )
     if (!res.ok) {
       const body = await res.text().catch(() => '')
+      const isRateLimit = res.status === 429
       return NextResponse.json(
-        { error: `API Annuaire des Entreprises indisponible (HTTP ${res.status})`, detail: body.slice(0, 200) },
-        { status: 502 }
+        {
+          error: isRateLimit
+            ? "Limite de requêtes atteinte sur l'annuaire des entreprises. Réessayez dans quelques secondes."
+            : `API Annuaire des Entreprises indisponible (HTTP ${res.status})`,
+          retryable: isRateLimit,
+          detail: body.slice(0, 200),
+        },
+        { status: isRateLimit ? 429 : 502 }
       )
     }
 

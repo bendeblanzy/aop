@@ -355,7 +355,7 @@ export default function VeillePage() {
   const searchParams = useSearchParams()
 
   const [tenders, setTenders] = useState<TenderItem[]>([])
-  const [total, setTotal] = useState(0)
+  const [total, setTotal] = useState<number | null>(null)
   const [page, setPage] = useState(0)
   const [loading, setLoading] = useState(true)
   const [hasBoampCodes, setHasBoampCodes] = useState(true)
@@ -507,7 +507,7 @@ export default function VeillePage() {
     ? sortTenders(favTenders, sortBy)
     : sortedTenders
 
-  const totalPages = Math.ceil(total / LIMIT)
+  const totalPages = Math.ceil((total ?? 0) / LIMIT)
   const favCount = favorites.size
   const isLoadingDisplay = tab === 'favorites' ? favTendersLoading : loading
 
@@ -529,9 +529,15 @@ export default function VeillePage() {
           <AlertCircle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
           <div className="flex-1">
             <p className="font-medium text-sm">Codes BOAMP non configurés</p>
-            <p className="text-gray-500 text-xs mt-0.5">Sans codes BOAMP, toutes les annonces sont affichées sans filtre.</p>
+            <p className="text-gray-500 text-xs mt-0.5">
+              Sans codes BOAMP, toutes les annonces sont affichées sans filtre métier.{' '}
+              <Link href="/profil#boamp" className="text-[#0000FF] hover:underline font-medium">
+                Ajoutez vos codes CPV dans votre profil
+              </Link>{' '}
+              pour affiner les résultats.
+            </p>
           </div>
-          <Link href="/profil" className="flex items-center gap-1 text-[#0000FF] text-xs font-medium hover:underline shrink-0">
+          <Link href="/profil#boamp" className="flex items-center gap-1 text-[#0000FF] text-xs font-medium hover:underline shrink-0">
             <Settings className="w-3 h-3" /> Configurer
           </Link>
         </div>
@@ -583,7 +589,7 @@ export default function VeillePage() {
           <input
             type="text"
             placeholder={searchMode === 'semantic'
-              ? 'Ex : refonte site web, campagne pub événementielle, motion design...'
+              ? 'Ex : impression supports de communication, maintenance informatique, formation professionnelle...'
               : 'Rechercher dans le titre, acheteur...'}
             value={searchInput}
             onChange={e => handleSearchChange(e.target.value)}
@@ -719,16 +725,18 @@ export default function VeillePage() {
         </div>
       </div>
 
-      {/* Suggestion bar */}
-      <div className="bg-[#E6E6FF] rounded-xl p-3 mb-4 flex items-center gap-2">
-        <Zap className="w-4 h-4 text-[#0000FF] shrink-0" />
-        <span className="text-sm text-[#0000FF] font-medium">
-          {searchMode === 'semantic' && search.trim()
-            ? `Recherche IA : résultats sémantiques pour « ${search} » — ${total} annonces trouvées`
-            : `Annonces de services communication & numérique — ${total} correspondances profil${search.trim() ? ` · filtre « ${search} »` : ''}`
-          }
-        </span>
-      </div>
+      {/* Suggestion bar — masquée pendant le chargement initial pour éviter le flash "0 correspondances" */}
+      {total !== null && (
+        <div className="bg-[#E6E6FF] rounded-xl p-3 mb-4 flex items-center gap-2">
+          <Zap className="w-4 h-4 text-[#0000FF] shrink-0" />
+          <span className="text-sm text-[#0000FF] font-medium">
+            {searchMode === 'semantic' && search.trim()
+              ? `Recherche IA : résultats sémantiques pour « ${search} » — ${total} annonces trouvées`
+              : `${total} correspondances profil${search.trim() ? ` · filtre « ${search} »` : ''}`
+            }
+          </span>
+        </div>
+      )}
 
       {/* Tabs */}
       <div className="flex gap-2 mb-4">

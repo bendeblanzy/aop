@@ -36,7 +36,7 @@ export default function LoginPage() {
             <Image src="/logo-ladn.svg" alt="L'ADN DATA" width={180} height={64} priority />
           </div>
           <h1 className="text-2xl font-bold text-text-primary">Connexion</h1>
-          <p className="text-text-secondary mt-1">Accédez à votre espace de réponse aux appels d&apos;offres</p>
+          <p className="text-text-secondary mt-1">Accédez à votre espace de veille sur les marchés publics</p>
         </div>
 
         <div className="bg-white rounded-2xl border border-border p-8 shadow-sm">

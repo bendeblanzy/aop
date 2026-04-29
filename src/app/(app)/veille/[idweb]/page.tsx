@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useState } from 'react'
-import { useParams, useRouter } from 'next/navigation'
+import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import {
   ArrowLeft, Building2, Calendar, MapPin, Clock,
@@ -90,6 +90,22 @@ interface ProfileInfo {
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
+/** Normalise les libellés de procédure TED (anglais brut) en français. */
+function normalizeProcedureLibelle(libelle: string | null): string | null {
+  if (!libelle) return null
+  const lower = libelle.toLowerCase().trim()
+  const map: Record<string, string> = {
+    'open': 'Procédure Ouverte',
+    'restricted': 'Procédure Restreinte',
+    'negotiated': 'Procédure Négociée',
+    'negotiated with prior publication': 'Procédure Négociée avec publication',
+    'competitive dialogue': 'Dialogue Compétitif',
+    'innovation partnership': 'Partenariat d\'Innovation',
+    'competitive procedure with negotiation': 'Procédure Concurrentielle avec Négociation',
+  }
+  return map[lower] ?? libelle
+}
+
 function formatDate(iso: string | null) {
   if (!iso) return '—'
   try {
@@ -147,7 +163,6 @@ function getScoreBarColor(score: number) {
 
 export default function TenderDetailPage() {
   const params = useParams()
-  const router = useRouter()
   const idweb = params.idweb as string
 
   const [tender, setTender] = useState<TenderDetail | null>(null)
@@ -207,17 +222,6 @@ export default function TenderDetailPage() {
     } finally {
       setFavLoading(false)
     }
-  }
-
-  function handleRepondre() {
-    if (!tender) return
-    const p = new URLSearchParams()
-    if (tender.objet) p.set('titre', tender.objet)
-    if (tender.nomacheteur) p.set('acheteur', tender.nomacheteur)
-    if (tender.idweb) p.set('boamp_idweb', tender.idweb)
-    if (tender.datelimitereponse) p.set('deadline', tender.datelimitereponse.split('T')[0])
-    if (tender.url_profil_acheteur) p.set('boamp_url', tender.url_profil_acheteur)
-    router.push(`/appels-offres/nouveau?${p.toString()}`)
   }
 
   if (loading) {
@@ -288,7 +292,7 @@ export default function TenderDetailPage() {
         <span className="text-xs font-bold bg-[#0000FF] text-white px-3 py-1 rounded-full uppercase">
           {tender.nature_libelle ?? 'Services'}
         </span>
-        {tender.type_marche && (
+        {tender.type_marche && tender.type_marche.toLowerCase() !== (tender.nature_libelle ?? '').toLowerCase() && (
           <span className="text-xs font-medium bg-gray-100 text-gray-600 px-3 py-1 rounded-full">
             {tender.type_marche}
           </span>
@@ -331,7 +335,7 @@ export default function TenderDetailPage() {
       <hr className="border-[#E0E0F0]" />
 
       {/* Action cards row */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4">
         {/* Voir l'annonce originale */}
         <div className="bg-[#F5F5FF] rounded-xl border border-[#E0E0F0] p-5 flex items-center justify-between">
           <div>
@@ -361,21 +365,6 @@ export default function TenderDetailPage() {
           ) : (
             <span className="text-xs text-gray-400 italic">Lien non disponible</span>
           )}
-        </div>
-
-        {/* Générer une réponse */}
-        <div className="bg-[#F5F5FF] rounded-xl border border-[#E0E0F0] p-5 flex items-center justify-between">
-          <div>
-            <h3 className="font-semibold text-gray-900 text-sm">Générer une réponse automatique</h3>
-            <p className="text-xs text-gray-500 mt-0.5">Utilisez l&apos;IA pour générer un brouillon de réponse à partir du DCE</p>
-          </div>
-          <button
-            onClick={handleRepondre}
-            className="flex items-center gap-2 bg-[#0000FF] hover:bg-[#0000CC] text-white rounded-lg px-4 py-2.5 text-sm font-semibold transition-colors shrink-0"
-          >
-            <FileText className="w-4 h-4" />
-            Générer une réponse
-          </button>
         </div>
       </div>
 
@@ -473,7 +462,7 @@ export default function TenderDetailPage() {
             isOuvert ? 'bg-green-50 border-green-200 text-green-800' :
             'bg-gray-50 border-gray-200 text-gray-700'
           )}>
-            <span className="font-bold">Procédure :</span> {tender.procedure_libelle}
+            <span className="font-bold">Procédure :</span> {normalizeProcedureLibelle(tender.procedure_libelle)}
           </div>
         )}
 
@@ -529,7 +518,7 @@ export default function TenderDetailPage() {
         {tender.procedure_libelle && (
           <div>
             <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Type de procédure</h3>
-            <p className="text-sm text-gray-700">{tender.procedure_libelle}</p>
+            <p className="text-sm text-gray-700">{normalizeProcedureLibelle(tender.procedure_libelle)}</p>
           </div>
         )}
 
@@ -556,7 +545,7 @@ export default function TenderDetailPage() {
           {/* Procédure */}
           <div className="space-y-1">
             <span className="text-xs font-bold text-gray-400 uppercase">Procédure</span>
-            <p className="text-sm text-gray-700">{tender.procedure_libelle ?? tender.type_procedure ?? '—'}</p>
+            <p className="text-sm text-gray-700">{normalizeProcedureLibelle(tender.procedure_libelle) ?? tender.type_procedure ?? '—'}</p>
           </div>
 
           {/* Budget */}
@@ -868,7 +857,7 @@ export default function TenderDetailPage() {
       )}
 
       {/* Bottom action bar */}
-      <div className="flex items-center justify-between bg-white rounded-xl border border-[#E0E0F0] p-4">
+      <div className="flex items-center bg-white rounded-xl border border-[#E0E0F0] p-4">
         <button
           onClick={toggleFav}
           disabled={favLoading}
@@ -882,18 +871,6 @@ export default function TenderDetailPage() {
           <Star className={cn('w-4 h-4', isFav ? 'fill-amber-400' : '')} />
           {isFav ? 'Dans vos favoris' : 'Ajouter aux favoris'}
         </button>
-
-        <div className="flex items-center gap-3">
-          {!deadline.expired && (
-            <button
-              onClick={handleRepondre}
-              className="flex items-center gap-2 bg-[#0000FF] hover:bg-[#0000CC] text-white rounded-lg px-5 py-2.5 text-sm font-semibold transition-colors"
-            >
-              <FileText className="w-4 h-4" />
-              Répondre à cet AO
-            </button>
-          )}
-        </div>
       </div>
     </div>
   )

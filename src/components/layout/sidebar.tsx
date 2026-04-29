@@ -45,6 +45,7 @@ export function Sidebar() {
   const router = useRouter()
   const [mobileOpen, setMobileOpen] = useState(false)
   const [forceMode, setForceMode] = useState(false)
+  const [isAdmin, setIsAdmin] = useState(false)
 
   useEffect(() => {
     setMobileOpen(false)
@@ -56,8 +57,17 @@ export function Sidebar() {
   // les clics inutiles côté UI).
   useEffect(() => {
     const supabase = createClient()
-    supabase.auth.getUser().then(({ data }) => {
+    supabase.auth.getUser().then(async ({ data }) => {
       setForceMode(data.user?.user_metadata?.force_password_change === true)
+      if (data.user) {
+        // Vérifier le rôle dans organization_members
+        const { data: member } = await supabase
+          .from('organization_members')
+          .select('role')
+          .eq('user_id', data.user.id)
+          .maybeSingle()
+        setIsAdmin(member?.role === 'admin')
+      }
     })
   }, [pathname])
 
@@ -159,8 +169,8 @@ export function Sidebar() {
         {/* Spacer */}
         <div className="flex-1" />
 
-        {/* Admin section */}
-        {adminNavigation.length > 0 && (
+        {/* Admin section — visible uniquement pour les admins */}
+        {isAdmin && adminNavigation.length > 0 && (
           <>
             <div className="my-3 border-t border-[#E0E0F0]" />
             <div className="mb-1">

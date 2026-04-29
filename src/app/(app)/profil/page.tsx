@@ -62,7 +62,12 @@ export default function ProfilPage() {
       const res = await fetch(`/api/profil/siret?q=${encodeURIComponent(siret)}`)
       const data = await res.json()
       if (!res.ok) {
-        toast.error(data.error || 'Entreprise introuvable')
+        if (data.retryable) {
+          // 429 rate-limit : message explicite + suggestion de réessayer
+          toast.error(data.error || 'Trop de requêtes — réessayez dans quelques secondes.', { duration: 6000 })
+        } else {
+          toast.error(data.error || 'Entreprise introuvable')
+        }
         return
       }
 
@@ -207,9 +212,13 @@ export default function ProfilPage() {
     for (const f of DATE_FIELDS) {
       if (payload[f] === '') payload[f] = null
     }
+    // Synchroniser profile_methodology avec methodologie_type pour la cohérence DB
+    if (payload.methodologie_type !== undefined) {
+      payload.profile_methodology = payload.methodologie_type
+    }
 
     const { error } = await supabase.from('profiles').upsert(
-      { ...payload, organization_id: orgId },
+      { ...payload, organization_id: orgId, updated_at: new Date().toISOString() },
       { onConflict: 'organization_id' }
     )
     if (error) {
@@ -248,8 +257,12 @@ export default function ProfilPage() {
       for (const f of DATE_FIELDS) {
         if (payload[f] === '') payload[f] = null
       }
+      // Synchroniser profile_methodology avec methodologie_type pour la cohérence DB
+      if (payload.methodologie_type !== undefined) {
+        payload.profile_methodology = payload.methodologie_type
+      }
       const { error } = await supabase.from('profiles').upsert(
-        { ...payload, organization_id: orgId },
+        { ...payload, organization_id: orgId, updated_at: new Date().toISOString() },
         { onConflict: 'organization_id' }
       )
       if (!error) {
@@ -287,7 +300,7 @@ export default function ProfilPage() {
         <div className="flex items-center justify-between">
           <div className="min-w-0 mr-4">
             <h1 className="text-lg sm:text-2xl font-bold text-text-primary flex items-center gap-2 truncate"><Building2 className="w-5 h-5 sm:w-6 sm:h-6 text-primary shrink-0" /> Mon profil entreprise</h1>
-            <p className="text-text-secondary mt-1 text-xs sm:text-sm hidden sm:block">Ces informations servent à remplir automatiquement vos formulaires</p>
+            <p className="text-text-secondary mt-1 text-xs sm:text-sm hidden sm:block">Ces informations alimentent votre matching IA avec les annonces</p>
           </div>
           <div className="flex items-center gap-2 shrink-0">
             {/* Indicateur auto-save */}
@@ -328,7 +341,7 @@ export default function ProfilPage() {
         <div className="w-full bg-gray-100 rounded-full h-2">
           <div className={cn('h-2 rounded-full transition-all', completion >= 80 ? 'bg-secondary' : completion >= 50 ? 'bg-warning' : 'bg-danger')} style={{ width: `${completion}%` }} />
         </div>
-        {completion < 100 && <p className="text-xs text-text-secondary mt-2">Complétez votre profil pour générer des documents plus précis</p>}
+        {completion < 100 && <p className="text-xs text-text-secondary mt-2">Complétez votre profil pour améliorer la précision de votre matching IA</p>}
       </div>
 
       {/* Actions matching — Refaire onboarding + Calibration */}
@@ -792,7 +805,7 @@ export default function ProfilPage() {
                   <div>
                     <p className="text-sm text-[#0000FF] font-medium flex items-center gap-2"><Sparkles className="w-4 h-4" /> Votre ADN, en quelques mots</p>
                     <p className="text-xs text-gray-600 mt-1">
-                      Ces textes alimentent le matching IA avec les appels d'offres et sont intégrés dans vos mémoires techniques.
+                      Ces textes alimentent le matching IA avec les appels d'offres.
                       Plus ils sont précis, meilleurs sont les résultats.
                     </p>
                   </div>

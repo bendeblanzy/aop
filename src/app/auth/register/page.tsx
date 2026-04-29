@@ -78,7 +78,7 @@ export default function RegisterPage() {
             <Image src="/logo-ladn.svg" alt="L'ADN DATA" width={180} height={64} priority />
           </div>
           <h1 className="text-2xl font-bold text-text-primary">Créer un compte</h1>
-          <p className="text-text-secondary mt-1">Commencez à répondre aux appels d&apos;offres avec l&apos;IA</p>
+          <p className="text-text-secondary mt-1">Commencez votre veille intelligente des appels d&apos;offres</p>
         </div>
         <div className="bg-white rounded-2xl border border-border p-8 shadow-sm">
           <form onSubmit={handleSubmit} className="space-y-4">

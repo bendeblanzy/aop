@@ -219,6 +219,7 @@ Génère ce JSON (toutes les clés sont OBLIGATOIRES) :
     positionnement: synthesized.philosophie_valeurs,
     atouts_differenciants: synthesized.atouts_differenciants,
     profile_methodology: synthesized.methodologie_type,
+    methodologie_type: synthesized.methodologie_type,
     prestations_types: answers.prestations,
     prestations_detail: synthesized.prestations_detail,
     exclusions_globales: synthesized.exclusions_globales,

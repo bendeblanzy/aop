@@ -166,11 +166,16 @@ export async function POST(request: NextRequest) {
     const password = Array.from({ length: 12 }, () => chars[Math.floor(Math.random() * chars.length)]).join('')
 
     // Create the user account directly (no email sent)
+    // FIX B1: team members join an existing org → no onboarding needed
     const { data: newUser, error: createError } = await adminClient.auth.admin.createUser({
       email,
       password,
       email_confirm: true, // Skip email confirmation
-      user_metadata: { invited_by: user.id, invite_type: type },
+      user_metadata: {
+        invited_by: user.id,
+        invite_type: type,
+        ...(type === 'team' ? { onboarding_completed: true } : {}),
+      },
     })
 
     if (createError) {
