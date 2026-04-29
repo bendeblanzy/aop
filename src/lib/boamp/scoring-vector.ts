@@ -1,6 +1,7 @@
 import { adminClient } from '@/lib/supabase/admin'
 import { getEmbedding, buildProfileText, cosineSimilarity, simToScore, type PrestationDetail } from '@/lib/ai/embeddings'
-import { callClaude } from '@/lib/ai/claude-client'
+import { callClaudeDetailed } from '@/lib/ai/claude-client'
+import { hashPrompt, logScoringBatch, type ScoringLogEntry } from '@/lib/ai/scoring-logger'
 
 export interface VectorScoreResult {
   idweb: string
@@ -179,9 +180,7 @@ export async function scoreWithVectors(
       }
     })
 
-    try {
-      const raw = await callClaude(
-        `Tu es votre spécialiste Appels d'Offre, expert en marchés publics français.
+    const systemPrompt = `Tu es votre spécialiste Appels d'Offre, expert en marchés publics français.
 Ta mission : évaluer la pertinence de chaque appel d'offres pour cette société spécifique.
 
 Pour chaque annonce :
@@ -202,22 +201,51 @@ RÈGLES IMPÉRATIVES :
 - Si l'AO matche la SPÉCIFICITÉ exacte de la prestation (ex: vidéo IA alors que la société est sur
   vidéo IA), boost minimum de +10 points par rapport au score vectoriel.
 
-Réponds UNIQUEMENT en JSON valide : [{"idweb":"...", "score": 75, "raison": "..."}]`,
+Réponds UNIQUEMENT en JSON valide : [{"idweb":"...", "score": 75, "raison": "..."}]`
+
+    try {
+      const meta = await callClaudeDetailed(
+        systemPrompt,
         `PROFIL DE LA SOCIÉTÉ :\n${richContext}\n\nAPPELS D'OFFRES À ÉVALUER :\n${JSON.stringify(tendersForClaude)}`,
-        'sonnet'
+        'sonnet',
       )
 
-      const cleaned = raw.replace(/^```[a-z]*\n?/i, '').replace(/\n?```$/i, '').trim()
+      const cleaned = meta.text.replace(/^```[a-z]*\n?/i, '').replace(/\n?```$/i, '').trim()
       const parsed = JSON.parse(cleaned) as { idweb: string; score: number; raison: string }[]
+
+      const promptHash = hashPrompt(systemPrompt)
+      const logEntries: ScoringLogEntry[] = []
 
       for (const p of parsed) {
         const r = results.find(x => x.idweb === p.idweb)
         if (r) {
+          const scoreIn = r.score
+          const scoreOut = Math.max(0, Math.min(100, Math.round(Number(p.score) || r.score)))
+          const raisonOut = String(p.raison || '').slice(0, 200)
           // Le score Claude affine le score vectoriel
-          r.score = Math.max(0, Math.min(100, Math.round(Number(p.score) || r.score)))
-          r.raison = String(p.raison || '').slice(0, 200)
+          r.score = scoreOut
+          r.raison = raisonOut
+
+          // Phase 3.A — un log par tender (la latence/tokens est partagée entre tous,
+          // mais on les répartit pour pouvoir grouper par run via prompt_hash + window).
+          logEntries.push({
+            organizationId: orgId,
+            tenderIdweb: r.idweb,
+            scoreIn,
+            scoreOut,
+            similarity: r.similarity,
+            raison: raisonOut,
+            model: meta.model,
+            latencyMs: meta.latencyMs,
+            tokensIn: Math.round(meta.tokensIn / parsed.length),
+            tokensOut: Math.round(meta.tokensOut / parsed.length),
+            promptHash,
+          })
         }
       }
+
+      // Fire-and-forget : on ne bloque pas le retour utilisateur.
+      void logScoringBatch(logEntries)
     } catch (e) {
       console.error('[scoring-vector] Tier 2 Claude Sonnet error:', e)
     }

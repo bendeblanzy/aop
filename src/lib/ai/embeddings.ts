@@ -1,8 +1,15 @@
 import OpenAI from 'openai'
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
-
 const MODEL = 'text-embedding-3-small' // 1536 dimensions, très rapide, ~$0.02/1M tokens
+
+// Phase 3.C — init lazy : permet d'importer ce module dans des tests
+// unitaires (simToScore, cosineSimilarity) sans exiger OPENAI_API_KEY.
+let _openai: OpenAI | null = null
+function openai(): OpenAI {
+  if (_openai) return _openai
+  _openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+  return _openai
+}
 
 // ── Constantes de normalisation du score ─────────────────────────────────────
 // Calibrées EMPIRIQUEMENT sur la distribution réelle des similarités cosinus
@@ -60,7 +67,7 @@ export async function getEmbedding(text: string): Promise<number[]> {
   const clean = text.replace(/\n+/g, ' ').trim().slice(0, 32000)
   if (!clean) return []
 
-  const response = await openai.embeddings.create({
+  const response = await openai().embeddings.create({
     model: MODEL,
     input: clean,
   })
@@ -84,7 +91,7 @@ export async function getEmbeddingsBatch(texts: string[]): Promise<number[][]> {
 
   for (let i = 0; i < cleaned.length; i += BATCH_SIZE) {
     const batch = cleaned.slice(i, i + BATCH_SIZE)
-    const response = await openai.embeddings.create({
+    const response = await openai().embeddings.create({
       model: MODEL,
       input: batch,
     })
