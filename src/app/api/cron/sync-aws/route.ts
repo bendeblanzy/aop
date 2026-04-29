@@ -47,14 +47,14 @@ export async function POST(request: NextRequest) {
 
       if (unembedded && unembedded.length > 0) {
         console.log(`[cron/sync-aws] Embedding ${unembedded.length} new AWS tenders...`)
-        const texts = unembedded.map((t: Record<string, unknown>) => buildTenderText(t))
+        const texts = unembedded.map(t => buildTenderText(t))
 
         for (let i = 0; i < texts.length; i += 100) {
           const chunkTexts = texts.slice(i, i + 100)
           const chunkTenders = unembedded.slice(i, i + 100)
           const embeddings = await getEmbeddingsBatch(chunkTexts)
 
-          const promises = chunkTenders.map((t: { idweb: string }, idx: number) =>
+          const promises = chunkTenders.map((t, idx) =>
             adminClient
               .from('tenders')
               .update({ embedding: JSON.stringify(embeddings[idx]) })
