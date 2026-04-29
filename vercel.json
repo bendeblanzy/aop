@@ -15,6 +15,10 @@
     {
       "path": "/api/cron/sync-dedup",
       "schedule": "0 8 * * *"
+    },
+    {
+      "path": "/api/cron/sync-aws",
+      "schedule": "0 9 * * *"
     }
   ],
   "functions": {
@@ -26,6 +30,7 @@
     "src/app/api/cron/sync-boamp/route.ts": { "maxDuration": 300 },
     "src/app/api/cron/sync-ted/route.ts": { "maxDuration": 300 },
     "src/app/api/cron/sync-atexo/route.ts": { "maxDuration": 600 },
-    "src/app/api/cron/sync-dedup/route.ts": { "maxDuration": 300 }
+    "src/app/api/cron/sync-dedup/route.ts": { "maxDuration": 300 },
+    "src/app/api/cron/sync-aws/route.ts": { "maxDuration": 300 }
   }
 }

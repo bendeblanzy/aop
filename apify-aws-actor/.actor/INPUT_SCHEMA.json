@@ -1,0 +1,37 @@
+{
+  "title": "AWS MPI Scraper Input",
+  "type": "object",
+  "schemaVersion": 1,
+  "properties": {
+    "keywords": {
+      "title": "Mots-clés de recherche",
+      "type": "array",
+      "description": "Liste de mots-clés à rechercher. Si absent, utilise les 22 mots-clés métier par défaut (communication, événementiel, audiovisuel…).",
+      "editor": "stringList",
+      "default": []
+    },
+    "minDaysUntilDeadline": {
+      "title": "Délai minimum avant date limite (jours)",
+      "type": "integer",
+      "description": "Ne push que les AO dont la date limite de remise est dans au moins N jours. Défaut 15. Mettre 0 pour désactiver.",
+      "default": 15,
+      "minimum": 0
+    },
+    "maxPagesPerKeyword": {
+      "title": "Pages max par mot-clé",
+      "type": "integer",
+      "description": "Nombre max de pages à scraper par mot-clé (10 items/page). Défaut 10 = 100 items max/keyword.",
+      "default": 10,
+      "minimum": 1,
+      "maximum": 50
+    },
+    "maxDetailFetches": {
+      "title": "Nombre max de fiches de détail à enrichir",
+      "type": "integer",
+      "description": "Nombre max de fiches de détail à fetcher pour enrichissement CPV/SIRET/valeur. Défaut 100.",
+      "default": 100,
+      "minimum": 0,
+      "maximum": 500
+    }
+  }
+}

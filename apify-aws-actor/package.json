@@ -1,0 +1,21 @@
+{
+  "name": "aws-mpi-scraper",
+  "version": "0.0.1",
+  "description": "Apify actor — scrape consultations SERVICES sur marches-publics.info (AWSolutions MPE)",
+  "type": "module",
+  "main": "dist/main.js",
+  "scripts": {
+    "start": "node dist/main.js",
+    "build": "tsc --project tsconfig.json",
+    "dev": "tsx src/main.ts"
+  },
+  "dependencies": {
+    "apify": "^3.2.6",
+    "cheerio": "^1.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.0.0"
+  }
+}
