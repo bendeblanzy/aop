@@ -245,7 +245,7 @@ function OnboardingPageInner() {
       if (sd.qualite_representant) upd('qualite_representant', sd.qualite_representant)
       if (!data.org_name && sd.raison_sociale) upd('org_name', sd.raison_sociale)
       toast.success('Entreprise trouvée !')
-    } catch { toast.error('Erreur réseau') }
+    } catch (e) { toast.error(e instanceof Error ? e.message : 'Erreur réseau — vérifiez votre connexion') }
     setSiretLoading(false)
   }
 

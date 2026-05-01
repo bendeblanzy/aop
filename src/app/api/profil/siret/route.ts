@@ -1,16 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
 
 /**
  * GET /api/profil/siret?q=<siren_or_siret>
  * Recherche une entreprise via l'Annuaire des Entreprises (data.gouv.fr)
  * et retourne les champs normalisés pour pré-remplir le profil.
  * Exécuté côté serveur pour éviter les problèmes CORS en production.
+ * Pas d'auth requise : API publique, appelée dès l'étape 1 de l'onboarding.
  */
 export async function GET(request: NextRequest) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const q = new URL(request.url).searchParams.get('q')?.replace(/\s/g, '')
   if (!q || q.length < 9) {
