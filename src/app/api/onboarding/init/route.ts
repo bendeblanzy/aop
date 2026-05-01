@@ -7,6 +7,10 @@ import { adminClient } from '@/lib/supabase/admin'
  * Crée l'organisation + un profil vide dès la 1ère étape du wizard.
  * Idempotent : si l'org existe déjà, retourne son ID sans rien créer.
  *
+ * Cas spécial : si le SIRET est déjà enregistré par une autre org,
+ * retourne { error: 'SIRET_ALREADY_REGISTERED', admin_email } avec status 409
+ * pour inviter l'utilisateur à rejoindre l'équipe existante.
+ *
  * Body: { org_name, raison_sociale, nom_commercial?, siret?, ...siret_data }
  */
 export async function POST(request: NextRequest) {
@@ -42,7 +46,50 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'org_name et raison_sociale sont requis' }, { status: 400 })
   }
 
-  // Vérifier si l'utilisateur a déjà une org
+  // ── Vérifier si le SIRET est déjà pris par une autre org ─────────────────
+  if (siret) {
+    const { data: existingProfile } = await adminClient
+      .from('profiles')
+      .select('organization_id')
+      .eq('siret', siret)
+      .maybeSingle()
+
+    if (existingProfile) {
+      // Vérifier si l'utilisateur est déjà membre de cette org
+      const { data: alreadyMember } = await adminClient
+        .from('organization_members')
+        .select('organization_id')
+        .eq('organization_id', existingProfile.organization_id)
+        .eq('user_id', user.id)
+        .maybeSingle()
+
+      if (!alreadyMember) {
+        // Récupérer l'email de l'admin de l'org existante
+        const { data: adminMember } = await adminClient
+          .from('organization_members')
+          .select('user_id')
+          .eq('organization_id', existingProfile.organization_id)
+          .eq('role', 'admin')
+          .maybeSingle()
+
+        let adminEmail: string | null = null
+        if (adminMember) {
+          const { data: adminUser } = await adminClient.auth.admin.getUserById(adminMember.user_id)
+          adminEmail = adminUser?.user?.email ?? null
+        }
+
+        return NextResponse.json({
+          error: 'SIRET_ALREADY_REGISTERED',
+          admin_email: adminEmail,
+        }, { status: 409 })
+      }
+
+      // L'utilisateur est déjà membre → on retourne simplement l'orgId
+      return NextResponse.json({ success: true, org_id: existingProfile.organization_id })
+    }
+  }
+
+  // ── Vérifier si l'utilisateur a déjà une org ──────────────────────────────
   const { data: existing } = await adminClient
     .from('organization_members')
     .select('organization_id')
@@ -74,7 +121,7 @@ export async function POST(request: NextRequest) {
     })
   }
 
-  // Upsert du profil avec les données disponibles (toutes optionnelles sauf raison_sociale)
+  // ── Upsert du profil ──────────────────────────────────────────────────────
   const profilePayload: Record<string, unknown> = {
     organization_id: orgId,
     raison_sociale: raison_sociale.trim(),
@@ -99,18 +146,10 @@ export async function POST(request: NextRequest) {
   if (email_representant) profilePayload.email_representant = email_representant
   if (telephone_representant) profilePayload.telephone_representant = telephone_representant
 
-  let { error: profileError } = await adminClient
+  // Upsert — gère le cas où le profil existe déjà pour cette org (double-submit, etc.)
+  const { error: profileError } = await adminClient
     .from('profiles')
-    .upsert(profilePayload, { onConflict: 'organization_id' })
-
-  // Si conflit sur le SIRET (déjà utilisé par une autre org), on réessaie sans le SIRET
-  if (profileError?.message?.includes('idx_profiles_siret') || profileError?.code === '23505') {
-    delete profilePayload.siret
-    const { error: retryError } = await adminClient
-      .from('profiles')
-      .upsert(profilePayload, { onConflict: 'organization_id' })
-    profileError = retryError ?? null
-  }
+    .upsert(profilePayload, { onConflict: 'organization_id', ignoreDuplicates: false })
 
   if (profileError) {
     return NextResponse.json({ error: profileError.message }, { status: 500 })

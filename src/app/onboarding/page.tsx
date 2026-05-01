@@ -284,9 +284,14 @@ function OnboardingPageInner() {
         qualite_representant: data.qualite_representant || sd?.qualite_representant,
       }),
     })
+    const resData = await res.json()
+    if (res.status === 409 && resData.error === 'SIRET_ALREADY_REGISTERED') {
+      const contact = resData.admin_email ? ` Contactez ${resData.admin_email} pour recevoir une invitation.` : ' Contactez l\'administrateur de votre société pour recevoir une invitation.'
+      toast.error(`Cette société est déjà inscrite sur la plateforme.${contact}`, { duration: 8000 })
+      return false
+    }
     if (!res.ok) {
-      const err = await res.json()
-      toast.error(err.error ?? 'Erreur initialisation')
+      toast.error(resData.error ?? 'Erreur initialisation')
       return false
     }
     setOrgCreated(true)
