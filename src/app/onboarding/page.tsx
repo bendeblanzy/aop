@@ -33,7 +33,8 @@ const STEP_META = [
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface SiretData {
-  raison_sociale?: string
+  nom_complet?: string        // champ retourné par l'API
+  raison_sociale?: string     // alias normalisé
   forme_juridique?: string
   code_naf?: string
   adresse_siege?: string
@@ -46,6 +47,9 @@ interface SiretData {
   prenom_representant?: string
   nom_representant?: string
   qualite_representant?: string
+  dirigeant_prenom?: string
+  dirigeant_nom?: string
+  dirigeant_qualite?: string
 }
 
 interface StepData {
@@ -238,12 +242,18 @@ function OnboardingPageInner() {
       const d = await res.json()
       if (!res.ok) { toast.error(d.error ?? 'SIRET introuvable'); return }
       const sd: SiretData = d
+      // L'API retourne nom_complet — on le normalise en raison_sociale
+      if (sd.nom_complet && !sd.raison_sociale) sd.raison_sociale = sd.nom_complet
       upd('siretData', sd)
       if (sd.raison_sociale) upd('raison_sociale', sd.raison_sociale)
-      if (sd.prenom_representant) upd('prenom_representant', sd.prenom_representant)
-      if (sd.nom_representant) upd('nom_representant', sd.nom_representant)
-      if (sd.qualite_representant) upd('qualite_representant', sd.qualite_representant)
       if (!data.org_name && sd.raison_sociale) upd('org_name', sd.raison_sociale)
+      // Représentant légal depuis dirigeants
+      const prenom = sd.dirigeant_prenom || sd.prenom_representant
+      const nom = sd.dirigeant_nom || sd.nom_representant
+      const qualite = sd.dirigeant_qualite || sd.qualite_representant
+      if (prenom) upd('prenom_representant', prenom)
+      if (nom) upd('nom_representant', nom)
+      if (qualite) upd('qualite_representant', qualite)
       toast.success('Entreprise trouvée !')
     } catch (e) { toast.error(e instanceof Error ? e.message : 'Erreur réseau — vérifiez votre connexion') }
     setSiretLoading(false)
@@ -611,8 +621,8 @@ function OnboardingPageInner() {
                   </p>
                   {data.siretData.forme_juridique && <p>• Forme juridique : <strong>{data.siretData.forme_juridique}</strong></p>}
                   {data.siretData.adresse_siege && <p>• Adresse : <strong>{data.siretData.adresse_siege}, {data.siretData.code_postal} {data.siretData.ville}</strong></p>}
-                  {(data.siretData.prenom_representant || data.siretData.nom_representant) && (
-                    <p>• Représentant : <strong>{data.siretData.prenom_representant} {data.siretData.nom_representant}{data.siretData.qualite_representant ? ` (${data.siretData.qualite_representant})` : ''}</strong></p>
+                  {(data.siretData.dirigeant_prenom || data.siretData.prenom_representant || data.siretData.dirigeant_nom || data.siretData.nom_representant) && (
+                    <p>• Représentant : <strong>{data.siretData.dirigeant_prenom || data.siretData.prenom_representant} {data.siretData.dirigeant_nom || data.siretData.nom_representant}{(data.siretData.dirigeant_qualite || data.siretData.qualite_representant) ? ` (${data.siretData.dirigeant_qualite || data.siretData.qualite_representant})` : ''}</strong></p>
                   )}
                   {data.siretData.effectif_moyen && <p>• Effectif estimé : <strong>{data.siretData.effectif_moyen} personnes</strong></p>}
                 </div>
