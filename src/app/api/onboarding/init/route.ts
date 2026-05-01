@@ -99,9 +99,18 @@ export async function POST(request: NextRequest) {
   if (email_representant) profilePayload.email_representant = email_representant
   if (telephone_representant) profilePayload.telephone_representant = telephone_representant
 
-  const { error: profileError } = await adminClient
+  let { error: profileError } = await adminClient
     .from('profiles')
     .upsert(profilePayload, { onConflict: 'organization_id' })
+
+  // Si conflit sur le SIRET (déjà utilisé par une autre org), on réessaie sans le SIRET
+  if (profileError?.message?.includes('idx_profiles_siret') || profileError?.code === '23505') {
+    delete profilePayload.siret
+    const { error: retryError } = await adminClient
+      .from('profiles')
+      .upsert(profilePayload, { onConflict: 'organization_id' })
+    profileError = retryError ?? null
+  }
 
   if (profileError) {
     return NextResponse.json({ error: profileError.message }, { status: 500 })
