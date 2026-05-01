@@ -106,9 +106,13 @@ export async function GET(request: NextRequest) {
     const effectifEstime = trancheToEffectif[tranche] ?? null
 
     // Représentant légal — premier dirigeant de la liste (si présent)
-    const dirigeant = Array.isArray(company.dirigeants) ? company.dirigeants[0] : null
+    // Prendre le premier dirigeant de type personne physique (pas personne morale)
+    const dirigeants = Array.isArray(company.dirigeants) ? company.dirigeants : []
+    const dirigeant = dirigeants.find((d: Record<string, unknown>) => d.type_dirigeant === 'personne physique') ?? dirigeants[0] ?? null
     const dirigeantNom: string | null = dirigeant?.nom ?? null
-    const dirigeantPrenom: string | null = dirigeant?.prenom ?? null
+    // L'API retourne "prenoms" (pluriel) — on prend le premier prénom uniquement
+    const prenoms: string = dirigeant?.prenoms ?? dirigeant?.prenom ?? ''
+    const dirigeantPrenom: string | null = prenoms ? prenoms.split(' ')[0] : null
     const dirigeantQualite: string | null = dirigeant?.qualite ?? null
 
     return NextResponse.json({
