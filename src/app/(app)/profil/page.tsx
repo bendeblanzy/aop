@@ -235,9 +235,7 @@ export default function ProfilPage() {
     }
   }
 
-  async function handlePdfUpload(e: React.ChangeEvent<HTMLInputElement>, field: 'cv_plaquette_url' | 'dossier_capacites_url') {
-    const file = e.target.files?.[0]
-    if (!file) return
+  async function uploadPdfFile(file: File, field: 'cv_plaquette_url' | 'dossier_capacites_url') {
     if (file.type !== 'application/pdf') {
       toast.error('Seuls les fichiers PDF sont acceptés')
       return
@@ -259,6 +257,21 @@ export default function ProfilPage() {
     update(field as keyof Profile, urlData.publicUrl)
     toast.success('Fichier uploadé !')
     setUploading(null)
+  }
+
+  async function handlePdfUpload(e: React.ChangeEvent<HTMLInputElement>, field: 'cv_plaquette_url' | 'dossier_capacites_url') {
+    const file = e.target.files?.[0]
+    if (!file) return
+    await uploadPdfFile(file, field)
+  }
+
+  function handlePdfDrop(e: React.DragEvent<HTMLLabelElement>, field: 'cv_plaquette_url' | 'dossier_capacites_url') {
+    e.preventDefault()
+    e.stopPropagation()
+    if (uploading !== null) return
+    const file = e.dataTransfer.files?.[0]
+    if (!file) return
+    void uploadPdfFile(file, field)
   }
 
   useEffect(() => {
@@ -856,9 +869,13 @@ export default function ProfilPage() {
                       <button onClick={() => update('cv_plaquette_url' as keyof Profile, null)} className="text-red-400 hover:text-red-600"><Trash2 className="w-3.5 h-3.5" /></button>
                     </div>
                   ) : (
-                    <label className="flex flex-col items-center gap-1 border-2 border-dashed border-gray-300 rounded-lg px-3 py-4 cursor-pointer hover:border-[#0000FF]/40 hover:bg-[#F5F5FF]/30 transition-colors">
+                    <label
+                      className="flex flex-col items-center gap-1 border-2 border-dashed border-gray-300 rounded-lg px-3 py-4 cursor-pointer hover:border-[#0000FF]/40 hover:bg-[#F5F5FF]/30 transition-colors"
+                      onDragOver={e => e.preventDefault()}
+                      onDrop={e => handlePdfDrop(e, 'cv_plaquette_url')}
+                    >
                       {uploading === 'cv_plaquette_url' ? <Loader2 className="w-6 h-6 animate-spin text-[#0000FF]" /> : <Upload className="w-6 h-6 text-gray-400" />}
-                      <span className="text-xs text-gray-500">PDF — 10 Mo max</span>
+                      <span className="text-xs text-gray-500">Glisser-déposer ou cliquer — PDF 10 Mo max</span>
                       <input type="file" accept=".pdf" className="hidden" onChange={e => handlePdfUpload(e, 'cv_plaquette_url')} disabled={uploading !== null} />
                     </label>
                   )}
@@ -873,9 +890,13 @@ export default function ProfilPage() {
                       <button onClick={() => update('dossier_capacites_url' as keyof Profile, null)} className="text-red-400 hover:text-red-600"><Trash2 className="w-3.5 h-3.5" /></button>
                     </div>
                   ) : (
-                    <label className="flex flex-col items-center gap-1 border-2 border-dashed border-gray-300 rounded-lg px-3 py-4 cursor-pointer hover:border-[#0000FF]/40 hover:bg-[#F5F5FF]/30 transition-colors">
+                    <label
+                      className="flex flex-col items-center gap-1 border-2 border-dashed border-gray-300 rounded-lg px-3 py-4 cursor-pointer hover:border-[#0000FF]/40 hover:bg-[#F5F5FF]/30 transition-colors"
+                      onDragOver={e => e.preventDefault()}
+                      onDrop={e => handlePdfDrop(e, 'dossier_capacites_url')}
+                    >
                       {uploading === 'dossier_capacites_url' ? <Loader2 className="w-6 h-6 animate-spin text-[#0000FF]" /> : <Upload className="w-6 h-6 text-gray-400" />}
-                      <span className="text-xs text-gray-500">PDF — 10 Mo max</span>
+                      <span className="text-xs text-gray-500">Glisser-déposer ou cliquer — PDF 10 Mo max</span>
                       <input type="file" accept=".pdf" className="hidden" onChange={e => handlePdfUpload(e, 'dossier_capacites_url')} disabled={uploading !== null} />
                     </label>
                   )}

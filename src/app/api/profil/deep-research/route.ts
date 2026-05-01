@@ -104,7 +104,8 @@ Réponds en JSON avec ce format exact :
       methodologie_type: result.methodologie_type || '',
     })
   } catch (e) {
-    console.error('[deep-research] error:', e)
-    return NextResponse.json({ error: 'Erreur lors de l\'analyse' }, { status: 500 })
+    const msg = e instanceof Error ? e.message : String(e)
+    console.error('[deep-research] error:', msg)
+    return NextResponse.json({ error: `Erreur Deep Research : ${msg}` }, { status: 500 })
   }
 }
