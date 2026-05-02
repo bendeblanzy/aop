@@ -20,13 +20,15 @@ const DOMAINES = [
   'Environnement', 'Communication', 'Juridique', 'Autre',
 ]
 
+// Labels courts pour que les 8 onglets tiennent dans le strip horizontal sans
+// scroll caché (cf. bug #1 — "Étape 1/8 mais seulement 5 onglets visibles").
 const STEP_META = [
   { id: 1, icon: Building2, label: 'Entreprise', required: true },
   { id: 2, icon: User, label: 'Représentant', required: false },
-  { id: 3, icon: Brain, label: 'Positionnement IA', required: true },
-  { id: 4, icon: Radio, label: 'Veille BOAMP', required: true },
+  { id: 3, icon: Brain, label: 'Positionnement', required: true },
+  { id: 4, icon: Radio, label: 'Veille', required: true },
   { id: 5, icon: Wrench, label: 'Capacités', required: false },
-  { id: 6, icon: BarChart3, label: 'Données financières', required: false },
+  { id: 6, icon: BarChart3, label: 'Finances', required: false },
   { id: 7, icon: FileText, label: 'Références', required: false },
   { id: 8, icon: ShieldCheck, label: 'Finalisation', required: true },
 ]

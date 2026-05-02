@@ -69,12 +69,18 @@ export default function AdminUsersPage() {
   const [created, setCreated] = useState<{ email: string; password: string; message: string } | null>(null)
 
   // Chargement initial
+  // Bug #18 : sur 403, on affichait silencieusement /dashboard. Désormais on
+  // garde l'utilisateur sur la page avec un message explicite, plutôt que de
+  // l'éjecter sans explication.
+  const [forbidden, setForbidden] = useState(false)
+
   useEffect(() => {
     async function load() {
       setLoading(true)
       const res = await fetch('/api/admin/users')
       if (res.status === 403) {
-        router.push('/dashboard')
+        setForbidden(true)
+        setLoading(false)
         return
       }
       if (!res.ok) {
@@ -157,6 +163,25 @@ export default function AdminUsersPage() {
   // Stats
   const totalOrgs = new Set(users.map(u => u.org_id).filter(Boolean)).size
   const totalBeta = users.filter(u => !u.org_id).length
+
+  if (forbidden) {
+    return (
+      <div className="flex flex-col items-center justify-center py-24">
+        <Shield className="w-16 h-16 text-border mb-6" />
+        <h1 className="text-2xl font-bold text-text-primary mb-2">Accès réservé</h1>
+        <p className="text-text-secondary text-sm mb-8 text-center max-w-md">
+          Cette page est réservée au super-administrateur de la plateforme. Si vous pensez qu&apos;il s&apos;agit d&apos;une erreur, contactez l&apos;équipe.
+        </p>
+        <button
+          onClick={() => router.push('/dashboard')}
+          className="flex items-center gap-2 bg-primary hover:bg-primary-hover text-white rounded-lg px-5 py-2.5 text-sm font-medium transition-colors"
+        >
+          <ArrowRight className="w-4 h-4 rotate-180" />
+          Retour au tableau de bord
+        </button>
+      </div>
+    )
+  }
 
   return (
     <div>

@@ -6,7 +6,7 @@ import { usePathname, useSearchParams } from 'next/navigation'
 import {
   LayoutDashboard, Building2, Users,
   Settings, LogOut, Search,
-  Menu, X, Star, Lock, UserCog,
+  Menu, X, Star, Lock, UserCog, FileText,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
@@ -28,6 +28,7 @@ const navigation: NavItem[] = [
   { name: 'Tableau de bord', href: '/dashboard', icon: LayoutDashboard, section: 'main' },
   { name: 'Recherche', href: '/veille', icon: Search, activeWhen: (p, s) => p === '/veille' && !s.includes('tab=favorites'), section: 'main' },
   { name: 'Favoris', href: '/veille?tab=favorites', icon: Star, activeWhen: (p, s) => p === '/veille' && s.includes('tab=favorites'), section: 'main' },
+  { name: 'Mes AO suivis', href: '/appels-offres', icon: FileText, section: 'main' },
   // ── Compte ──
   { name: 'Mon profil', href: '/profil', icon: Building2, section: 'account' },
   { name: 'Mon équipe', href: '/equipe', icon: Users, section: 'account' },

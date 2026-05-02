@@ -5,7 +5,7 @@ import {
   Search, Zap, AlertCircle, Settings, FileText, Building2, Calendar,
   Clock, RefreshCw, X, Star, MapPin,
 } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { cn, decodeHtmlEntities, isUnscored } from '@/lib/utils'
 import Link from 'next/link'
 import { toast } from 'sonner'
 import { REGIONS_FR } from '@/lib/boamp/regions'
@@ -77,7 +77,10 @@ function formatEuros(v: number | null) {
   return `${v}€`
 }
 
-function getScoreLabel(score: number) {
+function getScoreLabel(score: number, reason?: string | null): string {
+  // Cf. bug #11 : ne pas afficher "Match partiel 50%" pour un score de fallback
+  // (profil non renseigné, erreur IA…). On distingue via la raison textuelle.
+  if (isUnscored(reason)) return 'Non évalué'
   if (score >= 80) return 'Excellent match'
   if (score >= 60) return 'Bon match'
   if (score >= 40) return 'Match partiel'
@@ -238,7 +241,7 @@ function TenderCard({
           {tender.nomacheteur && (
             <div className="flex items-center gap-1.5 min-w-0">
               <Building2 className="w-3.5 h-3.5 shrink-0" />
-              <span className="font-medium text-gray-700 truncate">{tender.nomacheteur}</span>
+              <span className="font-medium text-gray-700 truncate">{decodeHtmlEntities(tender.nomacheteur)}</span>
             </div>
           )}
           <div className="flex items-center gap-3 flex-wrap">
@@ -297,7 +300,7 @@ function TenderCard({
           <div className="mb-3">
             <div className="flex items-center justify-between mb-1.5">
               <span className={cn('text-xs font-bold px-2.5 py-0.5 rounded-full border', getScoreBadgeStyle(tender.score))}>
-                {getScoreLabel(tender.score)}
+                {getScoreLabel(tender.score, tender.reason)}
               </span>
               <span className="text-xs font-bold text-gray-600">{tender.score}%</span>
             </div>
@@ -371,7 +374,7 @@ export default function VeillePage() {
   const [sortBy, setSortBy] = useState<SortKey>('score')
   const [regionFilter, setRegionFilter] = useState<string>('')
   const [procedureFilter, setProcedureFilter] = useState<'' | 'ouvert' | 'restreint'>('')
-  const [sourceFilter, setSourceFilter] = useState<'' | 'boamp' | 'ted' | 'atexo'>('')
+  const [sourceFilter, setSourceFilter] = useState<'' | 'boamp' | 'ted' | 'atexo' | 'aws'>('')
   const [tab, setTab] = useState<TabKey>(() =>
     searchParams.get('tab') === 'favorites' ? 'favorites' : 'all'
   )
@@ -640,7 +643,8 @@ export default function VeillePage() {
               ['boamp', 'BOAMP'],
               ['ted', 'TED EU'],
               ['atexo', 'Atexo'],
-            ] as ['' | 'boamp' | 'ted' | 'atexo', string][]).map(([val, label]) => (
+              ['aws', 'AWS'],
+            ] as ['' | 'boamp' | 'ted' | 'atexo' | 'aws', string][]).map(([val, label]) => (
               <button
                 key={val || 'all-src'}
                 onClick={() => setSourceFilter(val)}
@@ -732,7 +736,7 @@ export default function VeillePage() {
           <span className="text-sm text-[#0000FF] font-medium">
             {searchMode === 'semantic' && search.trim()
               ? `Recherche IA : résultats sémantiques pour « ${search} » — ${total} annonces trouvées`
-              : `${total} correspondances profil${search.trim() ? ` · filtre « ${search} »` : ''}`
+              : `${total} annonce${total > 1 ? 's' : ''} active${total > 1 ? 's' : ''}${search.trim() ? ` · filtre « ${search} »` : ''}`
             }
           </span>
         </div>
