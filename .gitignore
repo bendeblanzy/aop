@@ -2,6 +2,7 @@
 
 # dependencies
 /node_modules
+**/node_modules
 /.pnp
 .pnp.*
 .yarn/*
@@ -19,10 +20,21 @@
 
 # production
 /build
+apify-*/dist/
 
 # misc
 .DS_Store
 *.pem
+
+# Local documentation / tutorial materials (not code)
+NOVIUS/
+TUTOS/
+CHATRE\ GRAPHIQUE/
+DOCS\ GENERES/
+
+# Claude Code local settings
+.claude/settings.local.json
+.claude/worktrees/
 
 # debug
 npm-debug.log*

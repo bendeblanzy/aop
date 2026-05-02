@@ -143,10 +143,9 @@ export default function ParametresPage() {
             <h2 className="font-semibold text-text-primary mb-2">Plan actuel</h2>
             <div className="flex items-center justify-between">
               <div>
-                <span className="inline-block bg-primary-light text-primary px-3 py-1 rounded-full text-sm font-medium">Gratuit</span>
-                <p className="text-text-secondary text-sm mt-1">5 appels d&apos;offres / mois — Accès à tous les formulaires</p>
+                <span className="inline-block bg-primary-light text-primary px-3 py-1 rounded-full text-sm font-medium">Bêta</span>
+                <p className="text-text-secondary text-sm mt-1">Veille complète + scoring IA + favoris — toutes les fonctionnalités sont incluses pendant la bêta.</p>
               </div>
-              <button className="border border-primary text-primary hover:bg-primary-light rounded-lg px-4 py-2 text-sm font-medium transition-colors">Passer Pro</button>
             </div>
           </div>
         )}

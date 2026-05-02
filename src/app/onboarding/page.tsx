@@ -644,7 +644,7 @@ function OnboardingPageInner() {
           {step === 2 && (
             <div className="space-y-4">
               <WhyItMatters>
-                Les coordonnées du représentant légal sont obligatoires dans les formulaires DC1 et DC2, qui accompagnent toute candidature à un marché public. En les renseignant ici, ils seront pré-remplis automatiquement dans tous vos dossiers.
+                Les coordonnées du représentant légal sont systématiquement demandées dans les formulaires DC1 et DC2 qui accompagnent toute candidature à un marché public. Les centraliser dans votre profil vous évite de les rechercher à chaque réponse.
               </WhyItMatters>
               <p className="text-sm text-gray-500">Pré-rempli depuis l'Annuaire des Entreprises. Vérifiez et complétez si nécessaire.</p>
               <div className="flex gap-4">
@@ -831,7 +831,7 @@ function OnboardingPageInner() {
           {step === 6 && (
             <div className="space-y-4">
               <WhyItMatters>
-                Le chiffre d'affaires et l'effectif sont obligatoires dans le DC2 — l'acheteur public les utilise pour évaluer votre capacité financière à exécuter le marché. Certains marchés fixent un CA minimum. En les renseignant ici, ils seront pré-remplis dans tous vos futurs dossiers.
+                Le chiffre d'affaires et l'effectif sont obligatoires dans le DC2 — l'acheteur public les utilise pour évaluer votre capacité financière à exécuter le marché. Certains marchés fixent un CA minimum. Les centraliser dans votre profil vous évite de les rechercher à chaque réponse.
               </WhyItMatters>
               <div className="grid grid-cols-2 gap-4">
                 <Input label="CA N-1 (€)" value={data.ca_annee_n1} onChange={v => upd('ca_annee_n1', v)} type="number" placeholder="500000" />
