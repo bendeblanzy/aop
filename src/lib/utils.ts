@@ -44,6 +44,52 @@ export function formatCurrency(amount: number): string {
   return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(amount)
 }
 
+/**
+ * Décode les entités HTML numériques + nommées les plus courantes.
+ * Utile pour les noms d'acheteurs récupérés depuis l'API BOAMP qui peuvent
+ * contenir `&#039;`, `&amp;`, etc. (cf. bug #10 — "Ville d&#039;Aubervilliers"
+ * affiché tel quel sur les cartes tender).
+ *
+ * Volontairement minimal : un parser HTML complet serait overkill pour ce besoin.
+ */
+export function decodeHtmlEntities(s: string | null | undefined): string {
+  if (!s) return ''
+  return s
+    .replace(/&#0?39;/g, "'")
+    .replace(/&apos;/g, "'")
+    .replace(/&#0?34;/g, '"')
+    .replace(/&quot;/g, '"')
+    .replace(/&#0?38;/g, '&')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&euro;/g, '€')
+    .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(parseInt(code, 10)))
+}
+
+/**
+ * Détermine si un score de tender est un score de fallback (pas de profil
+ * métier renseigné, erreur de scoring, ou non évalué). Dans ce cas l'UI doit
+ * afficher "Non évalué" plutôt que "Match partiel 50%" qui est trompeur
+ * (cf. bug #11).
+ *
+ * Les fallbacks sont identifiables par leur raison textuelle, pas par leur
+ * valeur numérique seule (un vrai score de 50 est légitime).
+ */
+export function isUnscored(reason: string | null | undefined): boolean {
+  if (!reason) return true
+  const r = reason.toLowerCase()
+  return (
+    r.includes('non renseigné') ||
+    r.includes('non évalué') ||
+    r.includes('non evalue') ||
+    r.includes('erreur') ||
+    r.includes('réponse ia invalide') ||
+    r.includes('reponse ia invalide')
+  )
+}
+
 export function getStatutLabel(statut: string): string {
   const labels: Record<string, string> = {
     brouillon: 'Brouillon',

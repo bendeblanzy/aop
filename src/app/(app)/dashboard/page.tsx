@@ -7,7 +7,7 @@ import {
   ArrowRight, Clock, MapPin,
 } from 'lucide-react'
 import Link from 'next/link'
-import { cn } from '@/lib/utils'
+import { cn, decodeHtmlEntities, isUnscored } from '@/lib/utils'
 import { toast } from 'sonner'
 import { countMatchingLots } from '@/lib/boamp/lot-matching'
 
@@ -67,7 +67,10 @@ function formatEuros(v: number | null) {
   return `${v}€`
 }
 
-function getScoreLabel(score: number) {
+function getScoreLabel(score: number, reason?: string | null): string {
+  // Cf. bug #11 : ne pas afficher "Match partiel 50%" pour un score de fallback
+  // (profil non renseigné, erreur IA…). On distingue via la raison textuelle.
+  if (isUnscored(reason)) return 'Non évalué'
   if (score >= 80) return 'Excellent match'
   if (score >= 60) return 'Bon match'
   if (score >= 40) return 'Match partiel'
@@ -170,7 +173,7 @@ function TenderCard({
           {tender.nomacheteur && (
             <div className="flex items-center gap-1.5 min-w-0">
               <Building2 className="w-3.5 h-3.5 shrink-0" />
-              <span className="font-medium text-gray-700 truncate">{tender.nomacheteur}</span>
+              <span className="font-medium text-gray-700 truncate">{decodeHtmlEntities(tender.nomacheteur)}</span>
             </div>
           )}
           <div className="flex items-center gap-3 flex-wrap">
@@ -229,7 +232,7 @@ function TenderCard({
           <div className="mb-3">
             <div className="flex items-center justify-between mb-1.5">
               <span className={cn('text-xs font-bold px-2.5 py-0.5 rounded-full border', getScoreBadgeStyle(tender.score))}>
-                {getScoreLabel(tender.score)}
+                {getScoreLabel(tender.score, tender.reason)}
               </span>
               <span className="text-xs font-bold text-gray-600">{tender.score}%</span>
             </div>
@@ -546,8 +549,13 @@ export default function DashboardPage() {
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-base sm:text-lg font-bold text-gray-900 flex items-center gap-2">
             <Zap className="w-5 h-5 text-[#0000FF] shrink-0" />
-            <span>Annonces pour vous</span>
-            <span className="text-xs font-bold bg-[#0000FF] text-white px-2 py-0.5 rounded-full">{totalCount}</span>
+            <span>Annonces actives</span>
+            <span
+              className="text-xs font-bold bg-[#0000FF] text-white px-2 py-0.5 rounded-full"
+              title="Nombre total d'annonces actives — affinez votre veille via les filtres dans Recherche"
+            >
+              {totalCount}
+            </span>
           </h2>
           <Link href="/veille" className="text-sm text-[#0000FF] font-medium hover:underline flex items-center gap-1 shrink-0">
             Voir tout <ArrowRight className="w-4 h-4" />

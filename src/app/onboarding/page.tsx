@@ -20,13 +20,15 @@ const DOMAINES = [
   'Environnement', 'Communication', 'Juridique', 'Autre',
 ]
 
+// Labels courts pour que les 8 onglets tiennent dans le strip horizontal sans
+// scroll caché (cf. bug #1 — "Étape 1/8 mais seulement 5 onglets visibles").
 const STEP_META = [
   { id: 1, icon: Building2, label: 'Entreprise', required: true },
   { id: 2, icon: User, label: 'Représentant', required: false },
-  { id: 3, icon: Brain, label: 'Positionnement IA', required: true },
-  { id: 4, icon: Radio, label: 'Veille BOAMP', required: true },
+  { id: 3, icon: Brain, label: 'Positionnement', required: true },
+  { id: 4, icon: Radio, label: 'Veille', required: true },
   { id: 5, icon: Wrench, label: 'Capacités', required: false },
-  { id: 6, icon: BarChart3, label: 'Données financières', required: false },
+  { id: 6, icon: BarChart3, label: 'Finances', required: false },
   { id: 7, icon: FileText, label: 'Références', required: false },
   { id: 8, icon: ShieldCheck, label: 'Finalisation', required: true },
 ]
@@ -195,42 +197,80 @@ function OnboardingPageInner() {
     return () => clearInterval(interval)
   }, [deepResearchLoading])
 
-  // Mode edit : charger le profil existant
+  // Bug #7 — Persistance d'état onboarding : on charge SYSTÉMATIQUEMENT le
+  // profil existant en DB au montage (pas seulement en mode edit). Ça permet
+  // à un utilisateur qui a fait la step 1 et fermé son onglet de revenir
+  // exactement où il en était au lieu de tout recommencer.
+  //
+  // Bug #8 — Auto-heal du flag `onboarding_completed` : si le profil a
+  // `onboarding_completed_at` rempli mais que `user_metadata.onboarding_completed`
+  // est null (désync — typiquement un utilisateur qui a complété son onboarding
+  // dans une session passée), on ré-appelle finalize et on redirige vers le
+  // dashboard.
   useEffect(() => {
-    if (!isEditMode) return
-    fetch('/api/profil').then(r => r.ok ? r.json() : null).then(wrapped => {
-      if (!wrapped) return
-      const p = wrapped?.data ?? wrapped
-      setData(d => ({
-        ...d,
-        org_name: p.raison_sociale ?? d.org_name,
-        raison_sociale: p.raison_sociale ?? '',
-        nom_commercial: p.nom_commercial ?? '',
-        siret: p.siret ?? '',
-        civilite_representant: p.civilite_representant ?? 'M.',
-        prenom_representant: p.prenom_representant ?? '',
-        nom_representant: p.nom_representant ?? '',
-        qualite_representant: p.qualite_representant ?? '',
-        email_representant: p.email_representant ?? '',
-        telephone_representant: p.telephone_representant ?? '',
-        activite_metier: p.activite_metier ?? '',
-        positionnement: p.positionnement ?? '',
-        atouts_differenciants: p.atouts_differenciants ?? '',
-        methodologie_type: p.methodologie_type ?? '',
-        types_marche_filtres: Array.isArray(p.types_marche_filtres) ? p.types_marche_filtres : [],
-        boamp_codes: Array.isArray(p.boamp_codes) ? p.boamp_codes : [],
-        domaines_competence: Array.isArray(p.domaines_competence) ? p.domaines_competence : [],
-        certifications: Array.isArray(p.certifications) ? p.certifications : [],
-        moyens_techniques: p.moyens_techniques ?? '',
-        ca_annee_n1: p.ca_annee_n1?.toString() ?? '',
-        ca_annee_n2: p.ca_annee_n2?.toString() ?? '',
-        ca_annee_n3: p.ca_annee_n3?.toString() ?? '',
-        marge_brute: p.marge_brute?.toString() ?? '',
-        effectif_moyen: p.effectif_moyen?.toString() ?? '',
-      }))
-      setOrgCreated(true)
-    }).catch(() => {})
-  }, [isEditMode])
+    let cancelled = false
+    ;(async () => {
+      try {
+        const res = await fetch('/api/profil')
+        if (cancelled || !res.ok) return
+        const wrapped = await res.json()
+        const p = wrapped?.data ?? wrapped
+        if (!p || cancelled) return
+
+        // Onboarding déjà terminé en DB → auto-heal + redirect
+        // (sauf en mode edit explicite où l'utilisateur veut modifier son profil)
+        if (p.onboarding_completed_at && !isEditMode) {
+          await fetch('/api/onboarding/finalize', { method: 'POST' }).catch(() => {})
+          router.push('/dashboard')
+          return
+        }
+
+        // Restaurer toutes les données partielles déjà saisies
+        setData(d => ({
+          ...d,
+          org_name: p.raison_sociale ?? d.org_name,
+          raison_sociale: p.raison_sociale ?? '',
+          nom_commercial: p.nom_commercial ?? '',
+          siret: p.siret ?? '',
+          civilite_representant: p.civilite_representant ?? 'M.',
+          prenom_representant: p.prenom_representant ?? '',
+          nom_representant: p.nom_representant ?? '',
+          qualite_representant: p.qualite_representant ?? '',
+          email_representant: p.email_representant ?? '',
+          telephone_representant: p.telephone_representant ?? '',
+          activite_metier: p.activite_metier ?? '',
+          positionnement: p.positionnement ?? '',
+          atouts_differenciants: p.atouts_differenciants ?? '',
+          methodologie_type: p.methodologie_type ?? '',
+          types_marche_filtres: Array.isArray(p.types_marche_filtres) ? p.types_marche_filtres : [],
+          boamp_codes: Array.isArray(p.boamp_codes) ? p.boamp_codes : [],
+          domaines_competence: Array.isArray(p.domaines_competence) ? p.domaines_competence : [],
+          certifications: Array.isArray(p.certifications) ? p.certifications : [],
+          moyens_techniques: p.moyens_techniques ?? '',
+          ca_annee_n1: p.ca_annee_n1?.toString() ?? '',
+          ca_annee_n2: p.ca_annee_n2?.toString() ?? '',
+          ca_annee_n3: p.ca_annee_n3?.toString() ?? '',
+          marge_brute: p.marge_brute?.toString() ?? '',
+          effectif_moyen: p.effectif_moyen?.toString() ?? '',
+        }))
+        if (p.raison_sociale) setOrgCreated(true)
+
+        // En mode edit, on reste sur step 1 (laisser l'utilisateur naviguer librement).
+        // Sinon, on saute à la première étape non encore remplie.
+        if (!isEditMode && p.raison_sociale) {
+          if (!p.prenom_representant && !p.nom_representant) setStep(2)
+          else if (!p.activite_metier && !p.positionnement) setStep(3)
+          else if (!Array.isArray(p.boamp_codes) || p.boamp_codes.length === 0) setStep(4)
+          else if (!Array.isArray(p.certifications) || p.certifications.length === 0) setStep(5)
+          else if (!p.ca_annee_n1 && !p.effectif_moyen) setStep(6)
+          else setStep(7) // Références (chargées séparément, voir useEffect refs)
+        }
+      } catch {
+        // Erreur réseau ou parsing → on reste sur step 1, comportement par défaut
+      }
+    })()
+    return () => { cancelled = true }
+  }, [isEditMode, router])
 
   // ── SIRET lookup ─────────────────────────────────────────────────────────
   async function lookupSiret() {
@@ -242,8 +282,10 @@ function OnboardingPageInner() {
       const d = await res.json()
       if (!res.ok) { toast.error(d.error ?? 'SIRET introuvable'); return }
       const sd: SiretData = d
-      // L'API retourne nom_complet — on le normalise en raison_sociale
-      if (sd.nom_complet && !sd.raison_sociale) sd.raison_sociale = sd.nom_complet
+      // Depuis 2026-05-02, l'API retourne `raison_sociale` directement (avec
+      // fallback `nom_complet` côté serveur). On garde une normalisation
+      // défensive au cas où un consommateur stale renverrait que nom_complet.
+      if (!sd.raison_sociale && sd.nom_complet) sd.raison_sociale = sd.nom_complet
       upd('siretData', sd)
       if (sd.raison_sociale) upd('raison_sociale', sd.raison_sociale)
       if (!data.org_name && sd.raison_sociale) upd('org_name', sd.raison_sociale)
@@ -642,7 +684,7 @@ function OnboardingPageInner() {
           {step === 2 && (
             <div className="space-y-4">
               <WhyItMatters>
-                Les coordonnées du représentant légal sont obligatoires dans les formulaires DC1 et DC2, qui accompagnent toute candidature à un marché public. En les renseignant ici, ils seront pré-remplis automatiquement dans tous vos dossiers.
+                Les coordonnées du représentant légal sont systématiquement demandées dans les formulaires DC1 et DC2 qui accompagnent toute candidature à un marché public. Les centraliser dans votre profil vous évite de les rechercher à chaque réponse.
               </WhyItMatters>
               <p className="text-sm text-gray-500">Pré-rempli depuis l'Annuaire des Entreprises. Vérifiez et complétez si nécessaire.</p>
               <div className="flex gap-4">
@@ -829,7 +871,7 @@ function OnboardingPageInner() {
           {step === 6 && (
             <div className="space-y-4">
               <WhyItMatters>
-                Le chiffre d'affaires et l'effectif sont obligatoires dans le DC2 — l'acheteur public les utilise pour évaluer votre capacité financière à exécuter le marché. Certains marchés fixent un CA minimum. En les renseignant ici, ils seront pré-remplis dans tous vos futurs dossiers.
+                Le chiffre d'affaires et l'effectif sont obligatoires dans le DC2 — l'acheteur public les utilise pour évaluer votre capacité financière à exécuter le marché. Certains marchés fixent un CA minimum. Les centraliser dans votre profil vous évite de les rechercher à chaque réponse.
               </WhyItMatters>
               <div className="grid grid-cols-2 gap-4">
                 <Input label="CA N-1 (€)" value={data.ca_annee_n1} onChange={v => upd('ca_annee_n1', v)} type="number" placeholder="500000" />
