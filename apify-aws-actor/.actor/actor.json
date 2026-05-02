@@ -1,0 +1,12 @@
+{
+  "actorSpecification": 1,
+  "name": "aws-mpi-scraper",
+  "title": "AWS / Marchés Publics Info Scraper",
+  "description": "Scrape les consultations SERVICES en cours sur marches-publics.info (AWSolutions MPE) par mots-clés. Résultats normalisés en AwsMpiApifyItem (reference, intitule, organisme, CPV, valeur estimée, lots, etc.).",
+  "version": "0.1",
+  "meta": {
+    "templateId": "actor-node-typescript"
+  },
+  "input": "./INPUT_SCHEMA.json",
+  "dockerfile": "../Dockerfile"
+}
