@@ -115,13 +115,47 @@ export async function GET(request: NextRequest) {
     const dirigeantPrenom: string | null = prenoms ? prenoms.split(' ')[0] : null
     const dirigeantQualite: string | null = dirigeant?.qualite ?? null
 
+    // Raison sociale : préférer `nom_raison_sociale` (légal pur) plutôt que
+    // `nom_complet` qui inclut le sigle/nom commercial entre parenthèses
+    // — quand sigle == raison sociale, l'API renvoie un doublon
+    // ("L'ADN STUDIO (L'ADN STUDIO)"). Fallback sur nom_complet si manquant.
+    const raisonSociale: string | null =
+      company.nom_raison_sociale ?? company.nom_complet ?? null
+
+    // Adresse rue uniquement (sans code postal ni ville) — l'API peut renvoyer
+    // `siege.adresse` qui les inclut déjà ; on recompose depuis les champs
+    // atomiques pour éviter le doublon "13 RUE CHAPON 75003 PARIS, 75003 PARIS".
+    const siege = company.siege ?? {}
+    const adresseRue: string | null = (() => {
+      const composed = [siege.numero_voie, siege.type_voie, siege.libelle_voie]
+        .filter((p: unknown): p is string => typeof p === 'string' && p.length > 0)
+        .join(' ')
+        .trim()
+      if (composed) return composed
+      // Fallback : strip CP + ville de l'adresse complète si présents
+      const full: string | null = siege.adresse ?? null
+      if (!full) return null
+      const cp = siege.code_postal as string | undefined
+      const ville = siege.libelle_commune as string | undefined
+      if (cp && full.includes(cp)) {
+        return full.split(cp)[0].trim().replace(/,\s*$/, '')
+      }
+      if (ville && full.toLowerCase().endsWith(ville.toLowerCase())) {
+        return full.slice(0, -ville.length).trim().replace(/,\s*$/, '')
+      }
+      return full
+    })()
+
     return NextResponse.json({
-      nom_complet: company.nom_complet,
+      // Champ canonique. `nom_complet` conservé en alias pour rétrocompat
+      // (consommateurs externes potentiels) — à supprimer dans une passe future.
+      raison_sociale: raisonSociale,
+      nom_complet: raisonSociale,
       siren: company.siren,
       forme_juridique: formeJuridique,
       code_naf: company.activite_principale,
       libelle_naf: company.libelle_activite_principale ?? null,
-      adresse_siege: company.siege?.adresse ?? company.siege?.libelle_voie ?? null,
+      adresse_siege: adresseRue,
       code_postal: company.siege?.code_postal ?? null,
       ville: company.siege?.libelle_commune ?? null,
       numero_tva: numeroTva,

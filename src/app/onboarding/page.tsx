@@ -242,8 +242,10 @@ function OnboardingPageInner() {
       const d = await res.json()
       if (!res.ok) { toast.error(d.error ?? 'SIRET introuvable'); return }
       const sd: SiretData = d
-      // L'API retourne nom_complet — on le normalise en raison_sociale
-      if (sd.nom_complet && !sd.raison_sociale) sd.raison_sociale = sd.nom_complet
+      // Depuis 2026-05-02, l'API retourne `raison_sociale` directement (avec
+      // fallback `nom_complet` côté serveur). On garde une normalisation
+      // défensive au cas où un consommateur stale renverrait que nom_complet.
+      if (!sd.raison_sociale && sd.nom_complet) sd.raison_sociale = sd.nom_complet
       upd('siretData', sd)
       if (sd.raison_sociale) upd('raison_sociale', sd.raison_sociale)
       if (!data.org_name && sd.raison_sociale) upd('org_name', sd.raison_sociale)
