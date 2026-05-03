@@ -247,7 +247,7 @@ function OnboardingPageInner() {
           positionnement: p.positionnement ?? '',
           atouts_differenciants: p.atouts_differenciants ?? '',
           methodologie_type: p.methodologie_type ?? '',
-          types_marche_filtres: Array.isArray(p.types_marche_filtres) ? p.types_marche_filtres : [],
+          types_marche_filtres: Array.isArray(p.types_marche_filtres) && p.types_marche_filtres.length > 0 ? p.types_marche_filtres : ['Services'],
           boamp_codes: Array.isArray(p.boamp_codes) ? p.boamp_codes : [],
           domaines_competence: Array.isArray(p.domaines_competence) ? p.domaines_competence : [],
           certifications: Array.isArray(p.certifications) ? p.certifications : [],

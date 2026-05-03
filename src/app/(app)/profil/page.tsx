@@ -176,7 +176,12 @@ export default function ProfilPage() {
     }
     const { data, error } = await supabase.from('profiles').select('*').eq('organization_id', orgId).maybeSingle()
     if (error) console.error('[profil] load error:', error.message)
-    if (data) setProfile(data)
+    if (data) setProfile({
+      ...data,
+      types_marche_filtres: Array.isArray(data.types_marche_filtres) && data.types_marche_filtres.length > 0
+        ? data.types_marche_filtres
+        : ['Services'],
+    })
     setLoading(false)
     // Marquer la fin du chargement initial pour activer l'auto-save
     setTimeout(() => { isInitialLoad.current = false }, 300)
