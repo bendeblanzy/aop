@@ -40,6 +40,8 @@ export async function POST(request: NextRequest) {
     qualite_representant,
     email_representant,
     telephone_representant,
+    linkedin_url,
+    website_url,
   } = body
 
   if (!org_name?.trim() || !raison_sociale?.trim()) {
@@ -145,6 +147,8 @@ export async function POST(request: NextRequest) {
   if (qualite_representant) profilePayload.qualite_representant = qualite_representant
   if (email_representant) profilePayload.email_representant = email_representant
   if (telephone_representant) profilePayload.telephone_representant = telephone_representant
+  if (linkedin_url) profilePayload.linkedin_url = linkedin_url
+  if (website_url) profilePayload.website_url = website_url
 
   // Upsert — gère le cas où le profil existe déjà pour cette org (double-submit, etc.)
   const { error: profileError } = await adminClient
