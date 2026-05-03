@@ -60,7 +60,7 @@ async function sendWelcomeEmail(opts: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        from: 'AOP <noreply@ladn.studio>',
+        from: "L'ADN DATA <noreply@ladngroupe.com>",
         to: [opts.to],
         subject,
         html,
