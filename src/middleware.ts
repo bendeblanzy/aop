@@ -25,7 +25,7 @@ export async function middleware(request: NextRequest) {
 
   const publicPaths = [
     '/auth/login', '/auth/register', '/auth/reset-password',
-    '/auth/callback', '/auth/accept-invite',
+    '/auth/callback', '/auth/confirm', '/auth/update-password', '/auth/accept-invite',
     '/onboarding',
     '/api/cron/', '/api/onboarding/',
     // /api/profil/siret : simple passthrough vers data.gouv.fr (recherche-entreprises),
