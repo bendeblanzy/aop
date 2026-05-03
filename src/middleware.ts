@@ -28,6 +28,12 @@ export async function middleware(request: NextRequest) {
     '/auth/callback', '/auth/accept-invite',
     '/onboarding',
     '/api/cron/', '/api/onboarding/',
+    // /api/profil/siret est un simple passthrough vers data.gouv.fr,
+    // appelé dès la step 1 du wizard — sans cette whitelist, un session
+    // cookie absent provoquait un 307 → /auth/login renvoyant du HTML
+    // que le client tentait de parser comme JSON, d'où l'erreur
+    // "Unexpected token '<' ... is not valid JSON" en onboarding.
+    '/api/profil/siret',
   ]
   const isPublicPath = publicPaths.some(p => request.nextUrl.pathname.startsWith(p))
 
