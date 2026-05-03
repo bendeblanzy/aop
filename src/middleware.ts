@@ -28,6 +28,13 @@ export async function middleware(request: NextRequest) {
     '/auth/callback', '/auth/accept-invite',
     '/onboarding',
     '/api/cron/', '/api/onboarding/',
+    // /api/profil/siret : simple passthrough vers data.gouv.fr (recherche-entreprises),
+    // appelé dès la step 1 du wizard. Sans cette whitelist, un cookie de session
+    // absent provoque un 307 → /auth/login renvoyant du HTML, que le client
+    // tente de parser comme JSON, d'où l'erreur :
+    // "Unexpected token '<', "<!DOCTYPE "... is not valid JSON"
+    // (fix initialement dans le commit 29f4541, perdu lors d'un merge — restauré).
+    '/api/profil/siret',
   ]
   const isPublicPath = publicPaths.some(p => request.nextUrl.pathname.startsWith(p))
 
