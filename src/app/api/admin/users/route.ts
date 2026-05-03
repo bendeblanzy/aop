@@ -87,7 +87,7 @@ async function sendWelcomeEmail(opts: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        from: "L'ADN DATA <noreply@ladngroupe.com>",
+        from: "L'ADN DATA <noreply@ladn.eu>",
         to: [opts.to],
         subject: opts.type === 'team'
           ? `Votre accès à l'outil AOP${opts.orgName ? ` — ${opts.orgName}` : ''}`
