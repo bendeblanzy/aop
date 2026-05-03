@@ -178,7 +178,7 @@ function OnboardingPageInner() {
     civilite_representant: 'M.', prenom_representant: '', nom_representant: '',
     qualite_representant: '', email_representant: '', telephone_representant: '',
     activite_metier: '', positionnement: '', atouts_differenciants: '', methodologie_type: '',
-    types_marche_filtres: [], boamp_codes: [], domaines_competence: [],
+    types_marche_filtres: ['Services'], boamp_codes: [], domaines_competence: [],
     certifications: [], moyens_techniques: '',
     ca_annee_n1: '', ca_annee_n2: '', ca_annee_n3: '', marge_brute: '', effectif_moyen: '',
   })
@@ -836,7 +836,7 @@ function OnboardingPageInner() {
                 <>
                   <div className="flex items-start gap-2 bg-blue-50 border border-blue-200 rounded-xl p-3 text-xs text-blue-700">
                     <Info className="w-4 h-4 shrink-0 mt-0.5" />
-                    <span>L'IA a généré un premier positionnement basé sur votre SIRET et votre raison sociale. <strong>Vérifiez et ajustez</strong> — plus c'est précis, meilleur sera votre matching AO.</span>
+                    <span>L'IA a analysé votre LinkedIn, votre site web et des sources publiques pour générer ce positionnement. <strong>Vérifiez et ajustez</strong> — plus c'est précis, meilleur sera votre matching AO.</span>
                   </div>
                   {data.activite_metier === '' && data.positionnement === '' && (
                     <button onClick={runDeepResearch} className="w-full flex items-center justify-center gap-2 py-3 bg-[#0000FF] hover:bg-[#0000CC] text-white font-medium rounded-xl text-sm transition-colors">

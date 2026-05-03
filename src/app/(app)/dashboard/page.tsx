@@ -354,6 +354,7 @@ function AoCard({ ao }: { ao: AppelOffre }) {
 export default function DashboardPage() {
   const router = useRouter()
   const [raisonSociale, setRaisonSociale] = useState<string | null>(null)
+  const [profileConfigured, setProfileConfigured] = useState(false)
   const [topTenders, setTopTenders] = useState<TopTender[]>([])
   const [favTenders, setFavTenders] = useState<TopTender[]>([])
   const [aoEnCours, setAoEnCours] = useState<AppelOffre[]>([])
@@ -377,7 +378,7 @@ export default function DashboardPage() {
         favsRes,
         favTendersRes,
       ] = await Promise.all([
-        supabase.from('profiles').select('raison_sociale').maybeSingle(),
+        supabase.from('profiles').select('raison_sociale, boamp_codes, activite_metier').maybeSingle(),
         supabase.from('appels_offres').select('*').in('statut', ['en_cours', 'analyse']).order('updated_at', { ascending: false }).limit(6),
         fetch('/api/veille/tenders?limit=50&active_only=true').then(r => r.ok ? r.json() : null),
         fetch('/api/veille/favorites').then(r => r.ok ? r.json() : null),
@@ -385,6 +386,10 @@ export default function DashboardPage() {
       ])
 
       setRaisonSociale(profile?.raison_sociale ?? null)
+      setProfileConfigured(!!(
+        (Array.isArray((profile as any)?.boamp_codes) && (profile as any).boamp_codes.length > 0) ||
+        (profile as any)?.activite_metier
+      ))
       setAoEnCours((aoData as AppelOffre[]) ?? [])
       if (favsRes?.favorites) setFavorites(new Set(favsRes.favorites))
       if (favTendersRes?.tenders) setFavTenders(favTendersRes.tenders as TopTender[])
@@ -567,7 +572,10 @@ export default function DashboardPage() {
             <Zap className="w-12 h-12 text-gray-200 mx-auto mb-3" />
             <p className="text-gray-500 font-medium">Aucune annonce pour le moment</p>
             <p className="text-gray-400 text-sm mt-1">
-              <Link href="/profil" className="text-[#0000FF] hover:underline">Configurez votre profil</Link> pour recevoir des suggestions
+              {profileConfigured
+                ? 'Aucune annonce ne correspond encore à votre profil — revenez demain ou ajustez vos codes BOAMP.'
+                : <><Link href="/profil" className="text-[#0000FF] hover:underline">Configurez votre profil</Link> pour recevoir des suggestions</>
+              }
             </p>
           </div>
         ) : (
