@@ -178,7 +178,7 @@ function OnboardingPageInner() {
     civilite_representant: 'M.', prenom_representant: '', nom_representant: '',
     qualite_representant: '', email_representant: '', telephone_representant: '',
     activite_metier: '', positionnement: '', atouts_differenciants: '', methodologie_type: '',
-    types_marche_filtres: ['Services'], boamp_codes: [], domaines_competence: [],
+    types_marche_filtres: ['SERVICES'], boamp_codes: [], domaines_competence: [],
     certifications: [], moyens_techniques: '',
     ca_annee_n1: '', ca_annee_n2: '', ca_annee_n3: '', marge_brute: '', effectif_moyen: '',
   })
@@ -247,7 +247,7 @@ function OnboardingPageInner() {
           positionnement: p.positionnement ?? '',
           atouts_differenciants: p.atouts_differenciants ?? '',
           methodologie_type: p.methodologie_type ?? '',
-          types_marche_filtres: Array.isArray(p.types_marche_filtres) && p.types_marche_filtres.length > 0 ? p.types_marche_filtres : ['Services'],
+          types_marche_filtres: Array.isArray(p.types_marche_filtres) && p.types_marche_filtres.length > 0 ? p.types_marche_filtres : ['SERVICES'],
           boamp_codes: Array.isArray(p.boamp_codes) ? p.boamp_codes : [],
           domaines_competence: Array.isArray(p.domaines_competence) ? p.domaines_competence : [],
           certifications: Array.isArray(p.certifications) ? p.certifications : [],

@@ -180,7 +180,7 @@ export default function ProfilPage() {
       ...data,
       types_marche_filtres: Array.isArray(data.types_marche_filtres) && data.types_marche_filtres.length > 0
         ? data.types_marche_filtres
-        : ['Services'],
+        : ['SERVICES'],
     })
     setLoading(false)
     // Marquer la fin du chargement initial pour activer l'auto-save
