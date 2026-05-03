@@ -61,6 +61,8 @@ interface StepData {
   nom_commercial: string
   siret: string
   siretData: SiretData | null
+  linkedin_url: string
+  website_url: string
   // Étape 2
   civilite_representant: string
   prenom_representant: string
@@ -172,6 +174,7 @@ function OnboardingPageInner() {
 
   const [data, setData] = useState<StepData>({
     org_name: '', raison_sociale: '', nom_commercial: '', siret: '', siretData: null,
+    linkedin_url: '', website_url: '',
     civilite_representant: 'M.', prenom_representant: '', nom_representant: '',
     qualite_representant: '', email_representant: '', telephone_representant: '',
     activite_metier: '', positionnement: '', atouts_differenciants: '', methodologie_type: '',
@@ -232,6 +235,8 @@ function OnboardingPageInner() {
           raison_sociale: p.raison_sociale ?? '',
           nom_commercial: p.nom_commercial ?? '',
           siret: p.siret ?? '',
+          linkedin_url: p.linkedin_url ?? '',
+          website_url: p.website_url ?? '',
           civilite_representant: p.civilite_representant ?? 'M.',
           prenom_representant: p.prenom_representant ?? '',
           nom_representant: p.nom_representant ?? '',
@@ -324,6 +329,9 @@ function OnboardingPageInner() {
         prenom_representant: data.prenom_representant || sd?.prenom_representant,
         nom_representant: data.nom_representant || sd?.nom_representant,
         qualite_representant: data.qualite_representant || sd?.qualite_representant,
+        // Sources d'enrichissement (saisies en step 1, utilisées en step 3 par le service enrichOrganization)
+        linkedin_url: data.linkedin_url || undefined,
+        website_url: data.website_url || undefined,
       }),
     })
     const resData = await res.json()
@@ -362,19 +370,68 @@ function OnboardingPageInner() {
     return true
   }
 
-  // ── Step 3 → Deep Research ───────────────────────────────────────────────
+  // ── Step 3 → Enrichment IA (LinkedIn + site web + recherche web) ────────
+  // Remplace l'ancien Deep Research qui ne faisait que reformuler les données
+  // déjà en DB. Le nouveau service `enrichOrganization` interroge LinkedIn (si URL),
+  // le site web (si URL) et fait une recherche web ciblée pour produire un
+  // contexte structuré et une pré-rédaction du positionnement.
   async function runDeepResearch() {
     setDeepResearchLoading(true)
     try {
-      const res = await fetch('/api/profil/deep-research', { method: 'POST' })
-      const d = await res.json()
-      if (!res.ok) throw new Error(d.error ?? `Erreur ${res.status}`)
-      if (d.activite_metier) upd('activite_metier', d.activite_metier)
-      if (d.positionnement) upd('positionnement', d.positionnement)
-      if (d.atouts_differenciants) upd('atouts_differenciants', d.atouts_differenciants)
-      if (d.methodologie_type) upd('methodologie_type', d.methodologie_type)
+      const res = await fetch('/api/profil/enrich', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      })
+      const wrapped = await res.json()
+      if (!res.ok) throw new Error(wrapped?.error ?? `Erreur ${res.status}`)
+      const ctx = (wrapped?.data?.context ?? wrapped?.context) as Record<string, unknown> | undefined
+      const sources = (wrapped?.data?.sources ?? wrapped?.sources) as Record<string, string> | undefined
+
+      if (ctx) {
+        // Pré-remplit les champs onboarding step 3 à partir du contexte enrichi
+        if (typeof ctx.specialite_principale === 'string' && ctx.specialite_principale) {
+          upd('activite_metier', ctx.specialite_principale)
+        }
+        if (typeof ctx.positionnement_resume === 'string' && ctx.positionnement_resume) {
+          upd('positionnement', ctx.positionnement_resume)
+        }
+        if (Array.isArray(ctx.signaux_specificite) && ctx.signaux_specificite.length > 0) {
+          upd('atouts_differenciants', (ctx.signaux_specificite as string[]).join(' • '))
+        }
+        // Pas de méthodologie générique — laissé vide à remplir manuellement
+      }
+
+      // Toast informatif sur les sources utilisées
+      if (sources) {
+        const okSources = (['linkedin', 'website', 'web_search'] as const)
+          .filter(k => sources[k] === 'ok')
+          .map(k => k === 'web_search' ? 'recherche web' : k)
+        if (okSources.length === 0) {
+          toast.warning('Enrichissement terminé sans source exploitable — remplis les champs à la main.')
+        } else {
+          toast.success(`Enrichissement terminé (sources : ${okSources.join(', ')})`)
+        }
+      }
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Erreur Deep Research')
+      const msg = e instanceof Error ? e.message : 'Erreur enrichissement'
+      // Fallback sur l'ancien deep-research (pas de scraping, juste reformulation)
+      // si le nouveau endpoint plante (manque ANTHROPIC_API_KEY, etc.)
+      try {
+        const res = await fetch('/api/profil/deep-research', { method: 'POST' })
+        const d = await res.json()
+        if (res.ok) {
+          if (d.activite_metier) upd('activite_metier', d.activite_metier)
+          if (d.positionnement) upd('positionnement', d.positionnement)
+          if (d.atouts_differenciants) upd('atouts_differenciants', d.atouts_differenciants)
+          if (d.methodologie_type) upd('methodologie_type', d.methodologie_type)
+          toast.info('Enrichissement complet indisponible — pré-remplissage basique appliqué.')
+        } else {
+          throw new Error(d.error ?? `Erreur ${res.status}`)
+        }
+      } catch {
+        toast.error(msg)
+      }
     }
     setDeepResearchLoading(false)
   }
@@ -677,6 +734,33 @@ function OnboardingPageInner() {
 
               <Input label="Raison sociale" value={data.raison_sociale} onChange={v => upd('raison_sociale', v)} placeholder="ACME Consulting SAS" required />
               <Input label="Nom commercial / marque" value={data.nom_commercial} onChange={v => upd('nom_commercial', v)} placeholder="ACME (optionnel)" hint="Si différent de la raison sociale" />
+
+              {/* ── Sources web pour l'enrichissement IA ── */}
+              <div className="pt-3 border-t border-gray-100">
+                <p className="text-xs font-medium text-gray-700 mb-2 flex items-center gap-1.5">
+                  <Brain className="w-3.5 h-3.5 text-[#0000FF]" />
+                  Sources pour l'analyse IA (étape 3)
+                </p>
+                <p className="text-xs text-gray-400 mb-3">
+                  Renseigner LinkedIn et le site permet à l'IA d'inférer votre spécialité, vos clients types et vos différenciateurs réels — bien plus précis qu'un simple résumé du SIRET.
+                </p>
+                <div className="space-y-3">
+                  <Input
+                    label="URL LinkedIn de la société"
+                    value={data.linkedin_url}
+                    onChange={v => upd('linkedin_url', v)}
+                    placeholder="https://www.linkedin.com/company/votre-entreprise"
+                    hint="Recommandé — utilisé par l'enrichissement IA"
+                  />
+                  <Input
+                    label="URL du site web"
+                    value={data.website_url}
+                    onChange={v => upd('website_url', v)}
+                    placeholder="https://votre-site.fr"
+                    hint="Optionnel — accélère l'analyse si vous avez un site officiel"
+                  />
+                </div>
+              </div>
             </div>
           )}
 
