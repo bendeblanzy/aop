@@ -415,8 +415,27 @@ function OnboardingPageInner() {
       }
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Erreur enrichissement'
-      // Fallback sur l'ancien deep-research (pas de scraping, juste reformulation)
-      // si le nouveau endpoint plante (manque ANTHROPIC_API_KEY, etc.)
+
+      // Détection des erreurs typiques pour donner un message UX clair plutôt
+      // qu'un échec silencieux ou un dump de stack technique.
+      const lowMsg = msg.toLowerCase()
+      if (lowMsg.includes('credit balance is too low') || lowMsg.includes('insufficient_quota') || lowMsg.includes('billing')) {
+        toast.error(
+          "Crédit IA épuisé. Contactez l'administrateur pour recharger le compte Anthropic. Tu peux remplir les champs manuellement en attendant.",
+          { duration: 12000 },
+        )
+        setDeepResearchLoading(false)
+        return // Pas de fallback : si Anthropic est à zéro, deep-research échouera aussi
+      }
+      if (lowMsg.includes('rate_limit') || lowMsg.includes('429')) {
+        toast.error('Quota API dépassé temporairement. Réessaie dans 1 min.', { duration: 8000 })
+        setDeepResearchLoading(false)
+        return
+      }
+
+      // Fallback sur l'ancien deep-research (reformulation simple, pas de scraping)
+      // pour tout autre type d'erreur — peut sauver la situation si seul l'enrich
+      // a un bug spécifique.
       try {
         const res = await fetch('/api/profil/deep-research', { method: 'POST' })
         const d = await res.json()
@@ -430,7 +449,7 @@ function OnboardingPageInner() {
           throw new Error(d.error ?? `Erreur ${res.status}`)
         }
       } catch {
-        toast.error(msg)
+        toast.error(`Enrichissement IA indisponible : ${msg.slice(0, 100)}. Tu peux remplir les champs manuellement.`, { duration: 10000 })
       }
     }
     setDeepResearchLoading(false)
