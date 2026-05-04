@@ -38,6 +38,20 @@ export interface ParsedEforms {
   lots_titres?: string[]
 }
 
+/** Champs extraits d'un avis MAPA (format français legacy < 90k€) */
+export interface ParsedMapa {
+  description?: string
+  url_profil_acheteur?: string
+  duree_mois?: number
+  date_debut_prestation?: string
+  email_contact?: string
+  contact_nom?: string
+  contact_prenom?: string
+  contact_fonction?: string
+  contact_civilite?: string
+  reference_acheteur?: string
+}
+
 /** Annonce BOAMP en base de données */
 export interface Tender {
   id: string

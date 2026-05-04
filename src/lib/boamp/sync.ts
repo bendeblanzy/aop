@@ -1,4 +1,4 @@
-import type { BoampApiResponse, BoampRecord, ParsedEforms, SyncResult } from './types'
+import type { BoampApiResponse, BoampRecord, ParsedEforms, ParsedMapa, SyncResult } from './types'
 
 const BOAMP_BASE_URL = 'https://www.boamp.fr/api/explore/v2.1/catalog/datasets/boamp/records'
 const PAGE_SIZE = 100
@@ -42,6 +42,98 @@ function txt(v: unknown): string | undefined {
   if (typeof v === 'string') return v || undefined
   if (typeof v === 'object' && v !== null && '#text' in v) return String((v as Record<string, unknown>)['#text']) || undefined
   return undefined
+}
+
+/**
+ * Parse le format MAPA (avis adapté français legacy, marchés < 90k€).
+ * Bien plus simple que eForms : structure { MAPA: { organisme, initial: { description, duree, ... } } }
+ */
+function parseMapa(donneesStr: string | null): ParsedMapa {
+  if (!donneesStr) return {}
+  try {
+    const donnees = typeof donneesStr === 'string' ? JSON.parse(donneesStr) : donneesStr
+    const mapa = donnees?.MAPA
+    if (!mapa) return {}
+
+    const result: ParsedMapa = {}
+    const organisme = mapa.organisme ?? {}
+    const initial = mapa.initial ?? {}
+
+    // ── URL profil acheteur ────────────────────────────────────────────────
+    const urlPA = txt(organisme.urlProfilAcheteur)
+    if (urlPA && urlPA.startsWith('http') && isSpecificUrl(urlPA)) {
+      result.url_profil_acheteur = urlPA
+    } else {
+      // Fallback : adressesComplt.document.coord.url
+      const altUrl = txt(initial.adressesComplt?.document?.coord?.url)
+      if (altUrl && altUrl.startsWith('http') && isSpecificUrl(altUrl)) {
+        result.url_profil_acheteur = altUrl
+      }
+    }
+
+    // ── Description : objet + lieu d'exécution + conditions ───────────────
+    const parts: string[] = []
+    const objet = txt(initial.description?.objet)
+    if (objet) parts.push(objet)
+    const lieu = initial.description?.lieuExecutionLivraison
+    if (lieu) {
+      const voie = txt(lieu.voie?.nomvoie)
+      const cp = txt(lieu.cp)
+      const ville = txt(lieu.ville)
+      const adresse = [voie, cp, ville].filter(Boolean).join(' ')
+      if (adresse) parts.push(`Lieu d'exécution : ${adresse}.`)
+    }
+    const nbMois = txt(initial.duree?.nbMois)
+    const dateDebut = txt(initial.duree?.dateDebutPrestation)
+    if (nbMois || dateDebut) {
+      const duree = nbMois ? `${nbMois} mois` : ''
+      const debut = dateDebut ? ` à compter du ${dateDebut}` : ''
+      parts.push(`Durée${duree ? ' ' + duree : ''}${debut}.`)
+    }
+    if (initial.marcheUnique !== undefined) parts.push("Marché unique, sans variantes.")
+    if (initial.justifications) {
+      const justifs: string[] = []
+      const j = initial.justifications
+      if (j.DC1 !== undefined) justifs.push('DC1')
+      if (j.DC2 !== undefined) justifs.push('DC2')
+      if (j.DC4 !== undefined) justifs.push('DC4')
+      if (j.attestationObligationsFiscales !== undefined) justifs.push('attestations fiscales')
+      if (j.bilans !== undefined) justifs.push('bilans')
+      if (j.effectifs !== undefined) justifs.push('effectifs')
+      if (justifs.length > 0) parts.push(`Justifications demandées : ${justifs.join(', ')}.`)
+    }
+    if (parts.length > 0) result.description = parts.join(' ')
+
+    // ── Durée en mois ─────────────────────────────────────────────────────
+    if (nbMois) {
+      const n = parseInt(nbMois)
+      if (!isNaN(n)) result.duree_mois = n
+    }
+    if (dateDebut) result.date_debut_prestation = dateDebut
+
+    // ── Contact PRM (Personne Responsable du Marché) ──────────────────────
+    const prm = organisme.correspondantPRM
+    if (prm) {
+      const nom = txt(prm.nom)
+      const pren = txt(prm.pren)
+      const fonc = txt(prm.fonc)
+      const civ = txt(prm.civilite)
+      if (nom) result.contact_nom = nom
+      if (pren) result.contact_prenom = pren
+      if (fonc) result.contact_fonction = fonc
+      if (civ) result.contact_civilite = civ
+    }
+    const mel = txt(initial.adressesComplt?.document?.coord?.mel)
+    if (mel) result.email_contact = mel
+
+    // ── Référence interne acheteur ────────────────────────────────────────
+    const ref = txt(initial.renseignements?.idMarche)
+    if (ref) result.reference_acheteur = ref
+
+    return result
+  } catch {
+    return {}
+  }
 }
 
 /** Extrait les infos utiles du champ `donnees` (eForms JSON) */
@@ -217,9 +309,24 @@ async function fetchBoampPage(offset: number, dateFrom: string, dateTo: string):
   return response.json() as Promise<BoampApiResponse>
 }
 
-/** Transforme un BoampRecord en objet prêt pour Supabase upsert */
+/** Transforme un BoampRecord en objet prêt pour Supabase upsert.
+ *  Fusionne le parsing eForms (européen) + MAPA (français legacy).
+ *  Le `donnees` brut est stocké pour permettre une re-extraction future
+ *  de champs additionnels sans re-frapper l'API BOAMP. */
 export function transformRecord(record: BoampRecord) {
   const eforms = parseEforms(record.donnees)
+  const mapa = parseMapa(record.donnees)
+  // Préfère eForms quand dispo (avis européen plus structuré), sinon MAPA
+  const description = eforms.description ?? mapa.description ?? null
+  const url_profil_acheteur = eforms.url_profil_acheteur ?? mapa.url_profil_acheteur ?? null
+  const duree_mois = eforms.duree_mois ?? mapa.duree_mois ?? null
+
+  // Stocker le donnees brut (jsonb) pour debug + future re-extraction
+  let donneesJson: object | null = null
+  if (record.donnees) {
+    try { donneesJson = typeof record.donnees === 'string' ? JSON.parse(record.donnees) : record.donnees } catch { donneesJson = null }
+  }
+
   return {
     idweb: record.idweb,
     objet: record.objet ?? null,
@@ -232,24 +339,41 @@ export function transformRecord(record: BoampRecord) {
     datefindiffusion: record.datefindiffusion ?? null,
     descripteur_codes: parseJsonArray(record.descripteur_code),
     descripteur_libelles: parseJsonArray(record.descripteur_libelle),
-    // type_marche : préférer la valeur directe BOAMP (tableau → premier élément)
     type_marche: (Array.isArray(record.type_marche) ? record.type_marche[0] : record.type_marche) ?? eforms.type_marche ?? null,
     url_avis: record.url_avis ?? null,
     code_departement: parseJsonArray(record.code_departement),
     type_procedure: record.type_procedure ?? null,
     procedure_libelle: record.procedure_libelle ?? null,
-    // Champs eForms
-    url_profil_acheteur: eforms.url_profil_acheteur ?? null,
-    description_detail: eforms.description ?? null,
+    // Champs canoniques (fusion eForms + MAPA)
+    url_profil_acheteur,
+    description_detail: description,
     valeur_estimee: eforms.valeur_estimee ?? null,
     budget_estime: eforms.budget_estime ?? null,
-    duree_mois: eforms.duree_mois ?? null,
+    duree_mois,
     cpv_codes: eforms.cpv_codes ?? [],
     code_nuts: eforms.code_nuts ?? null,
     nb_lots: eforms.nb_lots ?? null,
     lots_titres: eforms.lots_titres ?? [],
+    // Données brutes pour future re-extraction (contact, ref interne, etc.)
+    donnees: donneesJson,
     updated_at: new Date().toISOString(),
   }
+}
+
+/** Récupère un avis BOAMP par son idweb (utilisé par l'enrich-tenders cron). */
+export async function fetchBoampByIdweb(idweb: string): Promise<BoampRecord | null> {
+  const params = new URLSearchParams()
+  params.set('limit', '1')
+  params.set('where', `idweb="${idweb}"`)
+  params.set('select', 'idweb,objet,famille,nature,nature_libelle,dateparution,datelimitereponse,datefindiffusion,nomacheteur,descripteur_code,descripteur_libelle,url_avis,code_departement,type_procedure,procedure_libelle,type_marche,donnees')
+  const url = `${BOAMP_BASE_URL}?${params.toString()}`
+  const response = await fetch(url, {
+    headers: { 'User-Agent': 'AOP-App/1.0' },
+    signal: AbortSignal.timeout(15_000),
+  })
+  if (!response.ok) throw new Error(`BOAMP API error: ${response.status}`)
+  const json = await response.json() as BoampApiResponse
+  return json.results?.[0] ?? null
 }
 
 /**
