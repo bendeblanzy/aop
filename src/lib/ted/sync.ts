@@ -47,6 +47,19 @@ const TED_FIELDS = [
   'document-url-lot',
   'buyer-profile',
   'links',
+  // ── Nouveaux champs (2026-05-04) ──────────────────────────────────────
+  // Contact direct acheteur
+  'buyer-email',
+  'buyer-internet-address',
+  'buyer-contact-point',
+  'touchpoint-tel-buyer',
+  // URL exacte de la consultation (préférable à buyer-profile qui pointe la racine PLACE)
+  'submission-url-lot',
+  'tool-atypical-url-lot',
+  // Conditions et critères → enrichit description_detail pour le matching
+  'contract-conditions-description-lot',
+  'selection-criterion-description-lot',
+  'recurrence-description-lot',
 ] as const
 
 function sleep(ms: number) {
@@ -228,8 +241,28 @@ export function transformTedNotice(notice: TedNotice) {
 
   const idweb = `ted-${pubNumber}`
   const objet = extractText(notice['notice-title'])
-  const description = extractText(notice['description-lot'])
+  const baseDescription = extractText(notice['description-lot'])
   const acheteur = extractText(notice['buyer-name'])
+
+  // Contact acheteur — enrichit la description pour le matching
+  const buyerEmail = extractText(notice['buyer-email'])
+  const buyerWebsite = extractText(notice['buyer-internet-address'])
+  const buyerContactPoint = extractText(notice['buyer-contact-point'])
+  const buyerTel = extractText(notice['touchpoint-tel-buyer'])
+
+  // Conditions, critères et récurrence — chair pour le matching IA
+  const contractConditions = extractText(notice['contract-conditions-description-lot'])
+  const selectionCriterion = extractText(notice['selection-criterion-description-lot'])
+  const recurrence = extractText(notice['recurrence-description-lot'])
+
+  // Description composite : description-lot de base + conditions/critères/récurrence
+  // pour donner plus de signal sémantique à l'embedding (4× plus de contenu en moyenne)
+  const descParts: string[] = []
+  if (baseDescription) descParts.push(baseDescription)
+  if (selectionCriterion) descParts.push(`Critères de sélection : ${selectionCriterion}`)
+  if (contractConditions) descParts.push(`Conditions du contrat : ${contractConditions}`)
+  if (recurrence) descParts.push(`Récurrence : ${recurrence}`)
+  const description = descParts.length > 0 ? descParts.join('\n\n') : null
 
   // Valeur estimée — on essaie d'abord -glo (global), sinon on somme les -lot
   let valeurEstimee: number | null = null
@@ -278,9 +311,23 @@ export function transformTedNotice(notice: TedNotice) {
   }
   const typeMarche = nature ? (typeMarcheMap[nature.toLowerCase()] ?? nature.toUpperCase()) : null
 
-  // URL profil acheteur — buyer-profile en priorité, sinon document-url-lot
-  let urlProfilAcheteur = extractText(notice['buyer-profile'])
-  if (!urlProfilAcheteur) urlProfilAcheteur = extractText(notice['document-url-lot'])
+  // URL profil acheteur — préférer l'URL EXACTE de la consultation :
+  //   1. tool-atypical-url-lot (URL spécifique outil)
+  //   2. submission-url-lot (URL exacte de soumission)
+  //   3. document-url-lot (URL téléchargement DCE)
+  //   4. buyer-profile (racine PLACE — souvent générique)
+  let urlProfilAcheteur = extractText(notice['tool-atypical-url-lot'])
+    ?? extractText(notice['submission-url-lot'])
+    ?? extractText(notice['document-url-lot'])
+    ?? extractText(notice['buyer-profile'])
+
+  // Filtrer les URL trop génériques (racine sans paramètres)
+  if (urlProfilAcheteur && urlProfilAcheteur.match(/^https?:\/\/[^/]+\/?$/)) {
+    // URL racine seule (ex: "https://www.marches-publics.gouv.fr/") → garder en fallback
+    // mais préférer une URL plus spécifique si dispo
+    const fallback = extractText(notice['buyer-profile'])
+    if (fallback && !fallback.match(/^https?:\/\/[^/]+\/?$/)) urlProfilAcheteur = fallback
+  }
 
   // URL avis : on prend le PDF FRA via links.pdf.FRA, sinon on construit
   const links = notice['links'] as { pdf?: Record<string, string>; html?: Record<string, string> } | undefined
@@ -292,6 +339,20 @@ export function transformTedNotice(notice: TedNotice) {
   // Dates : on accepte plusieurs alias (deadline-date-lot prioritaire)
   const dateparution = cleanDate(notice['publication-date'])?.split('T')[0] ?? null
   const datelimite = cleanDate(notice['deadline-date-lot'] ?? notice['deadline-receipt-tender-date-lot'])
+
+  // Stockage donnees brut (jsonb) pour future re-extraction sans re-frapper l'API
+  // (contact acheteur, conditions complètes, critères, etc.)
+  const donneesJson: Record<string, unknown> = {
+    source: 'ted-v3',
+    publication_number: pubNumber,
+  }
+  if (buyerEmail) donneesJson.buyer_email = buyerEmail
+  if (buyerWebsite) donneesJson.buyer_website = buyerWebsite
+  if (buyerContactPoint) donneesJson.buyer_contact_point = buyerContactPoint
+  if (buyerTel) donneesJson.buyer_tel = buyerTel
+  if (contractConditions) donneesJson.contract_conditions = contractConditions
+  if (selectionCriterion) donneesJson.selection_criterion = selectionCriterion
+  if (recurrence) donneesJson.recurrence = recurrence
 
   return {
     idweb,
@@ -320,6 +381,7 @@ export function transformTedNotice(notice: TedNotice) {
     procedure_libelle: extractText(notice['procedure-type']),
     nb_lots: null,
     lots_titres: [] as string[],
+    donnees: donneesJson,
     updated_at: new Date().toISOString(),
   }
 }
