@@ -10,8 +10,6 @@ export default function RegisterPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
-  const [raisonSociale, setRaisonSociale] = useState('')
-  const [siret, setSiret] = useState('')
   const [nom, setNom] = useState('')
   const [prenom, setPrenom] = useState('')
   const [error, setError] = useState('')
@@ -28,7 +26,7 @@ export default function RegisterPage() {
       email,
       password,
       options: {
-        data: { raison_sociale: raisonSociale, siret, nom_representant: nom, prenom_representant: prenom }
+        data: { nom_representant: nom, prenom_representant: prenom }
       }
     })
     if (signUpError) {
@@ -83,14 +81,6 @@ export default function RegisterPage() {
               </div>
             </div>
             <div>
-              <label className="block text-sm font-medium text-text-primary mb-1.5">Raison sociale</label>
-              <input type="text" value={raisonSociale} onChange={e => setRaisonSociale(e.target.value)} className="w-full border border-border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary" required />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-text-primary mb-1.5">SIRET</label>
-              <input type="text" value={siret} onChange={e => setSiret(e.target.value)} className="w-full border border-border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary" placeholder="12345678900000" required />
-            </div>
-            <div>
               <label className="block text-sm font-medium text-text-primary mb-1.5">Email professionnel</label>
               <input type="email" value={email} onChange={e => setEmail(e.target.value)} className="w-full border border-border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary" required />
             </div>
@@ -103,6 +93,9 @@ export default function RegisterPage() {
                 </button>
               </div>
             </div>
+            <p className="text-xs text-text-secondary text-center">
+              Vous renseignerez votre entreprise (SIRET, raison sociale…) à l&apos;étape suivante.
+            </p>
             <button type="submit" disabled={loading} className="w-full bg-primary hover:bg-primary-hover text-white rounded-lg py-2.5 text-sm font-medium transition-colors flex items-center justify-center gap-2 disabled:opacity-60">
               {loading && <Loader2 className="w-4 h-4 animate-spin" />}
               Créer mon compte
