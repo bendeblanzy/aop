@@ -68,8 +68,9 @@ export async function middleware(request: NextRequest) {
     const onboardingDone = user.user_metadata?.onboarding_completed === true
     const onOnboarding = request.nextUrl.pathname.startsWith('/onboarding')
     const isApiPath = request.nextUrl.pathname.startsWith('/api/')
+    const isAuthPath = request.nextUrl.pathname.startsWith('/auth/')
 
-    if (!onboardingDone && !onOnboarding && !isApiPath && !forceChange) {
+    if (!onboardingDone && !onOnboarding && !isApiPath && !forceChange && !isAuthPath) {
       const url = request.nextUrl.clone()
       url.pathname = '/onboarding'
       return NextResponse.redirect(url)
