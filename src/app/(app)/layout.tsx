@@ -1,4 +1,5 @@
 import { Sidebar } from '@/components/layout/sidebar'
+import { BugReportButton } from '@/components/bug-report/BugReportButton'
 import { createClient } from '@/lib/supabase/server'
 import { adminClient } from '@/lib/supabase/admin'
 import { redirect } from 'next/navigation'
@@ -31,6 +32,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             {children}
           </div>
         </main>
+        <BugReportButton />
       </div>
     </OrganizationProvider>
   )

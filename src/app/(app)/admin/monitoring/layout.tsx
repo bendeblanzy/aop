@@ -31,10 +31,10 @@ export default async function MonitoringLayout({ children }: { children: React.R
 
       <nav className="flex items-center gap-1 border-b border-gray-200">
         <NavTab href="/admin/monitoring/syncs" icon={Activity}>État des syncs</NavTab>
-        <NavTab href="/admin/monitoring/bugs" icon={Bug} disabled>Bug reports</NavTab>
+        <NavTab href="/admin/monitoring/bugs" icon={Bug}>Bug reports</NavTab>
         <NavTab href="/admin/monitoring/api" icon={BarChart3} disabled>Crédits API</NavTab>
         <NavTab href="/admin/monitoring/users" icon={Users} disabled>Activité users</NavTab>
-        <NavTab href="/admin/monitoring/errors" icon={AlertTriangle} disabled>Erreurs</NavTab>
+        <NavTab href="/admin/monitoring/errors" icon={AlertTriangle}>Erreurs</NavTab>
       </nav>
 
       <section>{children}</section>
