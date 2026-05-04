@@ -64,8 +64,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Impossible d\'enregistrer le signalement.' }, { status: 500 })
   }
 
-  // Notif mail (best-effort, on ne fait pas échouer la requête si le mail rate)
-  void notifySuperAdmin({
+  // Notif mail (best-effort, on ne fait pas échouer la requête si le mail rate).
+  // On attend explicitement la fin du fetch — sans ça, Vercel serverless
+  // killait le processus avant que la requête Resend ne parte.
+  const emailSent = await notifySuperAdmin({
     id: data.id,
     reporterEmail: user.email ?? '',
     title: body.title ?? null,
@@ -74,7 +76,7 @@ export async function POST(request: NextRequest) {
     url: body.url ?? null,
   })
 
-  return NextResponse.json({ success: true, id: data.id })
+  return NextResponse.json({ success: true, id: data.id, emailSent })
 }
 
 async function notifySuperAdmin(opts: {
@@ -84,9 +86,9 @@ async function notifySuperAdmin(opts: {
   description: string
   severity: string
   url: string | null
-}) {
+}): Promise<boolean> {
   const apiKey = process.env.RESEND_API_KEY
-  if (!apiKey) return
+  if (!apiKey) return false
   const to = process.env.MONITORING_ALERT_EMAIL || process.env.SUPER_ADMIN_EMAIL || 'benjamindeblanzy@ladngroupe.com'
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://aop-staging.vercel.app'
 
@@ -121,7 +123,7 @@ async function notifySuperAdmin(opts: {
 </body></html>`
 
   try {
-    await fetch('https://api.resend.com/emails', {
+    const res = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
       body: JSON.stringify({
@@ -131,8 +133,15 @@ async function notifySuperAdmin(opts: {
         html,
       }),
     })
+    if (!res.ok) {
+      const errTxt = await res.text()
+      console.error('[bug-reports notif] resend HTTP', res.status, errTxt)
+      return false
+    }
+    return true
   } catch (e) {
     console.error('[bug-reports notif] resend exception:', e)
+    return false
   }
 }
 
