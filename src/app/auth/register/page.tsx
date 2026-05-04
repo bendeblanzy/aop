@@ -37,20 +37,8 @@ export default function RegisterPage() {
       return
     }
     if (data.user) {
-      // Create profile
-      await supabase.from('profiles').upsert({
-        id: data.user.id,
-        raison_sociale: raisonSociale,
-        siret,
-        nom_representant: nom,
-        prenom_representant: prenom,
-        pays: 'France',
-        declaration_non_interdiction: false,
-        declaration_a_jour_fiscal: false,
-        declaration_a_jour_social: false,
-      })
       if (data.session) {
-        router.push('/profil')
+        router.push('/onboarding')
       } else {
         setSuccess(true)
       }

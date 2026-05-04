@@ -5,6 +5,16 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import Image from 'next/image'
 import { Loader2, CheckCircle, Eye, EyeOff } from 'lucide-react'
 
+function translateAuthError(msg: string): string {
+  const m = msg.toLowerCase()
+  if (m.includes('different from the old password')) return 'Le nouveau mot de passe doit être différent de l\'ancien.'
+  if (m.includes('password should be at least')) return 'Le mot de passe doit contenir au moins 8 caractères.'
+  if (m.includes('weak password') || m.includes('password is too weak')) return 'Mot de passe trop faible. Choisissez un mot de passe plus complexe.'
+  if (m.includes('rate limit') || m.includes('too many requests')) return 'Trop de tentatives. Réessayez dans quelques minutes.'
+  if (m.includes('session') && m.includes('expired')) return 'Votre session a expiré. Demandez un nouveau lien.'
+  return `Erreur : ${msg}`
+}
+
 function UpdatePasswordForm() {
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
@@ -50,7 +60,7 @@ function UpdatePasswordForm() {
     const supabase = createClient()
     const { error: updateError } = await supabase.auth.updateUser({ password })
     if (updateError) {
-      setError(`Erreur : ${updateError.message}`)
+      setError(translateAuthError(updateError.message))
     } else {
       setDone(true)
       setTimeout(() => router.push('/dashboard'), 2500)
