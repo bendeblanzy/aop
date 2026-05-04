@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import {
   Loader2, CheckCircle2, ChevronRight, Search, Sparkles,
   Building2, User, Brain, Radio, Wrench, BarChart3, FileText, ShieldCheck,
-  Info, Plus, X, ArrowRight,
+  Info, Plus, X, ArrowRight, LogOut,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { BOAMP_CODES, BOAMP_CATEGORIES } from '@/lib/boamp/codes'
@@ -159,6 +159,19 @@ function OnboardingPageInner() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const isEditMode = searchParams.get('edit') === 'true'
+
+  const [userEmail, setUserEmail] = useState<string | null>(null)
+
+  useEffect(() => {
+    const supabase = createClient()
+    supabase.auth.getUser().then(({ data }) => setUserEmail(data.user?.email ?? null))
+  }, [])
+
+  async function handleLogout() {
+    const supabase = createClient()
+    await supabase.auth.signOut()
+    router.push('/auth/login')
+  }
 
   const [step, setStep] = useState(1)
   const [orgCreated, setOrgCreated] = useState(false)
@@ -665,11 +678,26 @@ function OnboardingPageInner() {
       <div className="w-full max-w-2xl">
 
         {/* Header */}
-        <div className="text-center mb-5">
-          <div className="inline-flex items-center justify-center w-10 h-10 rounded-xl bg-[#0000FF] text-white text-lg font-bold mb-3">A</div>
-          <p className="text-xs text-gray-400">
-            {isEditMode ? 'Mise à jour du profil' : 'Configuration de votre profil'} — Étape {step}/{TOTAL_STEPS}
-          </p>
+        <div className="flex items-center justify-between mb-5">
+          <div className="flex-1" />
+          <div className="text-center">
+            <div className="inline-flex items-center justify-center w-10 h-10 rounded-xl bg-[#0000FF] text-white text-lg font-bold mb-3">A</div>
+            <p className="text-xs text-gray-400">
+              {isEditMode ? 'Mise à jour du profil' : 'Configuration de votre profil'} — Étape {step}/{TOTAL_STEPS}
+            </p>
+          </div>
+          <div className="flex-1 flex justify-end">
+            {userEmail && (
+              <button
+                onClick={handleLogout}
+                className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-600 transition-colors"
+                title={userEmail}
+              >
+                <span className="hidden sm:inline truncate max-w-[140px]">{userEmail}</span>
+                <LogOut className="w-4 h-4 shrink-0" />
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Steps indicator */}
