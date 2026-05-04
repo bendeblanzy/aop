@@ -47,6 +47,7 @@ export default function ProfilPage() {
   const [deepResearchLoading, setDeepResearchLoading] = useState(false)
   // SIRET auto-fill
   const [sirenLoading, setSirenLoading] = useState(false)
+  const [siretError, setSiretError] = useState<{ kind: 'not_found' | 'rate_limit' | 'network'; message: string } | null>(null)
   // Suggestion IA (BOAMP codes + domaines)
   const [suggestLoading, setSuggestLoading] = useState(false)
   const supabase = createClient()
@@ -104,20 +105,29 @@ export default function ProfilPage() {
   async function autoFillFromSiret() {
     const siret = (profile.siret || '').replace(/\s/g, '')
     if (siret.length < 9) {
+      setSiretError({ kind: 'not_found', message: 'Entrez au moins les 9 premiers chiffres du SIREN/SIRET' })
       toast.error('Entrez au moins les 9 premiers chiffres du SIREN/SIRET')
       return
     }
     setSirenLoading(true)
+    setSiretError(null)
     try {
       // Appel server-side pour éviter les problèmes CORS/réseau en production
       const res = await fetch(`/api/profil/siret?q=${encodeURIComponent(siret)}`)
       const data = await res.json()
       if (!res.ok) {
-        if (data.retryable) {
-          // 429 rate-limit : message explicite + suggestion de réessayer
+        if (res.status === 404) {
+          setSiretError({
+            kind: 'not_found',
+            message: `Aucune entreprise trouvée pour le SIRET "${siret}". Vérifiez sur annuaire-entreprises.data.gouv.fr ou saisissez les champs manuellement ci-dessous.`,
+          })
+          toast.error('SIRET introuvable — vérifiez le numéro saisi.', { duration: 6000 })
+        } else if (data.retryable) {
+          setSiretError({ kind: 'rate_limit', message: data.error || 'Trop de requêtes — réessayez dans quelques secondes.' })
           toast.error(data.error || 'Trop de requêtes — réessayez dans quelques secondes.', { duration: 6000 })
         } else {
-          toast.error(data.error || 'Entreprise introuvable')
+          setSiretError({ kind: 'network', message: data.error || 'API Annuaire des Entreprises indisponible.' })
+          toast.error(data.error || 'Service Annuaire des Entreprises indisponible')
         }
         return
       }
@@ -537,6 +547,26 @@ export default function ProfilPage() {
                     Auto-remplir
                   </button>
                 </div>
+                {siretError && (
+                  <div className="mb-5 bg-amber-50 border border-amber-200 text-amber-900 rounded-lg px-4 py-3 text-sm flex items-start gap-3">
+                    <span className="font-semibold">⚠️</span>
+                    <div className="flex-1">
+                      <p className="font-medium mb-1">{siretError.kind === 'not_found' ? 'SIRET introuvable' : siretError.kind === 'rate_limit' ? 'Trop de requêtes' : 'Service indisponible'}</p>
+                      <p className="text-amber-800">{siretError.message}</p>
+                      {siretError.kind === 'not_found' && (
+                        <a
+                          href={`https://annuaire-entreprises.data.gouv.fr/rechercher?terme=${encodeURIComponent((profile.siret || '').replace(/\s/g, ''))}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-block mt-1.5 text-amber-900 underline font-medium hover:text-amber-700"
+                        >
+                          → Vérifier le SIRET sur annuaire-entreprises.data.gouv.fr
+                        </a>
+                      )}
+                    </div>
+                    <button onClick={() => setSiretError(null)} className="text-amber-700 hover:text-amber-900 text-lg leading-none" aria-label="Fermer">×</button>
+                  </div>
+                )}
                 <div className="grid grid-cols-2 gap-5">
                   <FormField label="Raison sociale *" value={profile.raison_sociale || ''} onChange={v => update('raison_sociale', v)} placeholder="Ma Société SAS" />
                   <FormSelect label="Forme juridique" value={profile.forme_juridique || ''} onChange={v => update('forme_juridique', v)} options={FORMES_JURIDIQUES} />

@@ -176,6 +176,7 @@ function OnboardingPageInner() {
   const [step, setStep] = useState(1)
   const [orgCreated, setOrgCreated] = useState(false)
   const [siretLoading, setSiretLoading] = useState(false)
+  const [siretError, setSiretError] = useState<{ kind: 'not_found' | 'rate_limit' | 'network'; message: string } | null>(null)
   const [deepResearchLoading, setDeepResearchLoading] = useState(false)
   const [deepResearchCountdown, setDeepResearchCountdown] = useState(0)
   const [boampLoading, setBoampLoading] = useState(false)
@@ -293,12 +294,32 @@ function OnboardingPageInner() {
   // ── SIRET lookup ─────────────────────────────────────────────────────────
   async function lookupSiret() {
     const q = data.siret.replace(/\s/g, '')
-    if (q.length < 9) { toast.error('Entrez un SIRET (14 chiffres) ou SIREN (9 chiffres)'); return }
+    if (q.length < 9) {
+      setSiretError({ kind: 'not_found', message: 'Entrez un SIRET (14 chiffres) ou SIREN (9 chiffres)' })
+      toast.error('Entrez un SIRET (14 chiffres) ou SIREN (9 chiffres)')
+      return
+    }
     setSiretLoading(true)
+    setSiretError(null)
     try {
       const res = await fetch(`/api/profil/siret?q=${encodeURIComponent(q)}`)
       const d = await res.json()
-      if (!res.ok) { toast.error(d.error ?? 'SIRET introuvable'); return }
+      if (!res.ok) {
+        if (res.status === 404) {
+          setSiretError({
+            kind: 'not_found',
+            message: `Aucune entreprise trouvée pour le SIRET "${q}". Vérifiez le numéro saisi ou continuez en remplissant les champs manuellement.`,
+          })
+          toast.error('SIRET introuvable — vérifiez le numéro saisi.', { duration: 6000 })
+        } else if (d.retryable) {
+          setSiretError({ kind: 'rate_limit', message: d.error || 'Trop de requêtes — réessayez dans quelques secondes.' })
+          toast.error(d.error || 'Trop de requêtes — réessayez dans quelques secondes.', { duration: 6000 })
+        } else {
+          setSiretError({ kind: 'network', message: d.error || 'API Annuaire des Entreprises indisponible.' })
+          toast.error(d.error ?? 'Service Annuaire des Entreprises indisponible')
+        }
+        return
+      }
       const sd: SiretData = d
       // Depuis 2026-05-02, l'API retourne `raison_sociale` directement (avec
       // fallback `nom_complet` côté serveur). On garde une normalisation
@@ -764,6 +785,27 @@ function OnboardingPageInner() {
                   Rechercher
                 </button>
               </div>
+
+              {siretError && (
+                <div className="bg-amber-50 border border-amber-200 text-amber-900 rounded-lg px-4 py-3 text-sm flex items-start gap-3">
+                  <span className="font-semibold">⚠️</span>
+                  <div className="flex-1">
+                    <p className="font-medium mb-1">{siretError.kind === 'not_found' ? 'SIRET introuvable' : siretError.kind === 'rate_limit' ? 'Trop de requêtes' : 'Service indisponible'}</p>
+                    <p className="text-amber-800">{siretError.message}</p>
+                    {siretError.kind === 'not_found' && data.siret.replace(/\s/g, '').length >= 9 && (
+                      <a
+                        href={`https://annuaire-entreprises.data.gouv.fr/rechercher?terme=${encodeURIComponent(data.siret.replace(/\s/g, ''))}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-block mt-1.5 text-amber-900 underline font-medium hover:text-amber-700"
+                      >
+                        → Vérifier le SIRET sur annuaire-entreprises.data.gouv.fr
+                      </a>
+                    )}
+                  </div>
+                  <button onClick={() => setSiretError(null)} className="text-amber-700 hover:text-amber-900 text-lg leading-none" aria-label="Fermer">×</button>
+                </div>
+              )}
 
               {data.siretData && (
                 <div className="bg-green-50 border border-green-200 rounded-xl p-4 text-sm text-gray-700 space-y-1">
