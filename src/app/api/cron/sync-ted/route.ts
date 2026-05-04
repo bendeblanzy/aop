@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { adminClient } from '@/lib/supabase/admin'
 import { syncTedTenders } from '@/lib/ted/sync'
 import { getEmbeddingsBatch, buildTenderText } from '@/lib/ai/embeddings'
+import { withSyncRun } from '@/lib/monitoring/sync-run'
 
 /**
  * Route cron — appelée par Vercel Cron chaque jour à 6h (Europe/Paris).
@@ -36,7 +37,10 @@ export async function POST(request: NextRequest) {
 
   console.log(`[cron/sync-ted] Démarrage sync, daysBack=${daysBack}`)
 
+  const triggeredBy = request.headers.get('x-triggered-by') ?? 'cron'
+
   try {
+    const payload = await withSyncRun({ source: 'ted', triggeredBy }, async () => {
     // Étape 1 : Sync TED
     const result = await syncTedTenders(adminClient, daysBack)
 
@@ -93,7 +97,18 @@ export async function POST(request: NextRequest) {
       console.error('[cron/sync-ted] Purge exception (non-fatal):', purgeErr)
     }
 
-    return NextResponse.json({ success: true, result, embedded, purged })
+    return {
+      metrics: {
+        fetched: result.fetched ?? 0,
+        inserted: result.inserted ?? 0,
+        updated: embedded,
+        errors: result.errors ?? 0,
+        metadata: { daysBack, embedded, purged, pages: result.pages },
+      },
+      response: { success: true, result, embedded, purged },
+    }
+    })
+    return NextResponse.json(payload)
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     console.error('[cron/sync-ted] Erreur:', message)

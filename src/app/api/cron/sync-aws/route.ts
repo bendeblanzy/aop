@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { adminClient } from '@/lib/supabase/admin'
 import { syncAwsMpiTenders } from '@/lib/aws/sync'
 import { getEmbeddingsBatch, buildTenderText } from '@/lib/ai/embeddings'
+import { withSyncRun } from '@/lib/monitoring/sync-run'
 
 /**
  * Route cron AWS MPI — appelée par Vercel Cron chaque jour à 9h (Europe/Paris).
@@ -30,7 +31,10 @@ export async function POST(request: NextRequest) {
 
   console.log('[cron/sync-aws] Démarrage')
 
+  const triggeredBy = request.headers.get('x-triggered-by') ?? 'cron'
+
   try {
+    const payload = await withSyncRun({ source: 'aws', triggeredBy }, async () => {
     // ── Étape 1-2 : Sync AWS MPI (Apify run + upsert) ─────────────────────
     const result = await syncAwsMpiTenders(adminClient)
 
@@ -87,7 +91,18 @@ export async function POST(request: NextRequest) {
       console.error('[cron/sync-aws] Purge exception (non-fatal):', purgeErr)
     }
 
-    return NextResponse.json({ success: true, result, embedded, purged })
+    return {
+      metrics: {
+        fetched: result.fetched ?? 0,
+        inserted: result.inserted ?? 0,
+        updated: embedded,
+        errors: result.errors ?? 0,
+        metadata: { embedded, purged, apifyRunId: result.apifyRunId },
+      },
+      response: { success: true, result, embedded, purged },
+    }
+    })
+    return NextResponse.json(payload)
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     console.error('[cron/sync-aws] Erreur:', message)

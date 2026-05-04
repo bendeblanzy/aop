@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { adminClient } from '@/lib/supabase/admin'
 import { syncAtexoTenders } from '@/lib/atexo/sync'
 import { getEmbeddingsBatch, buildTenderText } from '@/lib/ai/embeddings'
+import { withSyncRun } from '@/lib/monitoring/sync-run'
 
 /**
  * Route cron Atexo MPE — appelée par Vercel Cron chaque jour à 7h (Europe/Paris).
@@ -38,7 +39,10 @@ export async function POST(request: NextRequest) {
 
   console.log(`[cron/sync-atexo] Démarrage, daysBack=${daysBack}`)
 
+  const triggeredBy = request.headers.get('x-triggered-by') ?? 'cron'
+
   try {
+    const payload = await withSyncRun({ source: 'atexo', triggeredBy }, async () => {
     // Étape 1-2 : Sync Atexo (Apify run + upsert)
     const result = await syncAtexoTenders(adminClient, { daysBack })
 
@@ -95,7 +99,18 @@ export async function POST(request: NextRequest) {
       console.error('[cron/sync-atexo] Purge exception (non-fatal):', purgeErr)
     }
 
-    return NextResponse.json({ success: true, result, embedded, purged })
+    return {
+      metrics: {
+        fetched: result.fetched ?? 0,
+        inserted: result.inserted ?? 0,
+        updated: embedded,
+        errors: result.errors ?? 0,
+        metadata: { daysBack, embedded, purged, apifyRunId: result.apifyRunId },
+      },
+      response: { success: true, result, embedded, purged },
+    }
+    })
+    return NextResponse.json(payload)
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     console.error('[cron/sync-atexo] Erreur:', message)

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { adminClient } from '@/lib/supabase/admin'
 import { syncBoampTenders } from '@/lib/boamp/sync'
 import { getEmbeddingsBatch, buildTenderText } from '@/lib/ai/embeddings'
+import { withSyncRun } from '@/lib/monitoring/sync-run'
 
 /**
  * Route cron — appellée par Vercel Cron chaque jour à 6h (Europe/Paris)
@@ -38,7 +39,10 @@ export async function POST(request: NextRequest) {
 
   console.log(`[cron/sync-boamp] Démarrage sync, daysBack=${daysBack}`)
 
+  const triggeredBy = request.headers.get('x-triggered-by') ?? 'cron'
+
   try {
+    const payload = await withSyncRun({ source: 'boamp', triggeredBy }, async () => {
     // Étape 1 : Sync BOAMP
     const result = await syncBoampTenders(adminClient, daysBack)
 
@@ -97,7 +101,18 @@ export async function POST(request: NextRequest) {
       console.error('[cron/sync-boamp] Purge exception (non-fatal):', purgeErr)
     }
 
-    return NextResponse.json({ success: true, result, embedded, purged })
+    return {
+      metrics: {
+        fetched: result.fetched ?? 0,
+        inserted: result.inserted ?? 0,
+        updated: (result.updated ?? 0) + embedded,
+        errors: result.errors ?? 0,
+        metadata: { daysBack, embedded, purged },
+      },
+      response: { success: true, result, embedded, purged },
+    }
+    })
+    return NextResponse.json(payload)
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     console.error('[cron/sync-boamp] Erreur:', message)
