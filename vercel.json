@@ -23,6 +23,10 @@
     {
       "path": "/api/cron/check-sync-health",
       "schedule": "0 10 * * *"
+    },
+    {
+      "path": "/api/cron/check-api-usage",
+      "schedule": "0 11 * * *"
     }
   ],
   "functions": {
@@ -38,6 +42,7 @@
     "src/app/api/cron/sync-atexo/route.ts": { "maxDuration": 300 },
     "src/app/api/cron/sync-dedup/route.ts": { "maxDuration": 300 },
     "src/app/api/cron/sync-aws/route.ts": { "maxDuration": 300 },
-    "src/app/api/cron/check-sync-health/route.ts": { "maxDuration": 60 }
+    "src/app/api/cron/check-sync-health/route.ts": { "maxDuration": 60 },
+    "src/app/api/cron/check-api-usage/route.ts": { "maxDuration": 60 }
   }
 }
