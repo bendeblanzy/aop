@@ -1,18 +1,37 @@
 'use client'
-import { useState } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
 import { Loader2, Eye, EyeOff } from 'lucide-react'
 
-export default function LoginPage() {
+function LoginForm() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [exchanging, setExchanging] = useState(false)
   const router = useRouter()
+  const searchParams = useSearchParams()
+
+  // Auto-login après confirmation email : exchange le PKCE code en session
+  useEffect(() => {
+    const code = searchParams.get('code')
+    if (!code) return
+    setExchanging(true)
+    const supabase = createClient()
+    supabase.auth.exchangeCodeForSession(code).then(({ error }) => {
+      if (error) {
+        setError('Lien expiré ou invalide. Connectez-vous avec votre email et mot de passe.')
+        setExchanging(false)
+      } else {
+        router.push('/dashboard')
+        router.refresh()
+      }
+    })
+  }, [searchParams, router])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -27,6 +46,17 @@ export default function LoginPage() {
       router.push('/dashboard')
       router.refresh()
     }
+  }
+
+  if (exchanging) {
+    return (
+      <div className="min-h-screen bg-surface flex items-center justify-center px-4">
+        <div className="text-center text-text-secondary text-sm flex items-center gap-2">
+          <Loader2 className="w-4 h-4 animate-spin" />
+          Connexion en cours…
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -95,5 +125,17 @@ export default function LoginPage() {
         </div>
       </div>
     </div>
+  )
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-surface flex items-center justify-center">
+        <Loader2 className="w-6 h-6 animate-spin text-primary" />
+      </div>
+    }>
+      <LoginForm />
+    </Suspense>
   )
 }
