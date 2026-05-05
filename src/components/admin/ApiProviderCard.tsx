@@ -117,7 +117,7 @@ export function ApiProviderCard({ provider, label, dashboardUrl, apiKeyStatus, a
               <div className="font-semibold text-gray-900">
                 {snapshot.credits_remaining_usd != null
                   ? `$${snapshot.credits_remaining_usd.toLocaleString('fr-FR', { maximumFractionDigits: 2 })}`
-                  : <span className="text-gray-400 font-normal">—</span>}
+                  : <span className="text-gray-400 font-normal text-[11px]" title={remainingHint(provider, adminKeyStatus)}>{remainingHint(provider, adminKeyStatus)}</span>}
               </div>
             </div>
             <div className="bg-gray-50 rounded px-2.5 py-1.5">
@@ -125,7 +125,7 @@ export function ApiProviderCard({ provider, label, dashboardUrl, apiKeyStatus, a
               <div className="font-semibold text-gray-900">
                 {snapshot.spent_30d_usd != null
                   ? `$${snapshot.spent_30d_usd.toLocaleString('fr-FR', { maximumFractionDigits: 2 })}`
-                  : <span className="text-gray-400 font-normal">—</span>}
+                  : <span className="text-gray-400 font-normal text-[11px]" title={spent30dHint(provider, adminKeyStatus)}>{spent30dHint(provider, adminKeyStatus)}</span>}
               </div>
             </div>
           </div>
@@ -175,6 +175,40 @@ function KeyStatusPill({ status, suffix }: { status: CredentialStatus; suffix?: 
   )
 }
 
+// Liens directs vers les pages de création des clés / Admin Keys par provider.
+const KEY_HELP: Record<string, { url: string; label: string; hint: string }> = {
+  apify: {
+    url: 'https://console.apify.com/settings/integrations',
+    label: 'Console Apify → Settings → Integrations',
+    hint: 'Token API personnel, format apify_api_xxx.',
+  },
+  resend: {
+    url: 'https://resend.com/api-keys',
+    label: 'Resend → API Keys',
+    hint: 'Clé API standard, format re_xxx.',
+  },
+  anthropic: {
+    url: 'https://console.anthropic.com/settings/keys',
+    label: 'Console Anthropic → Settings → API Keys',
+    hint: 'Clé d\'API normale (sk-ant-xxx) — utilisée par l\'app pour les appels Claude.',
+  },
+  anthropic_admin: {
+    url: 'https://console.anthropic.com/settings/admin-keys',
+    label: 'Console Anthropic → Settings → Admin Keys',
+    hint: 'Admin Key (différente de la clé d\'API). Nécessaire pour lire l\'usage / coût de l\'organisation. Format sk-ant-admin01-xxx.',
+  },
+  openai: {
+    url: 'https://platform.openai.com/api-keys',
+    label: 'Platform OpenAI → API keys',
+    hint: 'Clé d\'API standard (sk-xxx) — utilisée par l\'app pour les embeddings.',
+  },
+  openai_admin: {
+    url: 'https://platform.openai.com/settings/organization/admin-keys',
+    label: 'Platform OpenAI → Settings → Organization → Admin keys',
+    hint: 'Admin API Key (différente de la clé d\'API standard). Nécessaire pour lire l\'usage organisation. Format sk-admin-xxx.',
+  },
+}
+
 function SettingsPanel({ provider, apiKeyStatus, adminKeyStatus, alert, onClose }: {
   provider: 'apify' | 'resend' | 'anthropic' | 'openai'
   apiKeyStatus: CredentialStatus
@@ -184,12 +218,18 @@ function SettingsPanel({ provider, apiKeyStatus, adminKeyStatus, alert, onClose 
 }) {
   return (
     <div className="border-t border-gray-100 pt-3 space-y-3">
-      <ApiKeyEditor providerLabel="Clé d'API normale" providerKey={provider} status={apiKeyStatus} />
+      <ApiKeyEditor
+        providerLabel="Clé d'API"
+        providerKey={provider}
+        status={apiKeyStatus}
+        help={KEY_HELP[provider]}
+      />
       {adminKeyStatus && (
         <ApiKeyEditor
-          providerLabel={`Clé Admin ${provider === 'anthropic' ? 'Anthropic' : 'OpenAI'} (pour usage report)`}
+          providerLabel={`Admin Key ${provider === 'anthropic' ? 'Anthropic' : 'OpenAI'}`}
           providerKey={`${provider}_admin` as const}
           status={adminKeyStatus}
+          help={KEY_HELP[`${provider}_admin`]}
         />
       )}
       <AlertSettingsEditor provider={provider} initial={alert} />
@@ -200,10 +240,11 @@ function SettingsPanel({ provider, apiKeyStatus, adminKeyStatus, alert, onClose 
   )
 }
 
-function ApiKeyEditor({ providerLabel, providerKey, status }: {
+function ApiKeyEditor({ providerLabel, providerKey, status, help }: {
   providerLabel: string
   providerKey: string
   status: CredentialStatus
+  help?: { url: string; label: string; hint: string }
 }) {
   const router = useRouter()
   const [_isPending, startTransition] = useTransition()
@@ -244,7 +285,17 @@ function ApiKeyEditor({ providerLabel, providerKey, status }: {
 
   return (
     <div className="bg-gray-50 rounded-lg px-3 py-2.5 space-y-2">
-      <label className="text-[11px] font-semibold uppercase text-gray-600">{providerLabel}</label>
+      <div className="flex items-baseline justify-between">
+        <label className="text-[11px] font-semibold uppercase text-gray-600">{providerLabel}</label>
+        {help && (
+          <a href={help.url} target="_blank" rel="noopener noreferrer" className="text-[11px] text-[#0000FF] hover:underline inline-flex items-center gap-0.5">
+            Créer la clé →
+          </a>
+        )}
+      </div>
+      {help && (
+        <p className="text-[11px] text-gray-500 -mt-1">{help.hint}</p>
+      )}
       <div className="flex items-center gap-2">
         <input
           type={show ? 'text' : 'password'}
@@ -363,4 +414,17 @@ function barColor(pct: number, threshold: number): string {
   if (pct >= threshold) return 'bg-amber-500'
   if (pct >= 50) return 'bg-blue-500'
   return 'bg-green-500'
+}
+
+function remainingHint(provider: string, adminKey?: CredentialStatus): string {
+  if (provider === 'apify') return 'Pay-as-you-go (pas de plafond)'
+  if (provider === 'resend') return 'Free tier email-based'
+  if ((provider === 'anthropic' || provider === 'openai') && !adminKey?.hasDbValue && !adminKey?.hasEnvFallback) return 'Configurer Admin Key →'
+  return '—'
+}
+
+function spent30dHint(provider: string, adminKey?: CredentialStatus): string {
+  if ((provider === 'anthropic' || provider === 'openai') && !adminKey?.hasDbValue && !adminKey?.hasEnvFallback) return 'Configurer Admin Key →'
+  if (provider === 'resend') return 'N/A (compte d\'emails)'
+  return '—'
 }

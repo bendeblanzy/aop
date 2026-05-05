@@ -394,7 +394,7 @@ export function transformTedNotice(notice: TedNotice) {
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function syncTedTenders(supabaseAdmin: any, daysBack = 7): Promise<TedSyncResult> {
-  const result: TedSyncResult = { fetched: 0, inserted: 0, errors: 0, pages: 0 }
+  const result: TedSyncResult = { fetched: 0, inserted: 0, errors: 0, pages: 0, errorMessages: [] }
   const query = buildQuery(daysBack)
 
   let page = 1
@@ -405,8 +405,10 @@ export async function syncTedTenders(supabaseAdmin: any, daysBack = 7): Promise<
     try {
       pageData = await fetchTedPage(query, page)
     } catch (e) {
-      console.error(`[sync-ted] Erreur page ${page}:`, e instanceof Error ? e.message : e)
+      const msg = e instanceof Error ? e.message : String(e)
+      console.error(`[sync-ted] Erreur page ${page}:`, msg)
       result.errors++
+      result.errorMessages?.push(`page ${page}: ${msg}`)
       break
     }
 
@@ -419,7 +421,6 @@ export async function syncTedTenders(supabaseAdmin: any, daysBack = 7): Promise<
       console.log(`[sync-ted] Total TED: ${totalCount} notices, ~${Math.ceil(totalCount / PAGE_SIZE)} pages`)
     }
 
-    // Transformer + upsert par lot de 50
     const records = notices
       .map(transformTedNotice)
       .filter((r): r is NonNullable<ReturnType<typeof transformTedNotice>> => r !== null)
@@ -434,12 +435,12 @@ export async function syncTedTenders(supabaseAdmin: any, daysBack = 7): Promise<
       if (error) {
         console.error(`[sync-ted] Upsert error page=${page} batch=${i}:`, error.message)
         result.errors += batch.length
+        result.errorMessages?.push(`page ${page} batch ${i}: ${error.message}`)
       } else {
         result.inserted += data?.length ?? 0
       }
     }
 
-    // Stop si on a tout récupéré
     if (notices.length < PAGE_SIZE || result.fetched >= totalCount) break
 
     page++

@@ -68,4 +68,5 @@ export interface TedSyncResult {
   inserted: number
   errors: number
   pages: number
+  errorMessages?: string[]
 }

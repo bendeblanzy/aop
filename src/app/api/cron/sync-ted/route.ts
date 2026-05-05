@@ -100,6 +100,7 @@ export async function POST(request: NextRequest) {
         inserted: result.inserted ?? 0,
         updated: embedded,
         errors: result.errors ?? 0,
+        errorMessages: result.errorMessages,
         metadata: { daysBack, embedded, purged, pages: result.pages },
       },
       response: { success: true, result, embedded, purged },
