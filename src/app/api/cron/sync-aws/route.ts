@@ -3,6 +3,7 @@ import { adminClient } from '@/lib/supabase/admin'
 import { syncAwsMpiTenders } from '@/lib/aws/sync'
 import { getEmbeddingsBatch, buildTenderText } from '@/lib/ai/embeddings'
 import { withSyncRun } from '@/lib/monitoring/sync-run'
+import { checkCronGuard } from '@/lib/monitoring/cron-guard'
 
 /**
  * Route cron AWS MPI — appelée par Vercel Cron chaque jour à 9h (Europe/Paris).
@@ -22,12 +23,8 @@ import { withSyncRun } from '@/lib/monitoring/sync-run'
  *   APIFY_AWS_ACTOR_ID — ex: "username~aws-mpi-scraper"
  */
 export async function POST(request: NextRequest) {
-  const authHeader = request.headers.get('authorization')
-  const cronSecret = process.env.CRON_SECRET
-
-  if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const guard = await checkCronGuard(request, 'aws')
+  if (!guard.ok) return guard.response
 
   console.log('[cron/sync-aws] Démarrage')
 

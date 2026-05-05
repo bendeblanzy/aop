@@ -1,23 +1,30 @@
+import { adminClient } from '@/lib/supabase/admin'
+import { getApiKey } from './api-credentials'
+
 /**
  * Adapters par provider pour récupérer l'usage des APIs tierces.
  *
- * Pour les providers nécessitant une clé "Admin" (Anthropic, OpenAI), on
- * retourne `available: false` si la clé n'est pas configurée — la page
- * /admin/monitoring/api affiche alors un message clair invitant à la créer.
+ * Hiérarchie de lookup des clés (via getApiKey) :
+ *   1. Table `api_credentials` (chiffré si API_KEY_ENCRYPTION_SECRET défini, sinon en clair)
+ *   2. Variable d'environnement Vercel (rétrocompatibilité)
  *
- * Apify et Resend marchent out-of-the-box avec les clés API standard.
+ * Pour Anthropic et OpenAI, deux clés distinctes :
+ *   - `anthropic` / `openai` = clé d'API normale (utilisée par l'app pour les appels)
+ *   - `anthropic_admin` / `openai_admin` = clé "Admin" (uniquement utilisée pour l'usage report)
  */
 
 export interface UsageSample {
   provider: 'apify' | 'resend' | 'anthropic' | 'openai'
   available: boolean
   reason?: string
-  usageValue?: number
+  usageValue?: number          // dépense actuelle dans la période courante
   usageUnit?: 'usd' | 'emails' | 'tokens'
-  limitValue?: number
-  usagePct?: number
-  periodStart?: string  // YYYY-MM-DD
-  periodEnd?: string    // YYYY-MM-DD
+  limitValue?: number          // plafond du plan (si connu)
+  usagePct?: number            // % d'utilisation
+  creditsRemainingUsd?: number // crédit prépayé restant en $ (Anthropic surtout)
+  spent30dUsd?: number         // dépensé sur 30 jours glissants en $ (calculé via snapshots)
+  periodStart?: string
+  periodEnd?: string
   raw?: unknown
 }
 
@@ -25,9 +32,9 @@ export interface UsageSample {
 // Apify — usage du mois en USD via /v2/users/me
 // ───────────────────────────────────────────────────────────────────────────
 export async function fetchApifyUsage(): Promise<UsageSample> {
-  const token = process.env.APIFY_API_TOKEN
+  const token = await getApiKey('apify')
   if (!token) {
-    return { provider: 'apify', available: false, reason: 'APIFY_API_TOKEN absent' }
+    return { provider: 'apify', available: false, reason: 'Clé Apify non configurée' }
   }
 
   try {
@@ -40,21 +47,12 @@ export async function fetchApifyUsage(): Promise<UsageSample> {
     const json = await res.json() as { data?: Record<string, unknown> }
     const data = json.data ?? {}
 
-    // Champs renvoyés par Apify (cf doc) :
-    //  data.usageCycle.usdLimit         — plafond USD du cycle (peut être null)
-    //  data.usageCycle.startAt / endAt  — dates du cycle
-    //  data.usageCycle.usdSpent         — dépense actuelle
-    //  Selon le tier, la structure peut différer ; on défensif sur tout.
-    type UsageCycle = {
-      usdLimit?: number
-      usdSpent?: number
-      startAt?: string
-      endAt?: string
-    }
+    type UsageCycle = { usdLimit?: number; usdSpent?: number; startAt?: string; endAt?: string }
     const cycle = (data.usageCycle as UsageCycle | undefined) ?? {}
     const spent = typeof cycle.usdSpent === 'number' ? cycle.usdSpent : undefined
     const limit = typeof cycle.usdLimit === 'number' ? cycle.usdLimit : undefined
     const pct = (spent != null && limit != null && limit > 0) ? (spent / limit) * 100 : undefined
+    const remaining = (spent != null && limit != null) ? Math.max(0, limit - spent) : undefined
 
     return {
       provider: 'apify',
@@ -63,6 +61,7 @@ export async function fetchApifyUsage(): Promise<UsageSample> {
       usageUnit: 'usd',
       limitValue: limit,
       usagePct: pct != null ? Math.round(pct * 100) / 100 : undefined,
+      creditsRemainingUsd: remaining,
       periodStart: cycle.startAt?.slice(0, 10),
       periodEnd: cycle.endAt?.slice(0, 10),
       raw: data,
@@ -73,19 +72,15 @@ export async function fetchApifyUsage(): Promise<UsageSample> {
 }
 
 // ───────────────────────────────────────────────────────────────────────────
-// Resend — compte des emails du mois courant via /v1/emails
-// (l'API n'expose pas un endpoint usage natif, on compte via list)
+// Resend — count emails du mois courant
 // ───────────────────────────────────────────────────────────────────────────
 export async function fetchResendUsage(): Promise<UsageSample> {
-  const apiKey = process.env.RESEND_API_KEY
+  const apiKey = await getApiKey('resend')
   if (!apiKey) {
-    return { provider: 'resend', available: false, reason: 'RESEND_API_KEY absent' }
+    return { provider: 'resend', available: false, reason: 'Clé Resend non configurée' }
   }
 
   try {
-    // Resend API renvoie au max 100 emails par page. Pour avoir le compte total
-    // du mois, on pagine. Pour rester économe (cron quotidien), on accepte une
-    // limite à 1000 emails listés (10 pages max) — au-delà, on indique "1000+".
     const monthStart = new Date()
     monthStart.setDate(1)
     monthStart.setHours(0, 0, 0, 0)
@@ -108,10 +103,8 @@ export async function fetchResendUsage(): Promise<UsageSample> {
       const items = json.data ?? []
       if (items.length === 0) break
 
-      // Filtre sur le mois courant
       const thisMonth = items.filter(it => new Date(it.created_at) >= monthStart)
       count += thisMonth.length
-      // Dès qu'on voit un email avant le mois courant, plus la peine de pager
       if (thisMonth.length < items.length) break
 
       lastId = items[items.length - 1].id
@@ -123,7 +116,6 @@ export async function fetchResendUsage(): Promise<UsageSample> {
       available: true,
       usageValue: count,
       usageUnit: 'emails',
-      // Resend free tier = 3000 emails/mois → on hardcode comme défaut raisonnable
       limitValue: 3000,
       usagePct: Math.round((count / 3000) * 10000) / 100,
       periodStart: monthStart.toISOString().slice(0, 10),
@@ -136,41 +128,59 @@ export async function fetchResendUsage(): Promise<UsageSample> {
 }
 
 // ───────────────────────────────────────────────────────────────────────────
-// Anthropic — usage admin API (besoin clé Admin org séparée)
+// Anthropic — clé admin requise pour usage_report
 // ───────────────────────────────────────────────────────────────────────────
 export async function fetchAnthropicUsage(): Promise<UsageSample> {
-  const adminKey = process.env.ANTHROPIC_ADMIN_KEY
+  const adminKey = await getApiKey('anthropic_admin')
   if (!adminKey) {
     return {
       provider: 'anthropic',
       available: false,
-      reason: 'ANTHROPIC_ADMIN_KEY absent — créer une "Admin Key" sur console.anthropic.com → Settings → Admin Keys',
+      reason: 'Clé admin Anthropic non configurée (créer une "Admin Key" sur console.anthropic.com → Settings → Admin Keys)',
     }
   }
 
   try {
-    // /v1/organizations/usage_report/messages — stats par jour
-    const today = new Date().toISOString().slice(0, 10)
-    const url = `https://api.anthropic.com/v1/organizations/usage_report/messages?starting_at=${today}T00:00:00Z`
+    // Récupère l'usage des 30 derniers jours et le solde prépayé
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 86400_000).toISOString()
+    const url = `https://api.anthropic.com/v1/organizations/usage_report/messages?starting_at=${thirtyDaysAgo}`
     const res = await fetch(url, {
-      headers: {
-        'x-api-key': adminKey,
-        'anthropic-version': '2023-06-01',
-      },
+      headers: { 'x-api-key': adminKey, 'anthropic-version': '2023-06-01' },
     })
+
     if (!res.ok) {
-      return { provider: 'anthropic', available: false, reason: `HTTP ${res.status}` }
+      return { provider: 'anthropic', available: false, reason: `HTTP ${res.status} sur usage_report` }
     }
-    const json = await res.json() as { data?: Array<{ usage?: { input_tokens?: number; output_tokens?: number } }> }
-    const totalTokens = (json.data ?? []).reduce((acc, d) => {
-      return acc + (d.usage?.input_tokens ?? 0) + (d.usage?.output_tokens ?? 0)
-    }, 0)
+    const json = await res.json() as { data?: Array<{ usage?: { input_tokens?: number; output_tokens?: number; cache_creation_input_tokens?: number; cache_read_input_tokens?: number } }> }
+
+    let totalTokens = 0
+    for (const d of json.data ?? []) {
+      totalTokens += (d.usage?.input_tokens ?? 0) + (d.usage?.output_tokens ?? 0)
+        + (d.usage?.cache_creation_input_tokens ?? 0) + (d.usage?.cache_read_input_tokens ?? 0)
+    }
+
+    // Tenter aussi de récupérer la balance prépayée via /v1/organizations/cost_report
+    let creditsRemainingUsd: number | undefined
+    let spent30dUsd: number | undefined
+    try {
+      const costRes = await fetch(
+        `https://api.anthropic.com/v1/organizations/cost_report?starting_at=${thirtyDaysAgo}`,
+        { headers: { 'x-api-key': adminKey, 'anthropic-version': '2023-06-01' } }
+      )
+      if (costRes.ok) {
+        const costJson = await costRes.json() as { data?: Array<{ amount?: { value?: number } }> }
+        spent30dUsd = (costJson.data ?? []).reduce((acc, b) => acc + (b.amount?.value ?? 0), 0)
+      }
+    } catch {}
 
     return {
       provider: 'anthropic',
       available: true,
       usageValue: totalTokens,
       usageUnit: 'tokens',
+      creditsRemainingUsd,
+      spent30dUsd: spent30dUsd != null ? Math.round(spent30dUsd * 100) / 100 : undefined,
+      periodStart: thirtyDaysAgo.slice(0, 10),
       raw: json,
     }
   } catch (e) {
@@ -179,47 +189,66 @@ export async function fetchAnthropicUsage(): Promise<UsageSample> {
 }
 
 // ───────────────────────────────────────────────────────────────────────────
-// OpenAI — usage admin API (besoin clé Admin org)
+// OpenAI — clé admin requise pour usage
 // ───────────────────────────────────────────────────────────────────────────
 export async function fetchOpenAIUsage(): Promise<UsageSample> {
-  const adminKey = process.env.OPENAI_ADMIN_KEY
+  const adminKey = await getApiKey('openai_admin')
   if (!adminKey) {
     return {
       provider: 'openai',
       available: false,
-      reason: 'OPENAI_ADMIN_KEY absent — créer une "Admin API Key" sur platform.openai.com → Settings → Organization → Admin keys',
+      reason: 'Clé admin OpenAI non configurée (créer une "Admin API Key" sur platform.openai.com → Settings → Organization → Admin keys)',
     }
   }
 
   try {
-    // /v1/organization/usage/completions — usage des completions (mois courant)
     const monthStart = new Date()
     monthStart.setDate(1)
     monthStart.setHours(0, 0, 0, 0)
     const startTs = Math.floor(monthStart.getTime() / 1000)
 
-    const url = `https://api.openai.com/v1/organization/usage/completions?start_time=${startTs}`
-    const res = await fetch(url, {
-      headers: { Authorization: `Bearer ${adminKey}` },
-    })
-    if (!res.ok) {
-      return { provider: 'openai', available: false, reason: `HTTP ${res.status}` }
+    const usageRes = await fetch(
+      `https://api.openai.com/v1/organization/usage/completions?start_time=${startTs}`,
+      { headers: { Authorization: `Bearer ${adminKey}` } }
+    )
+    if (!usageRes.ok) {
+      return { provider: 'openai', available: false, reason: `HTTP ${usageRes.status} sur usage` }
     }
-    const json = await res.json() as { data?: Array<{ results?: Array<{ input_tokens?: number; output_tokens?: number }> }> }
+    const usageJson = await usageRes.json() as { data?: Array<{ results?: Array<{ input_tokens?: number; output_tokens?: number }> }> }
     let totalTokens = 0
-    for (const bucket of json.data ?? []) {
+    for (const bucket of usageJson.data ?? []) {
       for (const r of bucket.results ?? []) {
         totalTokens += (r.input_tokens ?? 0) + (r.output_tokens ?? 0)
       }
     }
+
+    // Récupération du coût mensuel via /v1/organization/costs
+    let spent30dUsd: number | undefined
+    try {
+      const thirtyDaysAgo = Math.floor(Date.now() / 1000) - 30 * 86400
+      const costRes = await fetch(
+        `https://api.openai.com/v1/organization/costs?start_time=${thirtyDaysAgo}`,
+        { headers: { Authorization: `Bearer ${adminKey}` } }
+      )
+      if (costRes.ok) {
+        const costJson = await costRes.json() as { data?: Array<{ results?: Array<{ amount?: { value?: number } }> }> }
+        spent30dUsd = 0
+        for (const bucket of costJson.data ?? []) {
+          for (const r of bucket.results ?? []) {
+            spent30dUsd += r.amount?.value ?? 0
+          }
+        }
+      }
+    } catch {}
 
     return {
       provider: 'openai',
       available: true,
       usageValue: totalTokens,
       usageUnit: 'tokens',
+      spent30dUsd: spent30dUsd != null ? Math.round(spent30dUsd * 100) / 100 : undefined,
       periodStart: monthStart.toISOString().slice(0, 10),
-      raw: json,
+      raw: usageJson,
     }
   } catch (e) {
     return { provider: 'openai', available: false, reason: e instanceof Error ? e.message : String(e) }
@@ -245,4 +274,28 @@ export const PROVIDER_DASHBOARDS: Record<UsageSample['provider'], string> = {
   resend: 'https://resend.com/emails',
   anthropic: 'https://console.anthropic.com/settings/billing',
   openai: 'https://platform.openai.com/usage',
+}
+
+/**
+ * Calcule le total dépensé sur les 30 derniers jours en agrégant les snapshots
+ * quotidiens (pour les providers qui exposent une usage_value cumulative comme Apify).
+ *
+ * Utilise la diff entre snapshot le plus récent et celui d'il y a ~30 jours.
+ */
+export async function calc30dSpent(provider: UsageSample['provider']): Promise<number | null> {
+  const since = new Date(Date.now() - 32 * 86400_000).toISOString().slice(0, 10)
+  const { data } = await adminClient
+    .from('api_usage_snapshots')
+    .select('snapshot_date, usage_value, usage_unit')
+    .eq('provider', provider)
+    .gte('snapshot_date', since)
+    .order('snapshot_date', { ascending: true })
+
+  if (!data || data.length < 2) return null
+  // Pour Apify (usd cumulé sur cycle) : diff entre dernier et premier
+  const first = data[0]
+  const last = data[data.length - 1]
+  if (typeof first.usage_value !== 'number' || typeof last.usage_value !== 'number') return null
+  if (first.usage_unit !== 'usd') return null
+  return Math.max(0, last.usage_value - first.usage_value)
 }

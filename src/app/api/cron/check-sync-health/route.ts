@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { adminClient } from '@/lib/supabase/admin'
 import { SYNC_SOURCES } from '@/lib/monitoring/sync-run'
+import { checkCronGuard } from '@/lib/monitoring/cron-guard'
 
 /**
  * Cron quotidien — surveille la santé des syncs et envoie un email récap si anomalie.
@@ -19,11 +20,8 @@ import { SYNC_SOURCES } from '@/lib/monitoring/sync-run'
  *   - SUPER_ADMIN_EMAIL ou MONITORING_ALERT_EMAIL (destinataire, défaut benjamindeblanzy@ladngroupe.com)
  */
 export async function POST(request: NextRequest) {
-  const authHeader = request.headers.get('authorization')
-  const cronSecret = process.env.CRON_SECRET
-  if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const guard = await checkCronGuard(request, 'check-sync-health')
+  if (!guard.ok) return guard.response
 
   const now = Date.now()
   const oneHourAgo = new Date(now - 3600_000).toISOString()

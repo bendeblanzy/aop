@@ -1,6 +1,6 @@
 import { adminClient } from '@/lib/supabase/admin'
 import { SYNC_SOURCES, type SyncSource } from '@/lib/monitoring/sync-run'
-import { SyncSourceCard } from '@/components/admin/SyncSourceCard'
+import { SyncsListClient } from '@/components/admin/SyncsListClient'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -21,9 +21,17 @@ interface SyncRunRow {
   metadata: Record<string, unknown> | null
 }
 
+const SOURCE_DESCRIPTIONS: Record<string, string> = {
+  boamp: 'Récupère la liste des annonces BOAMP. Auto-chaîne sur l\'enrichissement à la fin pour combler les détails.',
+  ted: 'Tenders Electronic Daily — annonces UE limitées à la France.',
+  atexo: 'Atexo MPE — scraping PLACE + Maximilien.',
+  aws: 'AWS Marchés Publics — scraping via Apify.',
+  dedup: 'Marque les notices TED qui sont des doublons d\'avis BOAMP (cosine similarity ≥ 0.95).',
+  'embed-tenders': 'Génère les embeddings OpenAI pour les tenders sans embedding (matching profil).',
+  'enrich-tenders': 'Enrichit les anciens AO BOAMP avec leur détail complet (description, montant, lots). Auto-déclenché par sync-boamp pour les nouveaux.',
+}
+
 async function loadRuns(): Promise<Record<SyncSource, SyncRunRow[]>> {
-  // Lit les 30 derniers runs par source. Une seule requête, on regroupe en mémoire
-  // (les sources sont peu nombreuses → ~210 lignes max, négligeable).
   const { data, error } = await adminClient
     .from('sync_runs')
     .select('id, source, status, started_at, finished_at, duration_ms, fetched, inserted, updated, errors, error_messages, triggered_by, metadata')
@@ -48,28 +56,39 @@ async function loadRuns(): Promise<Record<SyncSource, SyncRunRow[]>> {
 }
 
 export default async function SyncsPage() {
-  const runsBySource = await loadRuns()
+  const [runsBySource, cronSettingsRes] = await Promise.all([
+    loadRuns(),
+    adminClient.from('cron_settings').select('source, preset, daily_hour_utc, enabled'),
+  ])
+
+  const cronSettings = (cronSettingsRes.data ?? []) as Array<{
+    source: string
+    preset: 'disabled' | 'daily' | 'every_2h' | 'every_4h' | 'every_8h' | 'every_12h' | 'hourly'
+    daily_hour_utc: number | null
+    enabled: boolean
+  }>
+
+  const sources = SYNC_SOURCES.map(s => ({
+    id: s.id,
+    label: s.label,
+    description: SOURCE_DESCRIPTIONS[s.id],
+  }))
 
   return (
     <div className="space-y-4">
       <div className="bg-blue-50 border border-blue-100 rounded-lg p-4 text-sm text-blue-900">
         <p>
-          Chaque carte représente une source de données. Les 30 derniers runs sont conservés
-          pour repérer les anomalies (statut, durée, volume). Le bouton <strong>Relancer maintenant</strong>
-          re-déclenche un cron à la demande (verrou anti-doublon de 5 minutes).
+          Chaque carte représente une source de données. Cliques sur l'icône <strong>horloge</strong> pour modifier la fréquence.
+          Le bouton <strong>Relancer</strong> déclenche une exécution immédiate (verrou anti-doublon de 5 min).
+          Si un run est en cours, sa progression s'affiche en bleu et se rafraîchit toutes les 3s.
         </p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {SYNC_SOURCES.map(source => (
-          <SyncSourceCard
-            key={source.id}
-            sourceId={source.id}
-            sourceLabel={source.label}
-            runs={runsBySource[source.id] ?? []}
-          />
-        ))}
-      </div>
+      <SyncsListClient
+        sources={sources}
+        runsBySource={runsBySource}
+        cronSettings={cronSettings}
+      />
     </div>
   )
 }

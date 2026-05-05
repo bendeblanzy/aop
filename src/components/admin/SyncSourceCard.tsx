@@ -2,8 +2,10 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { Play, Loader2, CheckCircle2, AlertCircle, AlertTriangle, Clock } from 'lucide-react'
+import { Play, Loader2, CheckCircle2, AlertCircle, AlertTriangle, Clock, Link as LinkIcon } from 'lucide-react'
 import { toast } from 'sonner'
+import { CronScheduleEditor, type CronPreset } from './CronScheduleEditor'
+import type { ActiveRun } from './LiveRunProgress'
 
 interface SyncRunRow {
   id: string
@@ -25,6 +27,9 @@ interface Props {
   sourceId: string
   sourceLabel: string
   runs: SyncRunRow[]
+  cronSettings?: { preset: CronPreset; daily_hour_utc: number | null; enabled: boolean } | null
+  activeRun?: ActiveRun | null
+  description?: string
 }
 
 const STATUS_STYLES: Record<SyncRunRow['status'], { bg: string; text: string; label: string; Icon: React.ComponentType<{ className?: string }> }> = {
@@ -56,7 +61,7 @@ function formatDateFr(iso: string): string {
   })
 }
 
-export function SyncSourceCard({ sourceId, sourceLabel, runs }: Props) {
+export function SyncSourceCard({ sourceId, sourceLabel, runs, cronSettings, activeRun, description }: Props) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [triggering, setTriggering] = useState(false)
@@ -98,20 +103,57 @@ export function SyncSourceCard({ sourceId, sourceLabel, runs }: Props) {
     }
   }
 
+  // Live progress (si run en cours dans cette card)
+  const liveProgress = activeRun?.progress
+  const livePct = liveProgress?.current != null && liveProgress?.total
+    ? Math.min(100, Math.round((liveProgress.current / liveProgress.total) * 100))
+    : null
+
   return (
     <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm flex flex-col gap-3">
       {/* En-tête */}
       <div className="flex items-start justify-between gap-3">
-        <div>
-          <h3 className="font-semibold text-gray-900">{sourceLabel}</h3>
+        <div className="min-w-0 flex-1">
+          <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+            {sourceLabel}
+            {description && (
+              <span className="inline-flex items-center gap-1 text-[10px] font-normal text-gray-500" title={description}>
+                <LinkIcon className="w-3 h-3" />
+              </span>
+            )}
+          </h3>
           <p className="text-xs text-gray-500 mt-0.5">
             Source <code className="font-mono">{sourceId}</code>
           </p>
+          {description && (
+            <p className="text-[11px] text-gray-500 mt-1 italic">{description}</p>
+          )}
         </div>
-        <span className={`text-[10px] font-semibold uppercase px-2 py-0.5 rounded ${healthBadge.bg} ${healthBadge.text}`}>
+        <span className={`text-[10px] font-semibold uppercase px-2 py-0.5 rounded ${healthBadge.bg} ${healthBadge.text} shrink-0`}>
           {healthBadge.label}
         </span>
       </div>
+
+      {/* Live progress bar (si run actif) */}
+      {activeRun && (
+        <div className="bg-blue-50 border border-blue-100 rounded-lg p-2.5 space-y-1.5">
+          <div className="flex items-center justify-between text-xs">
+            <span className="font-semibold text-blue-700 inline-flex items-center gap-1.5">
+              <Loader2 className="w-3 h-3 animate-spin" />
+              En cours…
+            </span>
+            <span className="text-blue-600 tabular-nums">{livePct != null ? `${livePct}%` : ''}</span>
+          </div>
+          {livePct != null && (
+            <div className="h-1.5 bg-white rounded-full overflow-hidden">
+              <div className="h-full bg-blue-500 transition-all" style={{ width: `${livePct}%` }} />
+            </div>
+          )}
+          {liveProgress?.step && (
+            <p className="text-[11px] text-blue-700">{liveProgress.step}</p>
+          )}
+        </div>
+      )}
 
       {/* Dernier run + bouton */}
       <div className="flex items-center justify-between gap-2 border-t border-b border-gray-100 py-2.5">
@@ -129,7 +171,7 @@ export function SyncSourceCard({ sourceId, sourceLabel, runs }: Props) {
         </div>
         <button
           onClick={trigger}
-          disabled={triggering || isPending}
+          disabled={triggering || isPending || !!activeRun}
           className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-[#0000FF] text-white hover:bg-[#0000CC] disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
         >
           {triggering ? (
@@ -145,6 +187,18 @@ export function SyncSourceCard({ sourceId, sourceLabel, runs }: Props) {
           )}
         </button>
       </div>
+
+      {/* Cron schedule editor */}
+      {cronSettings && (
+        <div className="border-b border-gray-100 pb-2">
+          <CronScheduleEditor
+            source={sourceId}
+            preset={cronSettings.preset}
+            dailyHourUtc={cronSettings.daily_hour_utc}
+            enabled={cronSettings.enabled}
+          />
+        </div>
+      )}
 
       {/* Liste des runs */}
       <div className="space-y-1.5">

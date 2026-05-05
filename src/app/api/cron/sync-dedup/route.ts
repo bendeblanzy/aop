@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { adminClient } from '@/lib/supabase/admin'
 import { withSyncRun } from '@/lib/monitoring/sync-run'
+import { checkCronGuard } from '@/lib/monitoring/cron-guard'
 
 /**
  * Route cron — déduplication multi-source (P9, 2026-04-29).
@@ -24,12 +25,8 @@ import { withSyncRun } from '@/lib/monitoring/sync-run'
  *   { "threshold": 0.95 }  — seuil de similarité (défaut 0.95, min 0.85, max 0.99)
  */
 export async function POST(request: NextRequest) {
-  const authHeader = request.headers.get('authorization')
-  const cronSecret = process.env.CRON_SECRET
-
-  if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const guard = await checkCronGuard(request, 'dedup')
+  if (!guard.ok) return guard.response
 
   let threshold = 0.95
   try {

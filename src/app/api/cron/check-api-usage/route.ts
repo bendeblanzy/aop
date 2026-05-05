@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { adminClient } from '@/lib/supabase/admin'
 import { USAGE_FETCHERS, PROVIDER_LABELS, PROVIDER_DASHBOARDS, type UsageSample } from '@/lib/monitoring/api-usage'
+import { checkCronGuard } from '@/lib/monitoring/cron-guard'
 
 /**
  * Cron quotidien — snapshot de l'usage des APIs tierces.
@@ -17,13 +18,9 @@ import { USAGE_FETCHERS, PROVIDER_LABELS, PROVIDER_DASHBOARDS, type UsageSample 
  *   - OPENAI_ADMIN_KEY (optionnel)
  */
 export async function POST(request: NextRequest) {
-  const authHeader = request.headers.get('authorization')
-  const cronSecret = process.env.CRON_SECRET
-  if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const guard = await checkCronGuard(request, 'check-api-usage')
+  if (!guard.ok) return guard.response
 
-  const threshold = Number(process.env.API_USAGE_ALERT_THRESHOLD ?? '80')
   const today = new Date().toISOString().slice(0, 10)
 
   const samples = await Promise.all(
@@ -33,6 +30,16 @@ export async function POST(request: NextRequest) {
       reason: e instanceof Error ? e.message : String(e),
     } as UsageSample))),
   )
+
+  // Récupérer les seuils par provider depuis la DB (sinon fallback env var globale)
+  const { data: alertSettings } = await adminClient
+    .from('api_alert_settings')
+    .select('provider, threshold_pct, threshold_usd_remaining, enabled')
+  const settingsByProvider = new Map<string, { threshold_pct: number; threshold_usd_remaining: number | null; enabled: boolean }>()
+  for (const r of (alertSettings ?? []) as Array<{ provider: string; threshold_pct: number; threshold_usd_remaining: number | null; enabled: boolean }>) {
+    settingsByProvider.set(r.provider, r)
+  }
+  const fallbackThreshold = Number(process.env.API_USAGE_ALERT_THRESHOLD ?? '80')
 
   const persisted: { provider: string; pct?: number; available: boolean }[] = []
   for (const s of samples) {
@@ -49,6 +56,8 @@ export async function POST(request: NextRequest) {
       usage_unit: s.usageUnit ?? null,
       limit_value: s.limitValue ?? null,
       usage_pct: s.usagePct ?? null,
+      credits_remaining_usd: s.creditsRemainingUsd ?? null,
+      spent_30d_usd: s.spent30dUsd ?? null,
       raw_payload: (s.raw as Record<string, unknown>) ?? null,
     }, { onConflict: 'provider,snapshot_date' })
     if (error) {
@@ -57,19 +66,30 @@ export async function POST(request: NextRequest) {
     persisted.push({ provider: s.provider, pct: s.usagePct, available: true })
   }
 
-  // Détection anomalies
-  const overThreshold = samples.filter(s => s.available && s.usagePct != null && s.usagePct >= threshold)
+  // Détection anomalies par provider (selon seuil DB ou fallback env)
+  const overThreshold: Array<UsageSample & { thresholdUsed: number }> = []
+  for (const s of samples) {
+    if (!s.available) continue
+    const setting = settingsByProvider.get(s.provider)
+    if (setting && !setting.enabled) continue  // alerte désactivée pour ce provider
+    const thr = setting?.threshold_pct ?? fallbackThreshold
+    const remThr = setting?.threshold_usd_remaining
+    const triggerPct = s.usagePct != null && s.usagePct >= thr
+    const triggerRem = remThr != null && s.creditsRemainingUsd != null && s.creditsRemainingUsd <= remThr
+    if (triggerPct || triggerRem) {
+      overThreshold.push({ ...s, thresholdUsed: thr })
+    }
+  }
 
   let emailSent = false
   if (overThreshold.length > 0) {
-    emailSent = await sendUsageAlert(overThreshold, threshold)
+    emailSent = await sendUsageAlert(overThreshold)
   }
 
   return NextResponse.json({
     success: true,
-    threshold,
     samples: persisted,
-    overThreshold: overThreshold.map(s => ({ provider: s.provider, pct: s.usagePct })),
+    overThreshold: overThreshold.map(s => ({ provider: s.provider, pct: s.usagePct, threshold: s.thresholdUsed, remainingUsd: s.creditsRemainingUsd })),
     emailSent,
   })
 }
@@ -78,7 +98,7 @@ export async function GET(request: NextRequest) {
   return POST(request)
 }
 
-async function sendUsageAlert(samples: UsageSample[], threshold: number): Promise<boolean> {
+async function sendUsageAlert(samples: Array<UsageSample & { thresholdUsed: number }>): Promise<boolean> {
   const apiKey = process.env.RESEND_API_KEY
   if (!apiKey) return false
   const to = process.env.MONITORING_ALERT_EMAIL || process.env.SUPER_ADMIN_EMAIL || 'benjamindeblanzy@ladngroupe.com'
@@ -88,11 +108,12 @@ async function sendUsageAlert(samples: UsageSample[], threshold: number): Promis
     const pct = s.usagePct?.toFixed(1) ?? '?'
     const usage = s.usageValue != null ? `${s.usageValue.toLocaleString('fr-FR')} ${s.usageUnit ?? ''}` : ''
     const limit = s.limitValue != null ? ` / ${s.limitValue.toLocaleString('fr-FR')} ${s.usageUnit ?? ''}` : ''
+    const remainingTxt = s.creditsRemainingUsd != null ? ` · <strong>${s.creditsRemainingUsd.toLocaleString('fr-FR', { maximumFractionDigits: 2 })} $ restants</strong>` : ''
     const dashboard = PROVIDER_DASHBOARDS[s.provider]
     return `
     <li style="margin-bottom:10px;">
-      <strong style="color:#ef4444;">${PROVIDER_LABELS[s.provider]}</strong> — <strong>${pct}%</strong> consommé
-      <div style="font-size:12px;color:#6b7280;margin-top:2px;">${usage}${limit} · <a href="${dashboard}" style="color:#0000FF;">Dashboard ${PROVIDER_LABELS[s.provider]} →</a></div>
+      <strong style="color:#ef4444;">${PROVIDER_LABELS[s.provider]}</strong> — <strong>${pct}%</strong> consommé (seuil ${s.thresholdUsed}%)
+      <div style="font-size:12px;color:#6b7280;margin-top:2px;">${usage}${limit}${remainingTxt} · <a href="${dashboard}" style="color:#0000FF;">Dashboard ${PROVIDER_LABELS[s.provider]} →</a></div>
     </li>`
   }).join('')
 
@@ -101,15 +122,15 @@ async function sendUsageAlert(samples: UsageSample[], threshold: number): Promis
 <body style="margin:0;padding:0;background:#f5f5f5;font-family:sans-serif;">
   <div style="max-width:600px;margin:40px auto;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #e0e0e0;">
     <div style="background:#ef4444;padding:18px 28px;">
-      <h1 style="color:#fff;margin:0;font-size:17px;font-weight:600;">⚠️ Crédits API — seuil ${threshold}% dépassé</h1>
+      <h1 style="color:#fff;margin:0;font-size:17px;font-weight:600;">⚠️ Crédits API — seuil dépassé</h1>
     </div>
     <div style="padding:24px 28px;">
-      <p style="color:#374151;margin:0 0 12px;">${samples.length} provider${samples.length > 1 ? 's ont' : ' a'} atteint ou dépassé ${threshold}% du quota.</p>
+      <p style="color:#374151;margin:0 0 12px;">${samples.length} provider${samples.length > 1 ? 's ont' : ' a'} atteint ou dépassé son seuil d'alerte.</p>
       <ul style="padding-left:20px;color:#374151;font-size:14px;">${itemsHtml}</ul>
       <a href="${appUrl}/admin/monitoring/api" style="display:inline-block;margin-top:8px;background:#0000FF;color:#fff;text-decoration:none;padding:11px 22px;border-radius:8px;font-weight:600;font-size:14px;">Ouvrir le monitoring →</a>
     </div>
     <div style="padding:14px 28px;background:#fafafa;border-top:1px solid #f0f0f0;color:#9ca3af;font-size:11px;">
-      Pas de rechargement automatique — décide toi-même de la marche à suivre.
+      Pas de rechargement automatique — décide toi-même de la marche à suivre. Les seuils sont configurables sur la page Crédits API.
     </div>
   </div>
 </body></html>`
@@ -121,7 +142,7 @@ async function sendUsageAlert(samples: UsageSample[], threshold: number): Promis
       body: JSON.stringify({
         from: "L'ADN DATA <noreply@ladn.eu>",
         to: [to],
-        subject: `[AOP API Usage] ${samples.length} provider${samples.length > 1 ? 's' : ''} > ${threshold}%`,
+        subject: `[AOP API Usage] ${samples.length} provider${samples.length > 1 ? 's' : ''} en alerte`,
         html,
       }),
     })

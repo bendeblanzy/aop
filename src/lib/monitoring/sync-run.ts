@@ -55,13 +55,40 @@ interface WithSyncRunOptions {
   triggeredBy?: string  // 'cron' (défaut) ou 'manual:<email>'
 }
 
+export interface ProgressInfo {
+  current: number
+  total: number
+  step?: string
+}
+
+export type ProgressUpdater = (progress: ProgressInfo) => Promise<void>
+
+/**
+ * Met à jour le `progress` jsonb d'un run en cours (best-effort).
+ */
+async function updateRunProgress(runId: string, progress: ProgressInfo): Promise<void> {
+  try {
+    await adminClient
+      .from('sync_runs')
+      .update({ progress })
+      .eq('id', runId)
+  } catch (e) {
+    // Best-effort
+    console.error('[sync-run/progress] update failed:', e instanceof Error ? e.message : e)
+  }
+}
+
 /**
  * Crée un run, exécute la fonction, log le résultat et propage la réponse.
  * En cas d'erreur, le run est marqué `failed` avant que l'exception ne remonte.
+ *
+ * La fonction métier reçoit `(runId, updateProgress)` :
+ *   - runId : id du row sync_runs (ou '' si l'INSERT a échoué)
+ *   - updateProgress : callback pour pousser un état d'avancement temps réel
  */
 export async function withSyncRun<T>(
   opts: WithSyncRunOptions,
-  fn: (runId: string) => Promise<SyncRunResult<T>>,
+  fn: (runId: string, updateProgress: ProgressUpdater) => Promise<SyncRunResult<T>>,
 ): Promise<T> {
   const triggeredBy = opts.triggeredBy ?? 'cron'
   const startedAt = Date.now()
@@ -91,7 +118,10 @@ export async function withSyncRun<T>(
   }
 
   try {
-    const { metrics, response } = await fn(runId ?? '')
+    const updater: ProgressUpdater = runId
+      ? (p) => updateRunProgress(runId, p)
+      : async () => {}
+    const { metrics, response } = await fn(runId ?? '', updater)
 
     // 2. UPDATE success / partial / failed
     if (runId) {

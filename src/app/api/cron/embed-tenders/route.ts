@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { adminClient } from '@/lib/supabase/admin'
 import { getEmbeddingsBatch, buildTenderText } from '@/lib/ai/embeddings'
 import { withSyncRun } from '@/lib/monitoring/sync-run'
+import { checkCronGuard } from '@/lib/monitoring/cron-guard'
 
 /**
  * Route cron — embedde les tenders qui n'ont pas encore d'embedding.
@@ -13,12 +14,8 @@ import { withSyncRun } from '@/lib/monitoring/sync-run'
  *     -d '{"limit": 200}'
  */
 export async function POST(request: NextRequest) {
-  const authHeader = request.headers.get('authorization')
-  const cronSecret = process.env.CRON_SECRET
-
-  if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const guard = await checkCronGuard(request, 'embed-tenders')
+  if (!guard.ok) return guard.response
 
   let limit = 200
   try {

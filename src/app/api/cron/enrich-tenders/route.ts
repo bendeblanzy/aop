@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { adminClient } from '@/lib/supabase/admin'
 import { fetchBoampByIdweb, transformRecord } from '@/lib/boamp/sync'
 import { withSyncRun } from '@/lib/monitoring/sync-run'
+import { checkCronGuard } from '@/lib/monitoring/cron-guard'
 
 /**
  * Route cron — enrichit les tenders BOAMP existants en base qui ont
@@ -23,11 +24,8 @@ const DELAY_MS = 600
 function sleep(ms: number) { return new Promise(r => setTimeout(r, ms)) }
 
 export async function POST(request: NextRequest) {
-  const authHeader = request.headers.get('authorization')
-  const cronSecret = process.env.CRON_SECRET
-  if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const guard = await checkCronGuard(request, 'enrich-tenders')
+  if (!guard.ok) return guard.response
 
   let limit = 200
   try {
