@@ -157,12 +157,17 @@ function cleanDate(v: unknown): string | null {
  * le pouvoir adjudicateur classe par objet du contrat plutôt que par nature.
  * Le filtre `contract-nature = "services"` en amont réduit déjà le bruit.
  */
-function buildCpvFilter(): string {
-  // TED API v3 mode expert n'accepte que les opérateurs : =, !=, ~, !~, IN, NOT.
-  // L'opérateur ~ est un match regex → on filtre par préfixe 2 chiffres avec ^.
-  const families = ['22', '32', '79', '92']
-  const parts = families.map(prefix => `classification-cpv ~ "^${prefix}"`).join(' OR ')
-  return `(${parts})`
+// Familles CPV cibles (préfixes 2 chiffres) — utilisées pour le filtre côté Node
+// après récupération, car TED v3 expert ne supporte plus aucun opérateur de
+// préfixe/regex/comparaison sur classification-cpv (>= : QUERY_UNSUPPORTED_FIELD_OPERATION,
+// LIKE : SYNTAX_ERROR, ~ : 'PHRASE' not supported). Seuls `=` et `IN` avec valeurs
+// exactes sont acceptés — impraticable pour matcher des familles entières.
+const TARGET_CPV_PREFIXES = ['22', '32', '79', '92']
+
+function matchesTargetCpv(notice: TedNotice): boolean {
+  const codes = extractStringArray(notice['classification-cpv'])
+  if (codes.length === 0) return true  // si pas de CPV, on garde (rare)
+  return codes.some(code => TARGET_CPV_PREFIXES.some(p => code.startsWith(p)))
 }
 
 /**
@@ -184,12 +189,14 @@ function buildCpvFilter(): string {
  *   et améliorer la densité signal/bruit avant scoring vectoriel.
  */
 function buildQuery(daysBack: number): string {
+  // Note : pas de filtre CPV ici (TED v3 expert ne le permet plus pour les
+  // familles). Le filtrage CPV est fait côté Node via matchesTargetCpv() après
+  // réception des notices.
   return [
     `publication-date >= today(-${daysBack})`,
     `notice-type IN (cn-standard cn-social cn-desg)`,
     `place-of-performance-country-lot = "FRA"`,
     `contract-nature = "services"`,
-    buildCpvFilter(),
   ].join(' AND ')
 }
 
@@ -408,12 +415,18 @@ export async function syncTedTenders(supabaseAdmin: any, daysBack = 7): Promise<
     }
 
     result.pages++
-    const notices = pageData.notices ?? []
-    result.fetched += notices.length
+    const noticesAll = pageData.notices ?? []
+    result.fetched += noticesAll.length
 
     if (page === 1) {
-      totalCount = pageData.totalNoticeCount ?? notices.length
+      totalCount = pageData.totalNoticeCount ?? noticesAll.length
       console.log(`[sync-ted] Total TED: ${totalCount} notices, ~${Math.ceil(totalCount / PAGE_SIZE)} pages`)
+    }
+
+    // Filtre CPV côté Node (TED v3 expert ne le permet plus côté query).
+    const notices = noticesAll.filter(matchesTargetCpv)
+    if (notices.length < noticesAll.length) {
+      console.log(`[sync-ted] page ${page}: ${noticesAll.length - notices.length}/${noticesAll.length} hors CPV cible`)
     }
 
     const records = notices
