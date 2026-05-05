@@ -101,13 +101,35 @@ export async function POST(request: NextRequest) {
       console.error('[cron/sync-boamp] Purge exception (non-fatal):', purgeErr)
     }
 
+    // Étape 4 : Auto-chaînage — déclenche enrich-tenders en arrière-plan pour
+    // récupérer les détails (description, montant, lots) des nouveaux AO.
+    // Best-effort, on n'attend pas la fin (peut prendre plusieurs minutes).
+    try {
+      const cronSecret = process.env.CRON_SECRET
+      if (cronSecret && (result.inserted ?? 0) > 0) {
+        const enrichUrl = new URL('/api/cron/enrich-tenders', request.nextUrl.origin).toString()
+        // Fire-and-forget : on lance mais on n'attend pas (limit 50 pour rester rapide)
+        fetch(enrichUrl, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${cronSecret}`,
+            'Content-Type': 'application/json',
+            'x-triggered-by': 'auto-chain:sync-boamp',
+          },
+          body: JSON.stringify({ limit: 50 }),
+        }).catch(err => console.error('[sync-boamp auto-chain] enrich fetch failed:', err))
+      }
+    } catch (chainErr) {
+      console.error('[sync-boamp auto-chain] exception:', chainErr)
+    }
+
     return {
       metrics: {
         fetched: result.fetched ?? 0,
         inserted: result.inserted ?? 0,
         updated: (result.updated ?? 0) + embedded,
         errors: result.errors ?? 0,
-        metadata: { daysBack, embedded, purged },
+        metadata: { daysBack, embedded, purged, autoChainedEnrich: (result.inserted ?? 0) > 0 },
       },
       response: { success: true, result, embedded, purged },
     }

@@ -93,11 +93,17 @@ export async function withSyncRun<T>(
   try {
     const { metrics, response } = await fn(runId ?? '')
 
-    // 2. UPDATE success / partial
+    // 2. UPDATE success / partial / failed
     if (runId) {
+      // Affiner : si on a eu des erreurs ET rien n'a été récupéré, c'est un échec.
+      // Si on a eu des erreurs ET au moins quelques succès, c'est partiel.
+      const hasErrors = !!(metrics?.errors && metrics.errors > 0)
+      const hasFetched = !!(metrics?.fetched && metrics.fetched > 0)
       const status = metrics?.partial
         ? 'partial'
-        : (metrics?.errors && metrics.errors > 0 ? 'partial' : 'success')
+        : hasErrors
+          ? (hasFetched ? 'partial' : 'failed')
+          : 'success'
 
       const errorMessages = metrics?.errorMessages && metrics.errorMessages.length > 0
         ? metrics.errorMessages.slice(0, 20)
