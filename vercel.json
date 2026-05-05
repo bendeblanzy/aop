@@ -1,14 +1,13 @@
 {
-  "//crons": "Tous les crons sont déclenchés toutes les heures par Vercel. Chaque route check ensuite shouldRunNow() côté DB (table cron_settings) pour décider de tourner ou skip. Permet à l'utilisateur de modifier la fréquence depuis l'UI sans redeploy.",
   "crons": [
-    { "path": "/api/cron/sync-boamp", "schedule": "0 * * * *" },
-    { "path": "/api/cron/sync-ted", "schedule": "0 * * * *" },
-    { "path": "/api/cron/sync-atexo", "schedule": "0 * * * *" },
-    { "path": "/api/cron/sync-dedup", "schedule": "0 * * * *" },
-    { "path": "/api/cron/sync-aws", "schedule": "0 * * * *" },
-    { "path": "/api/cron/check-sync-health", "schedule": "0 * * * *" },
-    { "path": "/api/cron/check-api-usage", "schedule": "0 * * * *" },
-    { "path": "/api/cron/enrich-tenders", "schedule": "0 * * * *" }
+    { "path": "/api/cron/sync-boamp", "schedule": "0 5 * * *" },
+    { "path": "/api/cron/sync-ted", "schedule": "0 6 * * *" },
+    { "path": "/api/cron/sync-atexo", "schedule": "0 7 * * *" },
+    { "path": "/api/cron/sync-dedup", "schedule": "0 8 * * *" },
+    { "path": "/api/cron/sync-aws", "schedule": "0 9 * * *" },
+    { "path": "/api/cron/check-sync-health", "schedule": "0 10 * * *" },
+    { "path": "/api/cron/check-api-usage", "schedule": "0 11 * * *" },
+    { "path": "/api/cron/enrich-tenders", "schedule": "0 14 * * *" }
   ],
   "functions": {
     "src/app/api/profil/suggest-profile/route.ts": { "maxDuration": 30 },
