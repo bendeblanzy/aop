@@ -158,15 +158,11 @@ function cleanDate(v: unknown): string | null {
  * Le filtre `contract-nature = "services"` en amont réduit déjà le bruit.
  */
 function buildCpvFilter(): string {
-  const families: [number, number][] = [
-    [22_000_000, 22_999_999], // Imprimés & édition
-    [32_000_000, 32_999_999], // Équipements radio/TV/AV
-    [79_000_000, 79_999_999], // Services aux entreprises (comm, mktg, pub, événementiel)
-    [92_000_000, 92_999_999], // Services culturels, loisirs, sport (AV, production, culture)
-  ]
-  const parts = families
-    .map(([lo, hi]) => `(classification-cpv >= ${lo} AND classification-cpv <= ${hi})`)
-    .join(' OR ')
+  // TED API v3 a déprécié l'opérateur de comparaison (>=, <=) sur
+  // `classification-cpv` en mode expert search → "QUERY_UNSUPPORTED_FIELD_OPERATION".
+  // On utilise LIKE avec wildcard pour matcher par préfixe 2 chiffres.
+  const families = ['22', '32', '79', '92']
+  const parts = families.map(prefix => `classification-cpv LIKE "${prefix}*"`).join(' OR ')
   return `(${parts})`
 }
 
