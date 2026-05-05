@@ -1,16 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
 
 /**
  * GET /api/profil/siret?q=<siren_or_siret>
  * Recherche une entreprise via l'Annuaire des Entreprises (data.gouv.fr)
  * et retourne les champs normalisés pour pré-remplir le profil.
  * Exécuté côté serveur pour éviter les problèmes CORS en production.
+ * Pas d'auth requise : API publique, appelée dès l'étape 1 de l'onboarding.
  */
 export async function GET(request: NextRequest) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const q = new URL(request.url).searchParams.get('q')?.replace(/\s/g, '')
   if (!q || q.length < 9) {
@@ -109,18 +106,56 @@ export async function GET(request: NextRequest) {
     const effectifEstime = trancheToEffectif[tranche] ?? null
 
     // Représentant légal — premier dirigeant de la liste (si présent)
-    const dirigeant = Array.isArray(company.dirigeants) ? company.dirigeants[0] : null
+    // Prendre le premier dirigeant de type personne physique (pas personne morale)
+    const dirigeants = Array.isArray(company.dirigeants) ? company.dirigeants : []
+    const dirigeant = dirigeants.find((d: Record<string, unknown>) => d.type_dirigeant === 'personne physique') ?? dirigeants[0] ?? null
     const dirigeantNom: string | null = dirigeant?.nom ?? null
-    const dirigeantPrenom: string | null = dirigeant?.prenom ?? null
+    // L'API retourne "prenoms" (pluriel) — on prend le premier prénom uniquement
+    const prenoms: string = dirigeant?.prenoms ?? dirigeant?.prenom ?? ''
+    const dirigeantPrenom: string | null = prenoms ? prenoms.split(' ')[0] : null
     const dirigeantQualite: string | null = dirigeant?.qualite ?? null
 
+    // Raison sociale : préférer `nom_raison_sociale` (légal pur) plutôt que
+    // `nom_complet` qui inclut le sigle/nom commercial entre parenthèses
+    // — quand sigle == raison sociale, l'API renvoie un doublon
+    // ("L'ADN STUDIO (L'ADN STUDIO)"). Fallback sur nom_complet si manquant.
+    const raisonSociale: string | null =
+      company.nom_raison_sociale ?? company.nom_complet ?? null
+
+    // Adresse rue uniquement (sans code postal ni ville) — l'API peut renvoyer
+    // `siege.adresse` qui les inclut déjà ; on recompose depuis les champs
+    // atomiques pour éviter le doublon "13 RUE CHAPON 75003 PARIS, 75003 PARIS".
+    const siege = company.siege ?? {}
+    const adresseRue: string | null = (() => {
+      const composed = [siege.numero_voie, siege.type_voie, siege.libelle_voie]
+        .filter((p: unknown): p is string => typeof p === 'string' && p.length > 0)
+        .join(' ')
+        .trim()
+      if (composed) return composed
+      // Fallback : strip CP + ville de l'adresse complète si présents
+      const full: string | null = siege.adresse ?? null
+      if (!full) return null
+      const cp = siege.code_postal as string | undefined
+      const ville = siege.libelle_commune as string | undefined
+      if (cp && full.includes(cp)) {
+        return full.split(cp)[0].trim().replace(/,\s*$/, '')
+      }
+      if (ville && full.toLowerCase().endsWith(ville.toLowerCase())) {
+        return full.slice(0, -ville.length).trim().replace(/,\s*$/, '')
+      }
+      return full
+    })()
+
     return NextResponse.json({
-      nom_complet: company.nom_complet,
+      // Champ canonique. `nom_complet` conservé en alias pour rétrocompat
+      // (consommateurs externes potentiels) — à supprimer dans une passe future.
+      raison_sociale: raisonSociale,
+      nom_complet: raisonSociale,
       siren: company.siren,
       forme_juridique: formeJuridique,
       code_naf: company.activite_principale,
       libelle_naf: company.libelle_activite_principale ?? null,
-      adresse_siege: company.siege?.adresse ?? company.siege?.libelle_voie ?? null,
+      adresse_siege: adresseRue,
       code_postal: company.siege?.code_postal ?? null,
       ville: company.siege?.libelle_commune ?? null,
       numero_tva: numeroTva,

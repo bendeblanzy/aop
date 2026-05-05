@@ -6,7 +6,7 @@ import { usePathname, useSearchParams } from 'next/navigation'
 import {
   LayoutDashboard, Building2, Users,
   Settings, LogOut, Search,
-  Menu, X, Star, Lock, UserCog,
+  Menu, X, Star, Lock, UserCog, FileText, Activity,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
@@ -28,6 +28,7 @@ const navigation: NavItem[] = [
   { name: 'Tableau de bord', href: '/dashboard', icon: LayoutDashboard, section: 'main' },
   { name: 'Recherche', href: '/veille', icon: Search, activeWhen: (p, s) => p === '/veille' && !s.includes('tab=favorites'), section: 'main' },
   { name: 'Favoris', href: '/veille?tab=favorites', icon: Star, activeWhen: (p, s) => p === '/veille' && s.includes('tab=favorites'), section: 'main' },
+  { name: 'Mes AO suivis', href: '/appels-offres', icon: FileText, section: 'main' },
   // ── Compte ──
   { name: 'Mon profil', href: '/profil', icon: Building2, section: 'account' },
   { name: 'Mon équipe', href: '/equipe', icon: Users, section: 'account' },
@@ -39,6 +40,11 @@ const adminNavigation: NavItem[] = [
   { name: 'Utilisateurs', href: '/admin/users', icon: UserCog, section: 'admin' },
 ]
 
+// Super-admin items (plateforme — visible si is_super_admin)
+const superAdminNavigation: NavItem[] = [
+  { name: 'Monitoring', href: '/admin/monitoring/syncs', icon: Activity, section: 'admin' },
+]
+
 export function Sidebar() {
   const pathname = usePathname()
   const searchParams = useSearchParams()
@@ -46,6 +52,7 @@ export function Sidebar() {
   const [mobileOpen, setMobileOpen] = useState(false)
   const [forceMode, setForceMode] = useState(false)
   const [isAdmin, setIsAdmin] = useState(false)
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false)
 
   useEffect(() => {
     setMobileOpen(false)
@@ -59,6 +66,7 @@ export function Sidebar() {
     const supabase = createClient()
     supabase.auth.getUser().then(async ({ data }) => {
       setForceMode(data.user?.user_metadata?.force_password_change === true)
+      setIsSuperAdmin(data.user?.user_metadata?.is_super_admin === true)
       if (data.user) {
         // Vérifier le rôle dans organization_members
         const { data: member } = await supabase
@@ -178,6 +186,19 @@ export function Sidebar() {
             </div>
             <div className="space-y-0.5">
               {adminNavigation.map(item => renderNavItem(item))}
+            </div>
+          </>
+        )}
+
+        {/* Super-admin section — plateforme, visible si is_super_admin */}
+        {isSuperAdmin && superAdminNavigation.length > 0 && (
+          <>
+            <div className="my-3 border-t border-[#E0E0F0]" />
+            <div className="mb-1">
+              <span className="px-3 text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Plateforme</span>
+            </div>
+            <div className="space-y-0.5">
+              {superAdminNavigation.map(item => renderNavItem(item))}
             </div>
           </>
         )}

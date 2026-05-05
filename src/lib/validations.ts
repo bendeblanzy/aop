@@ -104,6 +104,11 @@ export const upsertProfileSchema = z.object({
   positionnement: z.string().optional(),
   boamp_codes: z.array(z.string()).optional(),
   activite_metier: z.string().optional(),
+  // Sources pour le service d'enrichissement (LinkedIn + site web officiel).
+  // Schéma permissif : URL libre, on n'oblige pas le format https car certains
+  // utilisateurs collent juste "linkedin.com/company/xxx" sans protocole.
+  linkedin_url: z.string().optional().or(z.literal('')),
+  website_url: z.string().optional().or(z.literal('')),
 })
 
 // ── Delete (commun) ──────────────────────────────────────────────────────────

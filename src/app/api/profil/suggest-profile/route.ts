@@ -91,7 +91,8 @@ Réponds en JSON avec EXACTEMENT ces clés :
         : [],
     })
   } catch (e) {
-    console.error('[suggest-profile] error:', e)
-    return NextResponse.json({ error: 'Erreur lors de la suggestion IA' }, { status: 500 })
+    const msg = e instanceof Error ? e.message : String(e)
+    console.error('[suggest-profile] error:', msg)
+    return NextResponse.json({ error: `Erreur suggestion IA : ${msg}` }, { status: 500 })
   }
 }

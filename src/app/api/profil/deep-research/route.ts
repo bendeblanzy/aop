@@ -81,8 +81,11 @@ IMPORTANT :
 - Être très précis et concret, pas de phrases creuses ou génériques
 - Écrire à la première personne du pluriel ("Nous...")
 - Format : texte fluide, pas de listes à puces
+- **Si les informations sont trop minces pour remplir un champ, mets une chaîne vide ("") plutôt qu'un commentaire ou une explication.**
 
-Réponds en JSON avec ce format exact :
+**Tu DOIS répondre UNIQUEMENT par un objet JSON valide, sans aucun texte avant ni après, sans backticks markdown.** Pas de phrase d'intro ("Je n'ai pas...", "D'après les infos..."). Si tu manques d'info, renvoie quand même le JSON avec les champs vides.
+
+Format JSON exact :
 {
   "activite_metier": "Description précise de l'activité cœur de métier (200-400 caractères). Ne mentionner QUE les activités réellement exercées.",
   "positionnement": "Philosophie, valeurs et positionnement stratégique (300-500 caractères). Ce qui guide l'approche de l'entreprise.",
@@ -94,17 +97,50 @@ Réponds en JSON avec ce format exact :
 
   try {
     const raw = await callClaude(systemPrompt, userMessage, 'sonnet')
-    const cleaned = raw.replace(/^```[a-z]*\n?/i, '').replace(/\n?```$/i, '').trim()
-    const result = JSON.parse(cleaned)
+
+    // Parser robuste : Claude peut renvoyer le JSON entouré de backticks markdown,
+    // ou parfois précédé d'une phrase d'intro malgré la consigne. On tente :
+    //   1. Extraire ```json … ``` ou ``` … ```
+    //   2. Sinon extraire le premier objet { … } délimité
+    //   3. Sinon parser le texte brut nettoyé
+    function extractJsonBlock(text: string): string | null {
+      const fenced = text.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/i)
+      if (fenced) return fenced[1].trim()
+      const objStart = text.indexOf('{')
+      const objEnd = text.lastIndexOf('}')
+      if (objStart >= 0 && objEnd > objStart) return text.slice(objStart, objEnd + 1)
+      return null
+    }
+
+    let result: Record<string, unknown> = {}
+    try {
+      const candidate = extractJsonBlock(raw) ?? raw.trim()
+      result = JSON.parse(candidate)
+    } catch (parseErr) {
+      // Fallback gracieux : on retourne 200 avec champs vides + un warn pour
+      // que l'utilisateur puisse continuer le wizard sans être bloqué.
+      // Mieux vaut un wizard qui avance avec des champs vides à compléter à
+      // la main qu'un 500 qui bloque tout (cf. cas d'un nouveau profil avec
+      // peu d'info où Claude refuse de répondre en JSON).
+      console.warn('[deep-research] JSON parse failed, returning empty fields. Raw:', raw.slice(0, 300))
+      return NextResponse.json({
+        activite_metier: '',
+        positionnement: '',
+        atouts_differenciants: '',
+        methodologie_type: '',
+        warning: "L'IA n'a pas pu générer un positionnement automatique (informations insuffisantes). Remplis les champs manuellement.",
+      })
+    }
 
     return NextResponse.json({
-      activite_metier: result.activite_metier || '',
-      positionnement: result.positionnement || '',
-      atouts_differenciants: result.atouts_differenciants || '',
-      methodologie_type: result.methodologie_type || '',
+      activite_metier: typeof result.activite_metier === 'string' ? result.activite_metier : '',
+      positionnement: typeof result.positionnement === 'string' ? result.positionnement : '',
+      atouts_differenciants: typeof result.atouts_differenciants === 'string' ? result.atouts_differenciants : '',
+      methodologie_type: typeof result.methodologie_type === 'string' ? result.methodologie_type : '',
     })
   } catch (e) {
-    console.error('[deep-research] error:', e)
-    return NextResponse.json({ error: 'Erreur lors de l\'analyse' }, { status: 500 })
+    const msg = e instanceof Error ? e.message : String(e)
+    console.error('[deep-research] error:', msg)
+    return NextResponse.json({ error: `Erreur Deep Research : ${msg}` }, { status: 500 })
   }
 }

@@ -25,9 +25,16 @@ export async function middleware(request: NextRequest) {
 
   const publicPaths = [
     '/auth/login', '/auth/register', '/auth/reset-password',
-    '/auth/callback', '/auth/accept-invite',
+    '/auth/callback', '/auth/confirm', '/auth/update-password', '/auth/accept-invite',
     '/onboarding',
     '/api/cron/', '/api/onboarding/',
+    // /api/profil/siret : simple passthrough vers data.gouv.fr (recherche-entreprises),
+    // appelé dès la step 1 du wizard. Sans cette whitelist, un cookie de session
+    // absent provoque un 307 → /auth/login renvoyant du HTML, que le client
+    // tente de parser comme JSON, d'où l'erreur :
+    // "Unexpected token '<', "<!DOCTYPE "... is not valid JSON"
+    // (fix initialement dans le commit 29f4541, perdu lors d'un merge — restauré).
+    '/api/profil/siret',
   ]
   const isPublicPath = publicPaths.some(p => request.nextUrl.pathname.startsWith(p))
 
@@ -61,8 +68,9 @@ export async function middleware(request: NextRequest) {
     const onboardingDone = user.user_metadata?.onboarding_completed === true
     const onOnboarding = request.nextUrl.pathname.startsWith('/onboarding')
     const isApiPath = request.nextUrl.pathname.startsWith('/api/')
+    const isAuthPath = request.nextUrl.pathname.startsWith('/auth/')
 
-    if (!onboardingDone && !onOnboarding && !isApiPath && !forceChange) {
+    if (!onboardingDone && !onOnboarding && !isApiPath && !forceChange && !isAuthPath) {
       const url = request.nextUrl.clone()
       url.pathname = '/onboarding'
       return NextResponse.redirect(url)

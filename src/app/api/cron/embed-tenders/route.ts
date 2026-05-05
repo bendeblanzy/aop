@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { adminClient } from '@/lib/supabase/admin'
 import { getEmbeddingsBatch, buildTenderText } from '@/lib/ai/embeddings'
+import { withSyncRun } from '@/lib/monitoring/sync-run'
+import { checkCronGuard } from '@/lib/monitoring/cron-guard'
 
 /**
  * Route cron — embedde les tenders qui n'ont pas encore d'embedding.
@@ -12,12 +14,8 @@ import { getEmbeddingsBatch, buildTenderText } from '@/lib/ai/embeddings'
  *     -d '{"limit": 200}'
  */
 export async function POST(request: NextRequest) {
-  const authHeader = request.headers.get('authorization')
-  const cronSecret = process.env.CRON_SECRET
-
-  if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const guard = await checkCronGuard(request, 'embed-tenders')
+  if (!guard.ok) return guard.response
 
   let limit = 200
   try {
@@ -27,7 +25,10 @@ export async function POST(request: NextRequest) {
 
   console.log(`[cron/embed-tenders] Embedding up to ${limit} tenders...`)
 
+  const triggeredBy = request.headers.get('x-triggered-by') ?? 'cron'
+
   try {
+    const payload = await withSyncRun<Record<string, unknown>>({ source: 'embed-tenders', triggeredBy }, async () => {
     // 1. Récupérer les tenders sans embedding
     const { data: tenders, error } = await adminClient
       .from('tenders')
@@ -38,7 +39,10 @@ export async function POST(request: NextRequest) {
 
     if (error) throw new Error(`DB read error: ${error.message}`)
     if (!tenders || tenders.length === 0) {
-      return NextResponse.json({ success: true, embedded: 0, message: 'All tenders already embedded' })
+      return {
+        metrics: { fetched: 0, updated: 0, metadata: { limit } },
+        response: { success: true, embedded: 0, message: 'All tenders already embedded' },
+      }
     }
 
     console.log(`[cron/embed-tenders] Found ${tenders.length} tenders to embed`)
@@ -78,7 +82,16 @@ export async function POST(request: NextRequest) {
       console.log(`[cron/embed-tenders] Embedded ${totalEmbedded}/${tenders.length}`)
     }
 
-    return NextResponse.json({ success: true, embedded: totalEmbedded })
+    return {
+      metrics: {
+        fetched: tenders.length,
+        updated: totalEmbedded,
+        metadata: { limit, totalEmbedded },
+      },
+      response: { success: true, embedded: totalEmbedded },
+    }
+    })
+    return NextResponse.json(payload)
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     console.error('[cron/embed-tenders] Error:', message)

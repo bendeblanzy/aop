@@ -11,16 +11,12 @@ export default function ResetPasswordPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://aop-woad.vercel.app'
-
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError('')
     setLoading(true)
     const supabase = createClient()
-    const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${appUrl}/auth/callback?next=/auth/update-password`,
-    })
+    const { error: resetError } = await supabase.auth.resetPasswordForEmail(email)
     if (resetError) {
       console.error('[reset-password]', resetError.message)
       setError(resetError.message === 'For security purposes, you can only request this once every 60 seconds'

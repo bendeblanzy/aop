@@ -8,7 +8,7 @@ import {
   Star, RefreshCw, Layers, Target, Tag,
   Mail, Phone, MapPinned, Award, CheckCircle2,
 } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { cn, decodeHtmlEntities, isUnscored } from '@/lib/utils'
 import { toast } from 'sonner'
 import { buildProfileKeywords, getMatchingLots } from '@/lib/boamp/lot-matching'
 
@@ -138,7 +138,8 @@ function getDeadlineInfo(iso: string | null) {
   } catch { return { label: '—', urgent: false, expired: false, daysLeft: null } }
 }
 
-function getScoreLabel(score: number) {
+function getScoreLabel(score: number, reason?: string | null): string {
+  if (isUnscored(reason)) return 'Non évalué'
   if (score >= 80) return 'Excellent match'
   if (score >= 60) return 'Bon match'
   if (score >= 40) return 'Match partiel'
@@ -317,7 +318,7 @@ export default function TenderDetailPage() {
         {tender.nomacheteur && (
           <span className="flex items-center gap-1.5">
             <Building2 className="w-4 h-4" />
-            <span className="font-medium text-gray-700">{tender.nomacheteur}</span>
+            <span className="font-medium text-gray-700">{decodeHtmlEntities(tender.nomacheteur)}</span>
           </span>
         )}
         {depts.length > 0 && (
@@ -381,7 +382,7 @@ export default function TenderDetailPage() {
             <div>
               <div className="flex items-center gap-3 mb-2">
                 <span className={cn('text-xs font-bold px-3 py-1 rounded-full border', getScoreBadgeStyle(tender.score))}>
-                  {getScoreLabel(tender.score)} — {tender.score}%
+                  {isUnscored(tender.reason) ? 'Non évalué' : `${getScoreLabel(tender.score, tender.reason)} — ${tender.score}%`}
                 </span>
                 <div className="flex-1 h-2.5 bg-white rounded-full overflow-hidden">
                   <div className={cn('h-full rounded-full transition-all', getScoreBarColor(tender.score))} style={{ width: `${tender.score}%` }} />
@@ -539,7 +540,7 @@ export default function TenderDetailPage() {
           {/* Acheteur */}
           <div className="space-y-1">
             <span className="text-xs font-bold text-gray-400 uppercase">Acheteur</span>
-            <p className="text-sm font-medium text-gray-900">{tender.nomacheteur ?? '—'}</p>
+            <p className="text-sm font-medium text-gray-900">{tender.nomacheteur ? decodeHtmlEntities(tender.nomacheteur) : '—'}</p>
           </div>
 
           {/* Procédure */}

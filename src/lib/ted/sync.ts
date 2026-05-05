@@ -47,6 +47,19 @@ const TED_FIELDS = [
   'document-url-lot',
   'buyer-profile',
   'links',
+  // ── Nouveaux champs (2026-05-04) ──────────────────────────────────────
+  // Contact direct acheteur
+  'buyer-email',
+  'buyer-internet-address',
+  'buyer-contact-point',
+  'touchpoint-tel-buyer',
+  // URL exacte de la consultation (préférable à buyer-profile qui pointe la racine PLACE)
+  'submission-url-lot',
+  'tool-atypical-url-lot',
+  // Conditions et critères → enrichit description_detail pour le matching
+  'contract-conditions-description-lot',
+  'selection-criterion-description-lot',
+  'recurrence-description-lot',
 ] as const
 
 function sleep(ms: number) {
@@ -144,17 +157,17 @@ function cleanDate(v: unknown): string | null {
  * le pouvoir adjudicateur classe par objet du contrat plutôt que par nature.
  * Le filtre `contract-nature = "services"` en amont réduit déjà le bruit.
  */
-function buildCpvFilter(): string {
-  const families: [number, number][] = [
-    [22_000_000, 22_999_999], // Imprimés & édition
-    [32_000_000, 32_999_999], // Équipements radio/TV/AV
-    [79_000_000, 79_999_999], // Services aux entreprises (comm, mktg, pub, événementiel)
-    [92_000_000, 92_999_999], // Services culturels, loisirs, sport (AV, production, culture)
-  ]
-  const parts = families
-    .map(([lo, hi]) => `(classification-cpv >= ${lo} AND classification-cpv <= ${hi})`)
-    .join(' OR ')
-  return `(${parts})`
+// Familles CPV cibles (préfixes 2 chiffres) — utilisées pour le filtre côté Node
+// après récupération, car TED v3 expert ne supporte plus aucun opérateur de
+// préfixe/regex/comparaison sur classification-cpv (>= : QUERY_UNSUPPORTED_FIELD_OPERATION,
+// LIKE : SYNTAX_ERROR, ~ : 'PHRASE' not supported). Seuls `=` et `IN` avec valeurs
+// exactes sont acceptés — impraticable pour matcher des familles entières.
+const TARGET_CPV_PREFIXES = ['22', '32', '79', '92']
+
+function matchesTargetCpv(notice: TedNotice): boolean {
+  const codes = extractStringArray(notice['classification-cpv'])
+  if (codes.length === 0) return true  // si pas de CPV, on garde (rare)
+  return codes.some(code => TARGET_CPV_PREFIXES.some(p => code.startsWith(p)))
 }
 
 /**
@@ -176,12 +189,14 @@ function buildCpvFilter(): string {
  *   et améliorer la densité signal/bruit avant scoring vectoriel.
  */
 function buildQuery(daysBack: number): string {
+  // Note : pas de filtre CPV ici (TED v3 expert ne le permet plus pour les
+  // familles). Le filtrage CPV est fait côté Node via matchesTargetCpv() après
+  // réception des notices.
   return [
     `publication-date >= today(-${daysBack})`,
     `notice-type IN (cn-standard cn-social cn-desg)`,
     `place-of-performance-country-lot = "FRA"`,
     `contract-nature = "services"`,
-    buildCpvFilter(),
   ].join(' AND ')
 }
 
@@ -228,8 +243,28 @@ export function transformTedNotice(notice: TedNotice) {
 
   const idweb = `ted-${pubNumber}`
   const objet = extractText(notice['notice-title'])
-  const description = extractText(notice['description-lot'])
+  const baseDescription = extractText(notice['description-lot'])
   const acheteur = extractText(notice['buyer-name'])
+
+  // Contact acheteur — enrichit la description pour le matching
+  const buyerEmail = extractText(notice['buyer-email'])
+  const buyerWebsite = extractText(notice['buyer-internet-address'])
+  const buyerContactPoint = extractText(notice['buyer-contact-point'])
+  const buyerTel = extractText(notice['touchpoint-tel-buyer'])
+
+  // Conditions, critères et récurrence — chair pour le matching IA
+  const contractConditions = extractText(notice['contract-conditions-description-lot'])
+  const selectionCriterion = extractText(notice['selection-criterion-description-lot'])
+  const recurrence = extractText(notice['recurrence-description-lot'])
+
+  // Description composite : description-lot de base + conditions/critères/récurrence
+  // pour donner plus de signal sémantique à l'embedding (4× plus de contenu en moyenne)
+  const descParts: string[] = []
+  if (baseDescription) descParts.push(baseDescription)
+  if (selectionCriterion) descParts.push(`Critères de sélection : ${selectionCriterion}`)
+  if (contractConditions) descParts.push(`Conditions du contrat : ${contractConditions}`)
+  if (recurrence) descParts.push(`Récurrence : ${recurrence}`)
+  const description = descParts.length > 0 ? descParts.join('\n\n') : null
 
   // Valeur estimée — on essaie d'abord -glo (global), sinon on somme les -lot
   let valeurEstimee: number | null = null
@@ -278,9 +313,23 @@ export function transformTedNotice(notice: TedNotice) {
   }
   const typeMarche = nature ? (typeMarcheMap[nature.toLowerCase()] ?? nature.toUpperCase()) : null
 
-  // URL profil acheteur — buyer-profile en priorité, sinon document-url-lot
-  let urlProfilAcheteur = extractText(notice['buyer-profile'])
-  if (!urlProfilAcheteur) urlProfilAcheteur = extractText(notice['document-url-lot'])
+  // URL profil acheteur — préférer l'URL EXACTE de la consultation :
+  //   1. tool-atypical-url-lot (URL spécifique outil)
+  //   2. submission-url-lot (URL exacte de soumission)
+  //   3. document-url-lot (URL téléchargement DCE)
+  //   4. buyer-profile (racine PLACE — souvent générique)
+  let urlProfilAcheteur = extractText(notice['tool-atypical-url-lot'])
+    ?? extractText(notice['submission-url-lot'])
+    ?? extractText(notice['document-url-lot'])
+    ?? extractText(notice['buyer-profile'])
+
+  // Filtrer les URL trop génériques (racine sans paramètres)
+  if (urlProfilAcheteur && urlProfilAcheteur.match(/^https?:\/\/[^/]+\/?$/)) {
+    // URL racine seule (ex: "https://www.marches-publics.gouv.fr/") → garder en fallback
+    // mais préférer une URL plus spécifique si dispo
+    const fallback = extractText(notice['buyer-profile'])
+    if (fallback && !fallback.match(/^https?:\/\/[^/]+\/?$/)) urlProfilAcheteur = fallback
+  }
 
   // URL avis : on prend le PDF FRA via links.pdf.FRA, sinon on construit
   const links = notice['links'] as { pdf?: Record<string, string>; html?: Record<string, string> } | undefined
@@ -292,6 +341,20 @@ export function transformTedNotice(notice: TedNotice) {
   // Dates : on accepte plusieurs alias (deadline-date-lot prioritaire)
   const dateparution = cleanDate(notice['publication-date'])?.split('T')[0] ?? null
   const datelimite = cleanDate(notice['deadline-date-lot'] ?? notice['deadline-receipt-tender-date-lot'])
+
+  // Stockage donnees brut (jsonb) pour future re-extraction sans re-frapper l'API
+  // (contact acheteur, conditions complètes, critères, etc.)
+  const donneesJson: Record<string, unknown> = {
+    source: 'ted-v3',
+    publication_number: pubNumber,
+  }
+  if (buyerEmail) donneesJson.buyer_email = buyerEmail
+  if (buyerWebsite) donneesJson.buyer_website = buyerWebsite
+  if (buyerContactPoint) donneesJson.buyer_contact_point = buyerContactPoint
+  if (buyerTel) donneesJson.buyer_tel = buyerTel
+  if (contractConditions) donneesJson.contract_conditions = contractConditions
+  if (selectionCriterion) donneesJson.selection_criterion = selectionCriterion
+  if (recurrence) donneesJson.recurrence = recurrence
 
   return {
     idweb,
@@ -320,6 +383,7 @@ export function transformTedNotice(notice: TedNotice) {
     procedure_libelle: extractText(notice['procedure-type']),
     nb_lots: null,
     lots_titres: [] as string[],
+    donnees: donneesJson,
     updated_at: new Date().toISOString(),
   }
 }
@@ -332,7 +396,7 @@ export function transformTedNotice(notice: TedNotice) {
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function syncTedTenders(supabaseAdmin: any, daysBack = 7): Promise<TedSyncResult> {
-  const result: TedSyncResult = { fetched: 0, inserted: 0, errors: 0, pages: 0 }
+  const result: TedSyncResult = { fetched: 0, inserted: 0, errors: 0, pages: 0, errorMessages: [] }
   const query = buildQuery(daysBack)
 
   let page = 1
@@ -343,21 +407,28 @@ export async function syncTedTenders(supabaseAdmin: any, daysBack = 7): Promise<
     try {
       pageData = await fetchTedPage(query, page)
     } catch (e) {
-      console.error(`[sync-ted] Erreur page ${page}:`, e instanceof Error ? e.message : e)
+      const msg = e instanceof Error ? e.message : String(e)
+      console.error(`[sync-ted] Erreur page ${page}:`, msg)
       result.errors++
+      result.errorMessages?.push(`page ${page}: ${msg}`)
       break
     }
 
     result.pages++
-    const notices = pageData.notices ?? []
-    result.fetched += notices.length
+    const noticesAll = pageData.notices ?? []
+    result.fetched += noticesAll.length
 
     if (page === 1) {
-      totalCount = pageData.totalNoticeCount ?? notices.length
+      totalCount = pageData.totalNoticeCount ?? noticesAll.length
       console.log(`[sync-ted] Total TED: ${totalCount} notices, ~${Math.ceil(totalCount / PAGE_SIZE)} pages`)
     }
 
-    // Transformer + upsert par lot de 50
+    // Filtre CPV côté Node (TED v3 expert ne le permet plus côté query).
+    const notices = noticesAll.filter(matchesTargetCpv)
+    if (notices.length < noticesAll.length) {
+      console.log(`[sync-ted] page ${page}: ${noticesAll.length - notices.length}/${noticesAll.length} hors CPV cible`)
+    }
+
     const records = notices
       .map(transformTedNotice)
       .filter((r): r is NonNullable<ReturnType<typeof transformTedNotice>> => r !== null)
@@ -372,12 +443,12 @@ export async function syncTedTenders(supabaseAdmin: any, daysBack = 7): Promise<
       if (error) {
         console.error(`[sync-ted] Upsert error page=${page} batch=${i}:`, error.message)
         result.errors += batch.length
+        result.errorMessages?.push(`page ${page} batch ${i}: ${error.message}`)
       } else {
         result.inserted += data?.length ?? 0
       }
     }
 
-    // Stop si on a tout récupéré
     if (notices.length < PAGE_SIZE || result.fetched >= totalCount) break
 
     page++

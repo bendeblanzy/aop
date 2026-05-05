@@ -2,9 +2,17 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { adminClient } from '@/lib/supabase/admin'
 
-const SUPER_ADMIN_EMAIL = process.env.SUPER_ADMIN_EMAIL
-if (!SUPER_ADMIN_EMAIL) {
-  throw new Error('SUPER_ADMIN_EMAIL env variable is required')
+// `SUPER_ADMIN_EMAIL` accepte une liste d'emails séparés par des virgules
+// (ou un seul email). Ex : "alice@x.com,bob@y.com" → admins = [alice, bob].
+// Cf. bug #21 : permet à un même utilisateur d'avoir plusieurs comptes admin
+// (gmail perso + email pro) sans devoir choisir.
+const SUPER_ADMIN_EMAILS: string[] = (process.env.SUPER_ADMIN_EMAIL ?? '')
+  .split(',')
+  .map(e => e.trim().toLowerCase())
+  .filter(Boolean)
+
+if (SUPER_ADMIN_EMAILS.length === 0) {
+  throw new Error('SUPER_ADMIN_EMAIL env variable is required (single email or comma-separated list)')
 }
 
 // ── Guard super-admin ─────────────────────────────────────────────────────────
@@ -12,9 +20,9 @@ if (!SUPER_ADMIN_EMAIL) {
 async function checkSuperAdmin() {
   const supabase = await createClient()
   const { data: { user }, error } = await supabase.auth.getUser()
-  if (error || !user) return null
-  if (user.email !== SUPER_ADMIN_EMAIL) return null
-  return { id: user.id, email: user.email! }
+  if (error || !user || !user.email) return null
+  if (!SUPER_ADMIN_EMAILS.includes(user.email.toLowerCase())) return null
+  return { id: user.id, email: user.email }
 }
 
 // ── Email de bienvenue ────────────────────────────────────────────────────────
@@ -79,7 +87,7 @@ async function sendWelcomeEmail(opts: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        from: 'AOP <noreply@ladn.studio>',
+        from: "L'ADN DATA <noreply@ladn.eu>",
         to: [opts.to],
         subject: opts.type === 'team'
           ? `Votre accès à l'outil AOP${opts.orgName ? ` — ${opts.orgName}` : ''}`

@@ -32,9 +32,13 @@ export async function PUT(request: NextRequest) {
   const parsed = await parseBody(request, upsertProfileSchema)
   if (parsed.error) return parsed.error
 
+  // onConflict sur organization_id : la table a un UNIQUE constraint sur cette
+  // colonne, donc l'upsert doit explicitement cibler ce conflit. Sans ça,
+  // PostgreSQL utilise la PK (id) absente du payload → l'upsert devient un
+  // INSERT et collisionne (cf. bug rapporté lors du test live 2026-05-02).
   const { error } = await adminClient
     .from('profiles')
-    .upsert({ ...parsed.data, organization_id: orgId })
+    .upsert({ ...parsed.data, organization_id: orgId }, { onConflict: 'organization_id' })
 
   if (error) return apiError(error.message)
   return apiSuccess({ success: true })
