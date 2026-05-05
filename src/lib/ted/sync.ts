@@ -158,11 +158,10 @@ function cleanDate(v: unknown): string | null {
  * Le filtre `contract-nature = "services"` en amont réduit déjà le bruit.
  */
 function buildCpvFilter(): string {
-  // TED API v3 a déprécié l'opérateur de comparaison (>=, <=) sur
-  // `classification-cpv` en mode expert search → "QUERY_UNSUPPORTED_FIELD_OPERATION".
-  // On utilise LIKE avec wildcard pour matcher par préfixe 2 chiffres.
+  // TED API v3 mode expert n'accepte que les opérateurs : =, !=, ~, !~, IN, NOT.
+  // L'opérateur ~ est un match regex → on filtre par préfixe 2 chiffres avec ^.
   const families = ['22', '32', '79', '92']
-  const parts = families.map(prefix => `classification-cpv LIKE "${prefix}*"`).join(' OR ')
+  const parts = families.map(prefix => `classification-cpv ~ "^${prefix}"`).join(' OR ')
   return `(${parts})`
 }
 
